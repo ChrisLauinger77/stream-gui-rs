@@ -17,7 +17,7 @@ required-features = ["desktop"]
 
 [features]
 default = ["desktop"]
-desktop = ["dep:tauri", "dep:tauri-build", "dep:webbrowser"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:webbrowser", "dep:gio"]
 custom-protocol = ["tauri?/custom-protocol"]
 test-support = []
 
@@ -48,6 +48,7 @@ fs2 = "0.4"
 keyring = { version = "3.6.3", features = ["apple-native"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+gio = { version = "0.18", optional = true }
 keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust"] }
 
 [target.'cfg(unix)'.dependencies]

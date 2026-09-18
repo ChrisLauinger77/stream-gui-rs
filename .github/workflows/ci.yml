@@ -40,6 +40,9 @@ jobs:
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features test-support
       - name: Desktop Rust checks
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support
+      - name: Linux browser dispatch and launcher cleanup
+        if: runner.os == 'Linux'
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_browser_open --features test-support
       - name: Rust lint
         run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support -- -D warnings
       - name: Tauri desktop build (no packaging or publishing)

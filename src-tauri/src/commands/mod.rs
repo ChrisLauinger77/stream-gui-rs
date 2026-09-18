@@ -106,7 +106,7 @@ pub async fn auth_logout(services: State<'_, Arc<Services>>) -> Result<AuthStatu
 pub async fn auth_open_verification(services: State<'_, Arc<Services>>) -> Result<()> {
     // No URL or executable can be supplied by the webview.
     let uri = services.auth.verification_uri().await?;
-    tauri::async_runtime::spawn_blocking(move || webbrowser::open(&uri))
+    tauri::async_runtime::spawn_blocking(move || crate::desktop::browser::open(&uri))
         .await
         .map_err(|_| AppError::new(ErrorCode::Internal, "Browser opener failed."))?
         .map_err(|_| {

@@ -3673,6 +3673,7 @@ name = "stream-gui-rs"
 version = "0.1.0"
 dependencies = [
  "fs2",
+ "gio",
  "keyring",
  "libc",
  "reqwest 0.12.28",

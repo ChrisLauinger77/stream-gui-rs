@@ -4,6 +4,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use tauri::Manager;
+pub(crate) mod browser;
 
 #[derive(Default)]
 struct Lifecycle {
@@ -15,39 +16,66 @@ struct Lifecycle {
 struct NativeChatOpener;
 impl crate::domain::chat::ChatOpener for NativeChatOpener {
     fn open(&self, target: &crate::domain::chat::ChatTarget) -> crate::domain::Result<()> {
-        webbrowser::open(target.url()).map_err(|_| crate::domain::chat::open_error())
+        browser::open(target.url()).map_err(|_| crate::domain::chat::open_error())
     }
 }
 
-pub fn run() {
+pub fn run() -> std::result::Result<(), tauri::Error> {
     let app = tauri::Builder::default()
         .setup(|app| {
             let directory = app.path().app_config_dir()?;
             let client_id = crate::config::twitch_client_id::from_environment()?;
-            let services = Arc::new(Services::new(&directory, Some(client_id))?.with_chat_opener(Arc::new(NativeChatOpener)));
+            let services = Arc::new(
+                Services::new(&directory, Some(client_id))?
+                    .with_chat_opener(Arc::new(NativeChatOpener)),
+            );
             let lifecycle = Arc::new(Lifecycle::default());
             app.manage(services.clone());
             app.manage(lifecycle.clone());
             tauri::async_runtime::spawn(async move {
                 let stop = services.auth.start();
-                let mut stored = lifecycle.auth_stop.lock().expect("lifecycle mutex poisoned");
-                if lifecycle.stopping.load(Ordering::SeqCst) { stop.send_replace(true); }
+                let mut stored = lifecycle
+                    .auth_stop
+                    .lock()
+                    .expect("lifecycle mutex poisoned");
+                if lifecycle.stopping.load(Ordering::SeqCst) {
+                    stop.send_replace(true);
+                }
                 *stored = Some(stop);
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::backend_diagnostics, commands::streamlink_probe,
-            commands::open_channel_chat, commands::channel_settings, commands::save_channel_settings,
-            commands::playback_settings, commands::save_playback_settings, commands::discover_players, commands::streamlink_restart,
-            commands::streamlink_launch, commands::streamlink_stop, commands::streamlink_sessions,
-            commands::auth_status, commands::auth_login, commands::auth_open_verification,
-            commands::auth_validate, commands::auth_refresh, commands::auth_logout,
-            commands::auth_cancel, commands::auth_account,
-            commands::list_followed_streams, commands::list_followed_channels, commands::list_streams, commands::list_categories, commands::list_category_streams, commands::search_channels, commands::search_categories, commands::get_channel,
+            commands::backend_diagnostics,
+            commands::streamlink_probe,
+            commands::open_channel_chat,
+            commands::channel_settings,
+            commands::save_channel_settings,
+            commands::playback_settings,
+            commands::save_playback_settings,
+            commands::discover_players,
+            commands::streamlink_restart,
+            commands::streamlink_launch,
+            commands::streamlink_stop,
+            commands::streamlink_sessions,
+            commands::auth_status,
+            commands::auth_login,
+            commands::auth_open_verification,
+            commands::auth_validate,
+            commands::auth_refresh,
+            commands::auth_logout,
+            commands::auth_cancel,
+            commands::auth_account,
+            commands::list_followed_streams,
+            commands::list_followed_channels,
+            commands::list_streams,
+            commands::list_categories,
+            commands::list_category_streams,
+            commands::search_channels,
+            commands::search_categories,
+            commands::get_channel,
         ])
-        .build(tauri::generate_context!())
-        .expect("Could not initialize Stream GUI RS; check application settings and system prerequisites");
+        .build(tauri::generate_context!())?;
 
     app.run(|app, event| match event {
         tauri::RunEvent::ExitRequested { api, .. } => {
@@ -70,6 +98,7 @@ pub fn run() {
         }
         _ => {}
     });
+    Ok(())
 }
 
 // Phase 3 has no background/tray mode: closing the window and Quit both reap
