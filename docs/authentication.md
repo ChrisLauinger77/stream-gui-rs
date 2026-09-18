@@ -1,61 +1,68 @@
-# Twitch authentication prototype
+# Twitch authentication
 
-## Decision and documentation check
+## Flow and setup
 
-Checked against Twitch's official documentation on **2026-09-18**:
+Verified against official Twitch documentation on **2026-09-18**:
 
-- [Device Code Grant Flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow) supports public clients and explicitly permits obtaining and refreshing tokens without a client secret. It recommends public clients for open platforms such as Windows. This fits a distributable desktop app that cannot protect an embedded secret. The flow's device-oriented user experience is acceptable for this technical prototype.
-- Device-flow refresh tokens rotate after use and expire after 30 days of inactivity. Access-token expiry must be taken from validation, rather than assuming it never changes.
-- [Token validation](https://dev.twitch.tv/docs/authentication/validate-tokens/) is required at startup and at least hourly while maintaining an OAuth session.
-- [Application registration](https://dev.twitch.tv/docs/authentication/register-app/) requires a developer account, verified email and 2FA. The client ID is public.
-- [Token revocation](https://dev.twitch.tv/docs/authentication/revoke-tokens/) uses the client ID and access token. Local clearing must still succeed if revocation is offline.
+- [Device Code Grant Flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow) supports public clients without a client secret and recommends them for open desktop platforms. This application uses that flow in the system browser, with no embedded login or callback listener.
+- Device refresh tokens rotate after use and expire after 30 days of inactivity. Access-token expiration comes from the provider's validation response.
+- [Validation](https://dev.twitch.tv/docs/authentication/validate-tokens/) is required at startup and at least hourly. The Rust auth task performs both independently of UI activity.
+- [Followed channels and streams](https://dev.twitch.tv/docs/api/reference/#get-followed-channels) require `user:read:follows`. This is the only requested scope; unrelated additional grants are tolerated, while a missing required grant requires a new login.
 
-Device Flow is the selected public-client prototype; no implicit-flow fallback, embedded web login, client secret, token pasted into the UI, or legacy credential reuse is implemented.
+Create a **new Public application** in the [Twitch Developer Console](https://dev.twitch.tv/console/apps). Follow the [registration requirements](https://dev.twitch.tv/docs/authentication/register-app/) (verified email and 2FA). Do not reuse the legacy GUI's client ID or credentials. If registration requires a redirect URL, `http://localhost:3000` can satisfy the form; Device Flow does not use it. No client secret is generated, embedded, stored, or sent by this app.
 
-## Manual registration boundary
+Set the public client ID in the backend environment:
 
-No Twitch application registration or client ID was supplied. Registration is an account-owner action, so live authentication stops here until configured. Offline tests prove the code contracts; they do **not** establish that a live Twitch account has authorized this new app.
+```sh
+TWITCH_CLIENT_ID=your_public_client_id npm run tauri dev
+```
 
-1. In the [Twitch Developer Console](https://dev.twitch.tv/console/apps), create a **new application** for this project. Choose a unique name and an appropriate desktop/application category. Choose **Public** as the client type. Do not reuse the old Streamlink Twitch GUI client ID.
-2. If the registration form requires an OAuth Redirect URL, add `http://localhost:3000`. Device Flow does not use a redirect or start a callback listener; the URL is only a registration-form requirement.
-3. Copy the client ID. No client secret should be generated, stored, sent or embedded for this flow.
-4. Set the variable for the backend process, then start the desktop app:
+Windows PowerShell:
 
-   macOS/Linux:
-   ```sh
-   TWITCH_CLIENT_ID=your_public_client_id npm run tauri dev
-   ```
+```powershell
+$env:TWITCH_CLIENT_ID = "your_public_client_id"
+npm run tauri dev
+```
 
-   Windows PowerShell:
-   ```powershell
-   $env:TWITCH_CLIENT_ID = "your_public_client_id"
-   npm run tauri dev
-   ```
+A built executable needs the same runtime environment. Finder/Start menu launches may not inherit a terminal's environment. `.env` is not loaded and no `VITE_` credential configuration is used. Packaging a project-owned public client ID is a later distribution decision.
 
-   For a built app, launch its executable from an environment containing the same variable. It is intentionally runtime configuration in Phase 0. A Finder/Start menu launch may not inherit your shell environment. `.env` is not loaded; do not use `VITE_` for credentials.
+Click **Log in**, open the verification page, and enter the displayed user code. Rust alone receives the secret device code and tokens. The screen displays authorization status, the authenticated account, granted scopes, expiry, and the storage backend. **Cancel authorization** interrupts local polling; it does not undo consent already given in the browser. Validate and Refresh token remain development controls.
 
-5. Click **Log in**, open the system-browser verification page and authorize. Rust polls Twitch; the screen receives only a user code, activation URL and public identity/status. The secret device code and OAuth tokens remain in Rust.
-6. Exercise **Validate**, **Refresh token**, then **Log out**. Restarting the app loses in-memory credentials and requires login again.
+## Secure persistence
 
-The prototype sends the required `scopes` field as an empty string: identity validation does not need a privileged API scope. Acceptance of that request must be confirmed with the new public application during the live smoke test; do not add unrelated scopes just to make a test pass.
+| Platform | Backend | Requirements / failure strategy |
+| --- | --- | --- |
+| macOS | Keychain | Allow the application's keychain access when prompted. A locked/denied entry is an explicit error. |
+| Windows | Credential Manager | The current user's native credential store must be available. Native errors are reported without credential material. |
+| Linux | Secret Service over encrypted D-Bus | A user session bus and unlocked service such as GNOME Keyring or KWallet are required. The build needs `libdbus-1-dev`. Headless sessions without a service cannot persist authentication. |
 
-## Implemented behavior
+The `keyring` dependency enables each platform backend explicitly. There is **no plaintext, settings-file, or automatic memory fallback**. A missing entry is signed out; an unavailable/malformed store reports an error while playback remains usable. Unlocking a previously inaccessible store can recover on the next startup-validation retry. If another app instance owns `authentication.lock`, close it and restart the affected instance.
 
-Rust uses fixed Twitch OAuth HTTPS endpoints, disallows redirects, imposes a 15-second HTTP timeout and bounds JSON bodies to 64 KiB. Provider response bodies and raw HTTP errors are not logged or returned to the frontend. Secret token structures cannot be serialized to IPC.
+The secure entry uses service `io.github.twitch-gui-rs.oauth` and the public client ID as its account key. A private versioned record stores only the client ID and access/refresh pair. The empty `authentication.lock` in the app configuration directory contains no credentials and is held for the store's lifetime to prevent concurrent local instances rotating an entry. Changing client IDs selects a different secure entry; log out under the old configuration first if that entry should be removed.
 
-Device polling handles Twitch's documented `message: authorization_pending` as well as RFC-style `error` fields, rate limiting/slow-down, denial, expiry and transient failures. It waits at least the provider interval. Repeated login during an active grant reuses that grant.
+Blocking storage operations run off Tokio workers and are serialized. Save replaces the token pair in one entry. The old one-use pair is **deleted before refresh is dispatched**, and the replacement is saved before validation. Consequently an ambiguous network failure or crash cannot restore and replay a possibly consumed refresh token. The tradeoff is deliberate: a crash after deletion and before saving the response requires login again. If deletion fails, no refresh request is sent. There is no retry of an uncertain token exchange.
 
-Tokens are validated before an authenticated identity is exposed. Wrong client IDs, missing identity, expiry and rejection clear credentials. Validation runs after login/refresh, on startup if a future storage adapter restores credentials, and hourly. Temporary validation failures hide the authenticated identity and retry after a minute. Expiring tokens refresh proactively; refresh can also be exercised manually. Refresh outcomes that may have consumed a one-use token require a new login rather than retrying stale credentials.
+Normal application exit waits for an already-running rotation/write without revoking the session. An OS storage prompt can therefore delay exit. Force termination cannot guarantee completion; the clear-before-refresh rule still prevents stale-token replay. The filesystem lock coordinates instances sharing the normal application directory; custom forks using the same credential service must also share that lock protocol.
 
-Logout cancels the pending grant, clears the credential store and identity, then attempts remote revocation. Offline revocation produces a status message; local logout remains complete. Browser authorization itself cannot be undone by canceling the local poll. Closing the app drops memory; it does not perform a remote revocation request.
+## Lifecycle and errors
 
-## Live acceptance checklist (manual)
+- Startup restores credentials, validates them, and only then exposes identity. A rejected stored access token gets one coordinated refresh attempt; invalid/revoked refresh credentials are cleared.
+- Successful device authorization and refresh persist the pair and validate identity, public client ID, required scopes, and expiry. A refreshed token cannot change the authenticated account.
+- Device polling honors the provider interval, slows down on 429, backs off transient failures, and expires locally. Login reuses an active grant. Cancel/logout cannot be followed by a late grant completion that restores identity.
+- Hourly validation and known-expiry refresh run without a UI. A transient validation failure hides identity and retries after 60 seconds while preserving the unconsumed refresh token. A Helix 401 triggers one shared refresh and one retry; another 401 invalidates the session.
+- Concurrent validation/refresh work is coalesced. Service-owned operations continue safely if an IPC caller disappears. Read-only auth snapshots and playback do not wait behind network/keychain operations.
+- Logout cancels the grant and outstanding account requests, deletes local credentials, clears identity, and then attempts [remote revocation](https://dev.twitch.tv/docs/authentication/revoke-tokens/). Offline revocation reports that local deletion succeeded but remote revocation was not confirmed. Storage deletion failure is an explicit error, not successful logout; retry after unlocking the store.
 
-- Public registration accepts the scope-free device request and browser consent completes.
-- The UI shows the validated account, but no tokens in UI state, settings, console or process arguments.
-- Manual and automatic refresh rotate credentials; a second refresh works with the new token.
-- Cancel during authorization cannot authenticate later; denied/expired codes require login again.
-- Disconnect the application in Twitch account settings, then validate: the local session is cleared.
-- Logout works online and offline; restart is signed out.
+OAuth and Helix share a fixed-endpoint HTTPS pool with redirects disabled, a 5-second connect deadline and a 15-second request deadline. OAuth JSON is bounded to 64 KiB. Provider bodies, token values, raw HTTP errors and OS error details are never returned in normal errors/logs/diagnostics. Token records cannot be frontend DTOs. Tokens are not passed to Streamlink or imported from the old GUI.
 
-Secure persistent credential storage, production distribution of the project's public client ID, and provider verification with a real account remain future decisions. No Phase 1 functionality is implied.
+## Opt-in live acceptance checklist
+
+Normal tests use synthetic credentials, mock storage and loopback HTTP only. No live client ID was supplied during implementation; these checks remain manual:
+
+1. Register/configure the new public client, authorize `user:read:follows`, and confirm account/avatar/scopes.
+2. Restart the desktop app with the same client ID and confirm automatic restoration plus validation.
+3. Refresh twice and restart again to check rotation with the platform store.
+4. Cancel during device authorization; test denial/expiry and try again.
+5. Disconnect the app in Twitch account settings, then Validate; local auth must clear.
+6. Test an offline startup, recovery, and online/offline logout. After successful local logout, restart signed out.
+7. On each OS, test denied/locked credential access, multiple app instances, and closing during refresh. Inspect settings and UI state for public data only; never copy real tokens into test output or bug reports.
