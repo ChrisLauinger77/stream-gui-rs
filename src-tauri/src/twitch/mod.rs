@@ -319,30 +319,11 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         }
         state.session_id += 1;
         state.generation += 1;
-        // A stored access token may have expired while the app was closed.
-        let result = match self
-            .api
-            .validate(
-                &state
-                    .credentials
-                    .as_ref()
-                    .expect("restored credentials")
-                    .access_token,
-            )
-            .await
-        {
-            Ok(validation) => self.apply_validation(state, validation).await,
-            Err(error) if error.code == ErrorCode::AuthInvalid => self.refresh_locked(state).await,
-            Err(error) => {
-                state.status.phase = AuthPhase::Error;
-                state.status.error = Some(error.clone());
-                Err(error)
-            }
-        };
-        state.last_validation = result.clone();
-        self.validation_revision.fetch_add(1, Ordering::SeqCst);
-        result
+        // Restoration and later validation retries share the same bounded
+        // recovery path, including reconnect after an offline startup.
+        self.validate_locked(state).await
     }
+
     async fn login_owned(&self) -> Result<AuthStatus> {
         let client = self.client_id()?;
         let mut state = self.lock().await?;
@@ -592,6 +573,20 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         stop
     }
     async fn validate_locked(&self, state: &mut State) -> Result<()> {
+        let result = self.check_token_locked(state).await;
+        // Identity/client/scope mismatches already invalidate the credentials.
+        // Only a provider rejection of an existing access token is recoverable.
+        let result = match result {
+            Err(error) if error.code == ErrorCode::AuthInvalid && state.credentials.is_some() => {
+                self.refresh_locked(state).await
+            }
+            result => result,
+        };
+        state.last_validation = result.clone();
+        self.validation_revision.fetch_add(1, Ordering::SeqCst);
+        result
+    }
+    async fn check_token_locked(&self, state: &mut State) -> Result<()> {
         let token = state
             .credentials
             .as_ref()
@@ -599,21 +594,16 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             .access_token
             .clone();
         state.next_validation = Instant::now() + Duration::from_secs(60);
-        let result = match self.api.validate(&token).await {
+        match self.api.validate(&token).await {
             Ok(validation) => self.apply_validation(state, validation).await,
-            Err(error) if error.code == ErrorCode::AuthInvalid => {
-                self.invalidate(state, error).await
-            }
+            Err(error) if error.code == ErrorCode::AuthInvalid => Err(error),
             Err(error) => {
                 state.status.phase = AuthPhase::Error;
                 state.status.user = None;
                 state.status.error = Some(error.clone());
                 Err(error)
             }
-        };
-        state.last_validation = result.clone();
-        self.validation_revision.fetch_add(1, Ordering::SeqCst);
-        result
+        }
     }
     async fn apply_validation(&self, state: &mut State, validation: Validation) -> Result<()> {
         if Some(&validation.client_id) != self.client_id.as_ref()
@@ -660,7 +650,16 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         }
         state.credentials = Some(credentials);
         state.generation += 1;
-        self.validate_locked(state).await
+        // A newly issued pair gets validation only, never another refresh.
+        let result = match self.check_token_locked(state).await {
+            Err(error) if error.code == ErrorCode::AuthInvalid && state.credentials.is_some() => {
+                self.invalidate(state, error).await
+            }
+            result => result,
+        };
+        state.last_validation = result.clone();
+        self.validation_revision.fetch_add(1, Ordering::SeqCst);
+        result
     }
     async fn refresh_locked(&self, state: &mut State) -> Result<()> {
         let client = self.client_id()?;

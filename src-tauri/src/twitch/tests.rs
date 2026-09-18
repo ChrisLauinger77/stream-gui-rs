@@ -267,6 +267,17 @@ async fn validation_rejection_or_mismatched_client_clears_session() {
             Err(AppError::new(ErrorCode::AuthInvalid, "revoked"))
         };
         service.api.validations.lock().unwrap().push_back(response);
+        if !mismatch {
+            service
+                .api
+                .refreshes
+                .lock()
+                .unwrap()
+                .push_back(Err(AppError::new(
+                    ErrorCode::AuthInvalid,
+                    "revoked refresh token",
+                )));
+        }
         assert_eq!(
             service.validate().await.unwrap_err().code,
             ErrorCode::AuthInvalid
@@ -1042,4 +1053,89 @@ async fn unverified_native_deletion_blocks_refresh_and_logout_without_leaking_se
             );
         }
     }
+}
+
+#[tokio::test(start_paused = true)]
+async fn offline_restoration_recovers_expired_access_with_one_coordinated_refresh() {
+    let api = FakeApi::default();
+    api.validations.lock().unwrap().extend([
+        Err(AppError::new(ErrorCode::Network, "offline")),
+        Err(AppError::new(ErrorCode::AuthInvalid, "expired access")),
+        Ok(validation()),
+    ]);
+    let mut store = PersistentTestStore::default();
+    store.save(credentials("restored")).unwrap();
+    let service = AuthService::new(api, Some("client".into()), Box::new(store.clone()));
+    assert_eq!(service.tick().await.unwrap_err().code, ErrorCode::Network);
+    tokio::time::advance(Duration::from_secs(60)).await;
+    let (tick, validate) = tokio::join!(service.tick(), service.validate());
+    tick.unwrap();
+    validate.unwrap();
+    assert_eq!(service.status().await.phase, AuthPhase::Authenticated);
+    assert_eq!(*service.api.validate_count.lock().unwrap(), 3);
+    assert_eq!(
+        *service.api.refresh_inputs.lock().unwrap(),
+        ["refresh-restored"]
+    );
+    assert_eq!(
+        store.load().unwrap().unwrap().refresh_token.as_str(),
+        "refresh-rotated"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn explicit_validation_at_expiry_refreshes_instead_of_clearing_credentials() {
+    let service = service();
+    authorize(&service).await;
+    service
+        .api
+        .validations
+        .lock()
+        .unwrap()
+        .push_back(Err(AppError::new(ErrorCode::AuthInvalid, "expired access")));
+    tokio::time::advance(Duration::from_secs(14400)).await;
+    assert_eq!(
+        service.validate().await.unwrap().phase,
+        AuthPhase::Authenticated
+    );
+    assert_eq!(
+        *service.api.refresh_inputs.lock().unwrap(),
+        ["refresh-initial"]
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn rejected_new_refresh_token_validation_does_not_refresh_again() {
+    let service = service();
+    authorize(&service).await;
+    service.api.validations.lock().unwrap().extend([
+        Err(AppError::new(ErrorCode::AuthInvalid, "expired access")),
+        Err(AppError::new(ErrorCode::AuthInvalid, "new access rejected")),
+    ]);
+    assert_eq!(
+        service.validate().await.unwrap_err().code,
+        ErrorCode::AuthInvalid
+    );
+    assert_eq!(service.status().await.phase, AuthPhase::Error);
+    assert!(service.status().await.user.is_none());
+    assert!(
+        service
+            .state
+            .lock()
+            .await
+            .store
+            .load()
+            .await
+            .unwrap()
+            .is_none()
+    );
+    service.tick().await.unwrap();
+    assert_eq!(
+        service.validate().await.unwrap_err().code,
+        ErrorCode::Unauthenticated
+    );
+    assert_eq!(
+        *service.api.refresh_inputs.lock().unwrap(),
+        ["refresh-initial"]
+    );
 }
