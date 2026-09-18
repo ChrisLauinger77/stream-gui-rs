@@ -85,7 +85,7 @@ impl HttpTwitchApi {
     pub fn with_http(http: &crate::twitch_http::TwitchHttp) -> Self {
         Self {
             client: http.client.clone(),
-            base: http.oauth_base.clone(),
+            base: http.oauth_base_url.clone(),
         }
     }
 }

@@ -15,7 +15,7 @@ use zeroize::Zeroizing;
 #[derive(Clone)]
 pub struct TwitchHttp {
     pub(crate) client: Client,
-    pub(crate) oauth_base: String,
+    pub(crate) oauth_base_url: String,
     helix_base: url::Url,
     pub rate: Arc<RateLimiter>,
 }
@@ -27,7 +27,7 @@ impl TwitchHttp {
             Duration::from_secs(15),
         )
     }
-    fn build(oauth: &str, helix: &str, timeout: Duration) -> Result<Self> {
+    fn build(oauth_base_url: &str, helix: &str, timeout: Duration) -> Result<Self> {
         Ok(Self {
             client: Client::builder()
                 .timeout(timeout)
@@ -36,7 +36,7 @@ impl TwitchHttp {
                 .user_agent(concat!("stream-gui-rs/", env!("CARGO_PKG_VERSION")))
                 .build()
                 .map_err(|_| error(ErrorCode::Internal))?,
-            oauth_base: oauth.into(),
+            oauth_base_url: oauth_base_url.into(),
             helix_base: url::Url::parse(helix).map_err(|_| error(ErrorCode::Internal))?,
             rate: Arc::default(),
         })
