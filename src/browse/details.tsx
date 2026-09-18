@@ -19,12 +19,12 @@ export function SearchView({ context, links, draft, setDraft, type, setType }: {
 function ChannelSearch({ search, context, links }: { search: string; context: QueryContext; links: Links }) {
   const query = usePage<ChannelSummary>({ ...context, viewKey: `search:channels:${search}`, identify: c => c.broadcasterId,
     load: (cursor, refresh) => api.searchChannels({ query: search, page: pageRequest(context.sessionId, cursor, refresh) }) });
-  return <PageFrame query={query} empty={`No channels found for “${search}”`}><ChannelList items={query.page?.items ?? []} open={links.channel} /></PageFrame>;
+  return <PageFrame query={query} empty={`No channels found for “${search}”`}><ChannelList retryGeneration={query.imageRetryGeneration} items={query.page?.items ?? []} open={links.channel} /></PageFrame>;
 }
 function CategorySearch({ search, context, links }: { search: string; context: QueryContext; links: Links }) {
   const query = usePage<CategorySummary>({ ...context, viewKey: `search:categories:${search}`, identify: c => c.id,
     load: (cursor, refresh) => api.searchCategories({ query: search, page: pageRequest(context.sessionId, cursor, refresh) }) });
-  return <PageFrame query={query} empty={`No categories found for “${search}”`}><CategoryList items={query.page?.items ?? []} open={links.category} /></PageFrame>;
+  return <PageFrame query={query} empty={`No categories found for “${search}”`}><CategoryList retryGeneration={query.imageRetryGeneration} items={query.page?.items ?? []} open={links.category} /></PageFrame>;
 }
 export function ChannelView({ id, context, links }: { id: string; context: QueryContext; links: Links }) {
   const query = usePage<ChannelDetails>({ ...context, viewKey: `channel:${id}`, identify: d => d.channel.broadcasterId,
@@ -34,8 +34,8 @@ export function ChannelView({ id, context, links }: { id: string; context: Query
     } });
   const details = query.page?.items[0];
   return <PageFrame query={query} detail empty="Channel unavailable">{details && <article className="channel-detail">
-    <div className="channel-identity"><Media src={details.channel.imageUrl} shape="avatar" /><div><h2>{details.channel.displayName}</h2><p className="muted">@{details.channel.login}</p><p className={details.channel.liveState === "live" ? "live-tag" : "muted"}>{details.channel.liveState === "live" ? "LIVE NOW" : details.channel.liveState === "offline" ? "Offline — no current live stream" : "Live status unavailable"}</p></div></div>
+    <div className="channel-identity"><Media retryGeneration={query.imageRetryGeneration} src={details.channel.imageUrl} shape="avatar" /><div><h2>{details.channel.displayName}</h2><p className="muted">@{details.channel.login}</p><p className={details.channel.liveState === "live" ? "live-tag" : "muted"}>{details.channel.liveState === "live" ? "LIVE NOW" : details.channel.liveState === "offline" ? "Offline — no current live stream" : "Live status unavailable"}</p></div></div>
     {details.description && <p className="channel-description">{details.description}</p>}
-    {details.stream ? <div className="channel-stream"><StreamPreview stream={details.stream} /><h3>{details.stream.title}</h3><p className="stream-meta">{details.stream.categoryId && <button className="text-button" onClick={() => links.category(details.stream!.categoryId!, details.stream!.categoryName ?? "Category")}>{details.stream.categoryName ?? "Category"}</button>}{details.stream.language?.toUpperCase()}</p>{details.stream.startedAt && <p className="muted">Started <time dateTime={details.stream.startedAt}>{dateLabel(details.stream.startedAt)}</time></p>}</div> : <div><h3>{details.channel.title ?? "No stream information available"}</h3><p className="muted">{details.channel.categoryName}{details.channel.language && ` · ${details.channel.language.toUpperCase()}`}</p></div>}
+    {details.stream ? <div className="channel-stream"><StreamPreview retryGeneration={query.imageRetryGeneration} stream={details.stream} /><h3>{details.stream.title}</h3><p className="stream-meta">{details.stream.categoryId && <button className="text-button" onClick={() => links.category(details.stream!.categoryId!, details.stream!.categoryName ?? "Category")}>{details.stream.categoryName ?? "Category"}</button>}{details.stream.language?.toUpperCase()}</p>{details.stream.startedAt && <p className="muted">Started <time dateTime={details.stream.startedAt}>{dateLabel(details.stream.startedAt)}</time></p>}</div> : <div><h3>{details.channel.title ?? "No stream information available"}</h3><p className="muted">{details.channel.categoryName}{details.channel.language && ` · ${details.channel.language.toUpperCase()}`}</p></div>}
   </article>}</PageFrame>;
 }

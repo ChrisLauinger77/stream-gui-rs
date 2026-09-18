@@ -64,20 +64,20 @@ function Streams({ mode, context, links }: { mode: "live" | "followed"; context:
   const query = usePage<StreamSummary>({ ...context, viewKey: mode,
     identify: stream => stream.streamId,
     load: (cursor, refresh) => (mode === "followed" ? api.followedStreams : api.streams)(pageRequest(context.sessionId, cursor, refresh)) });
-  return <PageFrame query={query} empty={mode === "followed" ? "No followed channels are live right now" : "No live streams found"}><StreamList items={query.page?.items ?? []} {...links} /></PageFrame>;
+  return <PageFrame query={query} empty={mode === "followed" ? "No followed channels are live right now" : "No live streams found"}><StreamList retryGeneration={query.imageRetryGeneration} items={query.page?.items ?? []} {...links} /></PageFrame>;
 }
 function Follows({ context, links }: { context: QueryContext; links: Links }) {
   const query = usePage<ChannelSummary>({ ...context, viewKey: "followed-channels", identify: channel => channel.broadcasterId,
     load: (cursor, refresh) => api.followedChannels(pageRequest(context.sessionId, cursor, refresh)) });
-  return <PageFrame query={query} empty="You aren’t following any channels yet"><ChannelList items={query.page?.items ?? []} open={links.channel} /></PageFrame>;
+  return <PageFrame query={query} empty="You aren’t following any channels yet"><ChannelList retryGeneration={query.imageRetryGeneration} items={query.page?.items ?? []} open={links.channel} /></PageFrame>;
 }
 function Categories({ context, links }: { context: QueryContext; links: Links }) {
   const query = usePage<CategorySummary>({ ...context, viewKey: "categories", identify: category => category.id,
     load: (cursor, refresh) => api.categories(pageRequest(context.sessionId, cursor, refresh)) });
-  return <PageFrame query={query} empty="No categories found"><CategoryList items={query.page?.items ?? []} open={links.category} /></PageFrame>;
+  return <PageFrame query={query} empty="No categories found"><CategoryList retryGeneration={query.imageRetryGeneration} items={query.page?.items ?? []} open={links.category} /></PageFrame>;
 }
 function Category({ id, context, links }: { id: string; context: QueryContext; links: Links }) {
   const query = usePage<StreamSummary>({ ...context, viewKey: `category:${id}`, identify: stream => stream.streamId,
     load: async (cursor, refresh) => { const result = await api.category({ id, page: pageRequest(context.sessionId, cursor, refresh) }); return { ...result.streams, label: result.category.name, imageUrl: result.category.imageUrl }; } });
-  return <><div className="category-identity">{query.page && <><Media src={query.page.imageUrl ?? null} shape="artwork" /><span>{query.page.label}</span></>}</div><PageFrame query={query} empty="No streams are live in this category"><StreamList items={query.page?.items ?? []} {...links} /></PageFrame></>;
+  return <><div className="category-identity">{query.page && <><Media retryGeneration={query.imageRetryGeneration} src={query.page.imageUrl ?? null} shape="artwork" /><span>{query.page.label}</span></>}</div><PageFrame query={query} empty="No streams are live in this category"><StreamList retryGeneration={query.imageRetryGeneration} items={query.page?.items ?? []} {...links} /></PageFrame></>;
 }

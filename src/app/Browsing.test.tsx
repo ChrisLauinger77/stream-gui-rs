@@ -3,6 +3,7 @@ import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App } from "./App";
+import { Media } from "../browse/components";
 import { api } from "../lib/ipc";
 import type { AuthStatus, CategorySummary, ChannelDetails, ChannelSummary, PagedResult, StreamSummary } from "../lib/generated";
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: vi.fn() }));
@@ -258,4 +259,61 @@ test("final pagination does not move focus when Load more was not focused", asyn
   await render(); await click("Live"); const target = button("Settings"); target.focus(); await click("Load more");
   expect(text()).toContain("Loading more information"); await act(async () => pending.resolve(page([{ ...stream, streamId: "new-result" }])));
   expect(document.activeElement).toBe(target);
+});
+
+test("successful manual refresh retries the same failed image URL without resetting loaded images", async () => {
+  const items = [{ ...stream, previewUrl: "https://static-cdn.jtvnw.net/failed.jpg" }, { ...stream, streamId: "loaded", previewUrl: "https://static-cdn.jtvnw.net/loaded.jpg" }];
+  vi.mocked(api.streams).mockResolvedValueOnce(page(items)); await render(); await click("Live");
+  const [failed, loaded] = container.querySelectorAll<HTMLImageElement>(".media img");
+  await act(async () => { failed.dispatchEvent(new Event("error")); loaded.dispatchEvent(new Event("load")); });
+  const pending = deferred<PagedResult<StreamSummary>>(); vi.mocked(api.streams).mockReturnValueOnce(pending.promise); await click("Refresh");
+  expect(container.querySelectorAll(".media img")).toHaveLength(1); expect(loaded.parentElement!.classList.contains("loaded")).toBe(true);
+  await act(async () => pending.resolve(page(items)));
+  expect(container.querySelectorAll(".media img")).toHaveLength(2);
+  expect(container.querySelector<HTMLImageElement>('[data-focus="stream:stream-one"] img')!.src).toBe(items[0].previewUrl);
+  expect(container.querySelector('[data-focus="stream:loaded"] img')).toBe(loaded); expect(loaded.parentElement!.classList.contains("loaded")).toBe(true);
+});
+
+test("ordinary image rerenders preserve the failed placeholder without retrying", async () => {
+  const src = "https://static-cdn.jtvnw.net/failed.jpg";
+  await act(async () => root.render(<Media src={src} />)); await act(async () => container.querySelector("img")!.dispatchEvent(new Event("error")));
+  for (let n = 0; n < 3; n++) await act(async () => root.render(<Media src={src} />));
+  expect(container.querySelector("img")).toBeNull(); expect(container.querySelector(".media.preview.failed")).not.toBeNull(); expect(text()).toContain("Image unavailable");
+});
+
+test("changing image src retries naturally with the original layout shape", async () => {
+  await act(async () => root.render(<Media src="https://static-cdn.jtvnw.net/old.jpg" shape="artwork" />));
+  await act(async () => container.querySelector("img")!.dispatchEvent(new Event("error")));
+  await act(async () => root.render(<Media src="https://static-cdn.jtvnw.net/new.jpg" shape="artwork" />));
+  expect(container.querySelector<HTMLImageElement>("img")!.src).toBe("https://static-cdn.jtvnw.net/new.jpg"); expect(container.querySelector(".media.artwork.loading")).not.toBeNull();
+});
+
+test("repeated image failures wait for another successful refresh", async () => {
+  const items = [{ ...stream, previewUrl: "https://static-cdn.jtvnw.net/failed.jpg" }];
+  vi.mocked(api.streams).mockResolvedValue(page(items)); await render(); await click("Live");
+  const fail = async () => { await act(async () => container.querySelector(".media img")!.dispatchEvent(new Event("error"))); };
+  await fail(); vi.mocked(api.streams).mockRejectedValueOnce({ code: "network" }); await click("Refresh"); expect(container.querySelector(".media img")).toBeNull();
+  await click("Retry"); expect(container.querySelectorAll(".media img")).toHaveLength(1); await fail();
+  await click("Settings"); await act(async () => { const select = container.querySelector<HTMLSelectElement>(".settings-panel select")!; select.value = "light"; select.dispatchEvent(new Event("change", { bubbles: true })); await vi.advanceTimersByTimeAsync(1000); });
+  expect(container.querySelector(".media img")).toBeNull(); expect(api.streams).toHaveBeenCalledTimes(3);
+  await click("Refresh"); expect(container.querySelectorAll(".media img")).toHaveLength(1); await fail();
+  expect(container.querySelector(".media img")).toBeNull(); expect(container.querySelector(".media.preview.failed")).not.toBeNull();
+});
+
+test.each(["followed channels", "categories", "category details", "channel details", "channel search", "category search"])("successful refresh retries failed images in %s", async view => {
+  const imageUrl = "https://static-cdn.jtvnw.net/image.jpg";
+  const withImage = { ...channel, imageUrl }; const categoryImage = { ...category, imageUrl };
+  vi.mocked(api.followedChannels).mockResolvedValue(page([withImage])); vi.mocked(api.categories).mockResolvedValue(page([categoryImage]));
+  vi.mocked(api.category).mockResolvedValue({ category: categoryImage, streams: page([{ ...stream, previewUrl: imageUrl }]) });
+  vi.mocked(api.channel).mockResolvedValue({ ...details, channel: withImage, stream: { ...stream, previewUrl: imageUrl } });
+  vi.mocked(api.searchChannels).mockResolvedValue(page([withImage])); vi.mocked(api.searchCategories).mockResolvedValue(page([categoryImage]));
+  await render();
+  if (view === "followed channels") await click("All channels");
+  else if (view === "categories" || view === "category details") { await click("Categories"); if (view === "category details") await click("Open category Example Game"); }
+  else if (view === "channel details") { await click("Live"); await click("Open channel Example Channel"); }
+  else { await click("Search"); await type("example"); if (view === "category search") await click("Categories", ".tabs"); await act(async () => { await vi.advanceTimersByTimeAsync(350); }); }
+  const images = [...container.querySelectorAll(".media img")]; expect(images.length).toBeGreaterThan(0);
+  await act(async () => { images.forEach(img => img.dispatchEvent(new Event("error"))); }); expect(container.querySelectorAll(".media img")).toHaveLength(0);
+  await click("Refresh"); expect(container.querySelectorAll(".media img")).toHaveLength(images.length);
+  expect([...container.querySelectorAll<HTMLImageElement>(".media img")].every(img => img.src === imageUrl)).toBe(true);
 });

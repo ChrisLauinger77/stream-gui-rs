@@ -21,6 +21,7 @@ export function usePage<T>({ viewKey, memory, load, identify, onAuthLost }: {
 }) {
   const [snapshot, setSnapshot] = useState(() => memory.read<T>(viewKey));
   const [pending, setPending] = useState(false);
+  const [imageRetryGeneration, setImageRetryGeneration] = useState(0);
   const [error, setError] = useState<ErrorCode | null>(null);
   const [retained, setRetained] = useState(() => !!memory.read<T>(viewKey));
   const current = useRef(snapshot); current.current = snapshot;
@@ -51,6 +52,7 @@ export function usePage<T>({ viewKey, memory, load, identify, onAuthLost }: {
       }, cursors, pages, limited: pages >= 10 && !!response.cursor };
       current.current = next; setSnapshot(next); memory.write(viewKey, next);
       setRetained(more);
+      if (refresh) setImageRetryGeneration(value => value + 1);
     } catch (failure) {
       if (!alive.current || version !== generation.current) return;
       const code = errorCode(failure); setError(code);
@@ -67,7 +69,7 @@ export function usePage<T>({ viewKey, memory, load, identify, onAuthLost }: {
     return () => { disposed = true; alive.current = false; generation.current++; busy.current = false; };
     // A keyed view owns exactly one query; loader changes do not refetch it.
   }, [viewKey]);
-  return { page: snapshot?.page, pending, error, retained, limited: snapshot?.limited ?? false,
+  return { page: snapshot?.page, pending, error, retained, imageRetryGeneration, limited: snapshot?.limited ?? false,
     refresh: () => { void request(false, true); }, more: () => { void request(true, false); },
     retry: () => { void request(lastMore.current, !lastMore.current); } };
 }
