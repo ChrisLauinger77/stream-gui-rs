@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { api } from "../lib/ipc";
 import type { Account, AuthStatus } from "../lib/generated";
@@ -55,6 +55,6 @@ export function useAuthentication() {
     } catch (e) { if (alive.current && version === revision.current) setError(friendlyError(e)); }
     finally { if (alive.current && version === revision.current) { loggingOut.current = false; setBusy(null); } }
   };
-  const lost = () => { revision.current++; setStatus(null); setAccount(null); };
+  const lost = useCallback(() => { revision.current++; setStatus(null); setAccount(null); }, []);
   return { status, sessionId, account, error, busy, run, lost };
 }
