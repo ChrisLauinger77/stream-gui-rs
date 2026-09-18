@@ -57,6 +57,8 @@ pub struct AuthUser {
 #[serde(rename_all = "camelCase")]
 pub struct AuthStatus {
     pub phase: AuthPhase,
+    // Public session generation; not a credential or authorization token.
+    pub session_id: Option<String>,
     pub user: Option<AuthUser>,
     pub authorization: Option<DeviceAuthorization>,
     pub error: Option<AppError>,
@@ -179,6 +181,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
                 } else {
                     AuthPhase::NotConfigured
                 },
+                session_id: None,
                 user: None,
                 authorization: None,
                 error: None,
@@ -408,6 +411,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             state.expected_user = None;
             state.expires = None;
             state.status.user = None;
+            state.status.session_id = None;
             state.pending = None;
             state.status.authorization = None;
             if let Err(error) = state.store.clear().await {
@@ -469,6 +473,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         state.pending = None;
         state.expires = None;
         state.status.user = None;
+        state.status.session_id = None;
         state.status.authorization = None;
         state.status.error = None;
         if let Err(error) = state.store.clear().await {
@@ -615,6 +620,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             Err(error) => {
                 state.status.phase = AuthPhase::Error;
                 state.status.user = None;
+                state.status.session_id = None;
                 state.status.error = Some(error.clone());
                 Err(error)
             }
@@ -649,6 +655,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         state.status.phase = AuthPhase::Authenticated;
         state.status.error = None;
         state.expected_user = Some(validation.user_id.clone());
+        state.status.session_id = Some(state.session_id.to_string());
         state.status.user = Some(AuthUser {
             id: validation.user_id,
             login: validation.login,
@@ -696,6 +703,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         state.credentials = None;
         state.status.phase = AuthPhase::Error;
         state.status.user = None;
+        state.status.session_id = None;
         state.status.error = Some(AppError::new(
             ErrorCode::AuthInvalid,
             "The refresh was interrupted. Sign in again.",
@@ -720,6 +728,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             AuthPhase::Error
         };
         state.status.user = None;
+        state.status.session_id = None;
         state.status.authorization = None;
         state.status.error = Some(error.clone());
         if let Err(storage) = state.store.clear().await {

@@ -17,7 +17,7 @@ vi.mock("../lib/ipc", () => ({
 }));
 
 const signedOut: AuthStatus = {
-  phase: "signed_out", user: null, authorization: null, error: null, credentialStorage: "memory",
+  phase: "signed_out", sessionId: null, user: null, authorization: null, error: null, credentialStorage: "memory",
 };
 const session = (id: string): SessionSnapshot => ({
   id, phase: "running", pid: 123, url: "https://www.twitch.tv/example", quality: "best",
@@ -102,7 +102,7 @@ test("a slow probe does not block stopping an existing session", async () => {
 });
 
 const authenticated: AuthStatus = {
-  ...signedOut, phase: "authenticated",
+  ...signedOut, phase: "authenticated", sessionId: "1",
   user: { id: "123", login: "example", scopes: ["user:read:follows"], expiresIn: 3600 },
 };
 const account = { id: "123", login: "example", displayName: "Example Account", profileImageUrl: null };

@@ -26,6 +26,7 @@ pub struct Services {
     streamlink_operation: Mutex<()>,
     closing: AtomicBool,
     auth_configured: bool,
+    browse_slots: Arc<tokio::sync::Semaphore>,
 }
 
 impl Services {
@@ -72,7 +73,16 @@ impl Services {
             streamlink_operation: Mutex::new(()),
             closing: AtomicBool::new(false),
             auth_configured,
+            browse_slots: Arc::new(tokio::sync::Semaphore::new(8)),
         })
+    }
+
+    pub fn browse_permit(&self) -> Result<tokio::sync::OwnedSemaphorePermit> {
+        self.ensure_open()?;
+        self.browse_slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| AppError::new(ErrorCode::Capacity, "Browsing is busy. Try again shortly."))
     }
 
     pub fn diagnostics(&self) -> BackendDiagnostics {

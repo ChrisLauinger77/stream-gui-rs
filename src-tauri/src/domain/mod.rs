@@ -80,9 +80,21 @@ pub struct StopRequest {
 /// DTO definitions come from Rust; the deliberately small command map is reviewed
 /// alongside commands/mod.rs. Tokens deliberately do not implement TS/Serialize.
 pub fn typescript_bindings() -> String {
+    use crate::helix::browse::*;
     use crate::{config::Settings, diagnostics::BackendDiagnostics, streamlink::*, twitch::*};
     let declarations = [
         ErrorCode::decl(),
+        BrowseRequest::decl(),
+        EntityRequest::decl(),
+        SearchRequest::decl(),
+        DataFreshness::decl(),
+        LiveState::decl(),
+        StreamSummary::decl(),
+        CategorySummary::decl(),
+        ChannelSummary::decl(),
+        PagedResult::<StreamSummary>::decl(),
+        ChannelDetails::decl(),
+        CategoryDetails::decl(),
         AppError::decl(),
         ProbeRequest::decl(),
         LaunchRequest::decl(),

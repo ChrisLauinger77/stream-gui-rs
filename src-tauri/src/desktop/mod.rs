@@ -35,6 +35,7 @@ pub fn run() {
             commands::auth_status, commands::auth_login, commands::auth_open_verification,
             commands::auth_validate, commands::auth_refresh, commands::auth_logout,
             commands::auth_cancel, commands::auth_account,
+            commands::list_followed_streams, commands::list_followed_channels, commands::list_streams, commands::list_categories, commands::list_category_streams, commands::search_channels, commands::search_categories, commands::get_channel,
         ])
         .build(tauri::generate_context!())
         .expect("Could not initialize Stream GUI RS; check application settings and system prerequisites");

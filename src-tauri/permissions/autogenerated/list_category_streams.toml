@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-category-streams"
+description = "Enables the list_category_streams command without any pre-configured scope."
+commands.allow = ["list_category_streams"]
+
+[[permission]]
+identifier = "deny-list-category-streams"
+description = "Denies the list_category_streams command without any pre-configured scope."
+commands.deny = ["list_category_streams"]

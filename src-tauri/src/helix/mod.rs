@@ -1,3 +1,4 @@
+pub mod browse;
 pub mod cache;
 pub mod models;
 pub mod pagination;

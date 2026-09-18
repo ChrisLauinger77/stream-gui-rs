@@ -100,3 +100,101 @@ pub async fn auth_account(
         .account(&tokio_util::sync::CancellationToken::new())
         .await
 }
+
+use crate::helix::browse::*;
+
+#[tauri::command]
+pub async fn list_followed_streams(
+    services: State<'_, Arc<Services>>,
+    request: BrowseRequest,
+) -> Result<PagedResult<StreamSummary>> {
+    let _permit = services.browse_permit()?;
+    services
+        .helix
+        .browse_followed_streams(request, &tokio_util::sync::CancellationToken::new())
+        .await
+}
+
+#[tauri::command]
+pub async fn list_followed_channels(
+    services: State<'_, Arc<Services>>,
+    request: BrowseRequest,
+) -> Result<PagedResult<ChannelSummary>> {
+    let _permit = services.browse_permit()?;
+    services
+        .helix
+        .browse_followed_channels(request, &tokio_util::sync::CancellationToken::new())
+        .await
+}
+
+#[tauri::command]
+pub async fn list_streams(
+    services: State<'_, Arc<Services>>,
+    request: BrowseRequest,
+) -> Result<PagedResult<StreamSummary>> {
+    let _permit = services.browse_permit()?;
+    services
+        .helix
+        .browse_streams(request, &tokio_util::sync::CancellationToken::new())
+        .await
+}
+
+#[tauri::command]
+pub async fn list_categories(
+    services: State<'_, Arc<Services>>,
+    request: BrowseRequest,
+) -> Result<PagedResult<CategorySummary>> {
+    let _permit = services.browse_permit()?;
+    services
+        .helix
+        .browse_categories(request, &tokio_util::sync::CancellationToken::new())
+        .await
+}
+
+#[tauri::command]
+pub async fn list_category_streams(
+    services: State<'_, Arc<Services>>,
+    request: EntityRequest,
+) -> Result<CategoryDetails> {
+    let _permit = services.browse_permit()?;
+    services
+        .helix
+        .browse_category(request, &tokio_util::sync::CancellationToken::new())
+        .await
+}
+
+#[tauri::command]
+pub async fn search_channels(
+    services: State<'_, Arc<Services>>,
+    request: SearchRequest,
+) -> Result<PagedResult<ChannelSummary>> {
+    let _permit = services.browse_permit()?;
+    services
+        .helix
+        .browse_search_channels(request, &tokio_util::sync::CancellationToken::new())
+        .await
+}
+
+#[tauri::command]
+pub async fn search_categories(
+    services: State<'_, Arc<Services>>,
+    request: SearchRequest,
+) -> Result<PagedResult<CategorySummary>> {
+    let _permit = services.browse_permit()?;
+    services
+        .helix
+        .browse_search_categories(request, &tokio_util::sync::CancellationToken::new())
+        .await
+}
+
+#[tauri::command]
+pub async fn get_channel(
+    services: State<'_, Arc<Services>>,
+    request: EntityRequest,
+) -> Result<ChannelDetails> {
+    let _permit = services.browse_permit()?;
+    services
+        .helix
+        .browse_channel(request, &tokio_util::sync::CancellationToken::new())
+        .await
+}

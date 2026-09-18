@@ -1,11 +1,21 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
   Account, AppError, AuthStatus, BackendDiagnostics, LaunchRequest, ProbeRequest,
   ProbeResult, SessionSnapshot, StopRequest,
 } from "./generated";
 
 // Only these named operations are available. DTOs are generated from Rust.
 type Commands = {
+  list_followed_streams: [BrowseRequest, PagedResult<StreamSummary>];
+  list_followed_channels: [BrowseRequest, PagedResult<ChannelSummary>];
+  list_streams: [BrowseRequest, PagedResult<StreamSummary>];
+  list_categories: [BrowseRequest, PagedResult<CategorySummary>];
+  list_category_streams: [EntityRequest, CategoryDetails];
+  search_channels: [SearchRequest, PagedResult<ChannelSummary>];
+  search_categories: [SearchRequest, PagedResult<CategorySummary>];
+  get_channel: [EntityRequest, ChannelDetails];
+
   backend_diagnostics: [undefined, BackendDiagnostics];
   streamlink_probe: [ProbeRequest, ProbeResult];
   streamlink_launch: [LaunchRequest, SessionSnapshot];
@@ -29,6 +39,15 @@ async function call<K extends keyof Commands>(
 }
 
 export const api = {
+  followedStreams: (request: BrowseRequest) => call("list_followed_streams", request),
+  followedChannels: (request: BrowseRequest) => call("list_followed_channels", request),
+  streams: (request: BrowseRequest) => call("list_streams", request),
+  categories: (request: BrowseRequest) => call("list_categories", request),
+  category: (request: EntityRequest) => call("list_category_streams", request),
+  searchChannels: (request: SearchRequest) => call("search_channels", request),
+  searchCategories: (request: SearchRequest) => call("search_categories", request),
+  channel: (request: EntityRequest) => call("get_channel", request),
+
   diagnostics: () => call("backend_diagnostics"),
   probe: (request: ProbeRequest) => call("streamlink_probe", request),
   launch: (request: LaunchRequest) => call("streamlink_launch", request),

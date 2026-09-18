@@ -15,6 +15,14 @@ fn main() {
             "auth_logout",
             "auth_cancel",
             "auth_account",
+            "list_followed_streams",
+            "list_followed_channels",
+            "list_streams",
+            "list_categories",
+            "list_category_streams",
+            "search_channels",
+            "search_categories",
+            "get_channel",
         ]),
     ))
     .expect("Tauri build configuration is invalid");
