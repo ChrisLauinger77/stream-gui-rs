@@ -9,22 +9,67 @@ Verified against official Twitch documentation on **2026-09-18**:
 - [Validation](https://dev.twitch.tv/docs/authentication/validate-tokens/) is required at startup and at least hourly. The Rust auth task performs both independently of UI activity.
 - [Followed channels and streams](https://dev.twitch.tv/docs/api/reference/#get-followed-channels) require `user:read:follows`. This is the only requested scope; unrelated additional grants are tolerated, while a missing required grant requires a new login.
 
-Create a **new Public application** in the [Twitch Developer Console](https://dev.twitch.tv/console/apps). Follow the [registration requirements](https://dev.twitch.tv/docs/authentication/register-app/) (verified email and 2FA). Do not reuse the legacy GUI's client ID or credentials. If registration requires a redirect URL, `http://localhost:3000` can satisfy the form; Device Flow does not use it. No client secret is generated, embedded, stored, or sent by this app.
+## Installed apps and client-ID ownership
 
-Set the public client ID in the backend environment:
+Installed applications include the project's **public Twitch client ID** in the Rust binary. End users only connect their own Twitch account through the browser; they do not register a developer application or set environment variables. A public client ID identifies the application and may be distributed in the binary. It is not a client secret or a user's access/refresh token.
+
+Maintainers register a **Public application** in the [Twitch Developer Console](https://dev.twitch.tv/console/apps), following [registration requirements](https://dev.twitch.tv/docs/authentication/register-app/) (verified email and 2FA). The project-owned registration is `stream-gui-rs`. Use that registration's ID for official builds; forks/developers can register their own. Do not reuse/import the legacy GUI's client ID or credentials. If registration requires a redirect URL, a localhost URL can satisfy the form; Device Flow does not use it. No client secret is generated, embedded, stored, or sent by this app.
+
+### Rust configuration precedence
+
+Rust resolves the public ID once at startup, before opening the credential store:
+
+1. `TWITCH_CLIENT_ID`, **if present**, is an intentional runtime override for development/testing, including testing a distribution build.
+2. Otherwise, use the public ID embedded through `TWITCH_CLIENT_ID_BUILD` when compiling.
+3. If neither exists, startup fails with an actionable configuration error explaining both variables.
+
+Both inputs must contain **1–128 ASCII letters or digits**. Values are case-sensitive and are not trimmed; empty strings, whitespace, punctuation, control characters, non-Unicode environment values, and oversized inputs are errors. An invalid/empty runtime override **does not fall back** to the embedded ID: unset it to use the build's ID. An invalid build-time value fails every build, including development. Error messages name the input and validation rule without echoing its value. These are local syntax checks; Twitch checks that the ID is registered and that the application supports the requested public-client flow.
+
+Neither `.env` nor `VITE_` variables configure OAuth. Resolution and embedding stay in Rust; no OAuth configuration, client secret or token is added to React, IPC DTOs or settings files. The runtime override is never automatically captured as a build-time ID.
+
+### Development
+
+Replace `yourPublicClientId` in these examples with a real public client ID. Development builds may omit an embedded ID and supply the runtime override instead:
 
 ```sh
-TWITCH_CLIENT_ID=your_public_client_id npm run tauri dev
+TWITCH_CLIENT_ID=yourPublicClientId npm run tauri dev
 ```
 
 Windows PowerShell:
 
 ```powershell
-$env:TWITCH_CLIENT_ID = "your_public_client_id"
+$env:TWITCH_CLIENT_ID = "yourPublicClientId"
 npm run tauri dev
 ```
 
-A built executable needs the same runtime environment. Finder/Start menu launches may not inherit a terminal's environment. `.env` is not loaded and no `VITE_` credential configuration is used. Packaging a project-owned public client ID is a later distribution decision.
+A plain Cargo debug/dev build without either value can compile for offline tests, but the desktop app refuses to start until configured. To return to the embedded ID, use `unset TWITCH_CLIENT_ID` in a POSIX shell or `Remove-Item Env:TWITCH_CLIENT_ID` in PowerShell. Finder/Start menu launches need no terminal environment when the ID is embedded. If a macOS testing override was set with `launchctl setenv TWITCH_CLIENT_ID ...`, remove that override with `launchctl unsetenv TWITCH_CLIENT_ID` and restart the app.
+
+### Release and distribution builds
+
+Set **`TWITCH_CLIENT_ID_BUILD` in the build process**, using the project-owned public ID. For example, to build a release binary:
+
+```sh
+TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --no-bundle
+```
+
+Windows PowerShell:
+
+```powershell
+$env:TWITCH_CLIENT_ID_BUILD = "yourPublicClientId"
+npm run tauri build -- --no-bundle
+```
+
+To build a local macOS app bundle for testing:
+
+```sh
+TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --debug --bundles app --config '{"bundle":{"active":true}}'
+```
+
+`build.rs` rejects missing embedded configuration for **every non-debug Cargo profile** and for **`custom-protocol` builds**, the feature Tauri enables for distribution. This includes `cargo build --release`, release builds with debug assertions enabled, and `tauri build --debug` / `--no-bundle`. A runtime `TWITCH_CLIENT_ID` cannot bypass this check. The build script tracks changes to `TWITCH_CLIENT_ID_BUILD`, validates the value and emits a Rust compiler environment constant. Changing/removing the input invalidates the configuration; a previous embedded value cannot silently persist into a later build.
+
+The embedded value travels with the executable across installation, restarts and OS reboots. Build machines should configure the public ID as a normal build variable; it does not require secret storage. CI check builds use an explicitly synthetic public ID and are **not usable OAuth releases**. Any future publishing workflow must supply the actual project-owned ID. Signing, installers, publishing and updater workflows are separate from this configuration change.
+
+## Signing in
 
 Click **Log in**, open the verification page, and enter the displayed user code. Rust alone receives the secret device code and tokens. The screen displays authorization status, the authenticated account, granted scopes, expiry, and the storage backend. **Cancel authorization** interrupts local polling; it does not undo consent already given in the browser. Validate and Refresh token remain development controls.
 

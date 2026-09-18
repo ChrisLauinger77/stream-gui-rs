@@ -21,22 +21,24 @@ Linux, Windows and macOS are development targets and have a CI matrix. A matrix 
 
 ```sh
 npm ci
-npm run tauri dev
+TWITCH_CLIENT_ID=yourPublicClientId npm run tauri dev
 ```
+
+Replace `yourPublicClientId` with a registered public Twitch client ID. This runtime override is for development; installed builds include their own public ID. See [authentication and build configuration](docs/authentication.md) for Windows commands and precedence.
 
 `npm run dev` alone opens a frontend preview with backend controls unavailable. No mock backend success is displayed. The desktop application serves its Vite frontend on `127.0.0.1:1420` during development.
 
 Build a local desktop binary without release packaging:
 
 ```sh
-npm run tauri build -- --no-bundle
+TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --no-bundle
 ```
 
-The result is in `src-tauri/target/release/`. Bundling, signing, release publishing and updating are intentionally not configured.
+The result is in `src-tauri/target/release/` and authenticates without any runtime environment configuration. Release builds and all `tauri build` invocations (including `--debug` and `--no-bundle`) require a valid `TWITCH_CLIENT_ID_BUILD`; setting only `TWITCH_CLIENT_ID` cannot satisfy that build check. The public ID is embedded only in Rust. Installer/signing, release publishing and updating workflows remain out of scope.
 
 ## Browsing workflow
 
-1. Configure your own public Twitch application via the backend-only `TWITCH_CLIENT_ID` environment variable; follow [authentication setup](docs/authentication.md). Connect to Twitch and complete the device code flow in your browser. No client secret is needed.
+1. Open the installed app, connect to Twitch and complete the device code flow in your browser. The build includes the project's public client ID; users do not register an app or set environment variables. Developers building from source follow [authentication setup](docs/authentication.md). No client secret is needed.
 2. **Following** switches between live streams and all followed channels. **Live** shows popular streams. **Categories** opens a category's streams. **Search** has separate channel and category results.
 3. Select a stream/channel to read its details. **Back** restores the previous view, scroll position and focused item where retained. **Load more** fetches one page; **Refresh** checks for current information. Retained results are visibly labeled.
 4. Navigate with Tab and activate items with Enter. Settings offers system, dark and light appearance.
@@ -66,8 +68,10 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features test-support
 cargo check --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support
 cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support -- -D warnings
-npm run tauri build -- --debug --no-bundle --ci
+TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --debug --no-bundle --ci
 ```
+
+The final build command uses a synthetic public ID for compilation only; replace it with the project's registered public ID when building an app for use or distribution. Configuration tests cover embedded-only startup, developer precedence, missing/invalid values, and execute the actual build script to verify release and packaged-debug guards without contacting Twitch.
 
 The tests use a native fake Streamlink executable and local HTTP fixtures; no Twitch credentials or live streams are required. The test-support feature is only for checks and is omitted from app builds. `--no-default-features` exercises the Tauri-independent backend without a WebView toolchain. Vitest tests cover browsing behavior, search races, bounded pagination, navigation focus, authentication, playback/settings behavior, and independent session controls. See the [Phase 3 results and real-player checklist](docs/phase-3-validation.md).
 
