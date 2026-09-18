@@ -21,8 +21,7 @@ command construction, sessions, child lifecycles, bounded diagnostics and native
 React owns presentation and interaction: navigation, forms/drafts, tabs, dialogs, focus, pending-request
 guards and bounded navigation snapshots. Backend snapshots may be displayed in React; they do not transfer
 authority to it. If behavior affects credentials, persistence, native resources, external processes or
-authoritative Twitch state, it probably belongs in Rust. The existing appearance preference in localStorage
-is a narrow presentation-only exception.
+authoritative Twitch state, it probably belongs in Rust. Theme preference also persists through Rust settings; React applies the accepted snapshot.
 
 | Area | Start here |
 | --- | --- |
@@ -53,7 +52,8 @@ Do not introduce a second process owner or Twitch cache.
 - Use only the closed command map in `src/lib/ipc.ts` for frontend invocation. Handlers delegate to domain
   services; Rust validates all frontend inputs.
 - Express intent with actual commands such as `streamlink_launch`, `streamlink_stop`, `streamlink_restart`,
-  `playback_settings`, `save_playback_settings` and `auth_open_verification`.
+  `playback_settings`, `save_playback_settings`, `channel_settings`, `save_channel_settings`,
+  `open_channel_chat` and `auth_open_verification`.
 - Never add generic `execute_program`, `open_arbitrary_url`, `http_request`, `set_setting(key, value)` or
   `read_credentials` APIs.
 - Return intentional safe DTOs and typed `AppError` codes, not provider objects, raw response bodies,
@@ -89,9 +89,10 @@ Do not introduce a second process owner or Twitch cache.
 - OAuth/Helix errors use safe categorized text. Never return or log provider bodies, token-bearing
   URLs/headers or raw credential-store errors. Normal UI uses fixed messages in `src/browse/errors.ts`; do
   not stringify unknown IPC errors.
-- The only browser-opening command, `auth_open_verification`, takes no URL and uses the validated Twitch
-  activation URL. Keep native opening restricted to backend-selected, validated destinations; do not accept
-  arbitrary frontend URLs.
+- `auth_open_verification` takes no URL and uses the validated Twitch activation URL.
+  `open_channel_chat` accepts only broadcaster/session IDs and constructs a fixed Twitch popout URL from
+  fresh, session-bound identity. Keep native opening restricted to these validated destinations. Linux GIO
+  dispatch reaps browser launchers; preserve the isolated regression and safe errors.
 - Do not commit real credentials, account captures, personal local paths, `.env` files or credential
   exports. Keep generated builds, bundles, dependencies and diagnostic logs out of Git; preserve
   `.gitignore` protections.
@@ -154,21 +155,21 @@ user.
 
 ## Settings and launch configuration
 
-- `SettingsStore` owns strict version 2 settings: Streamlink path, player mode/path/literal arguments and
-  default quality, under Tauri's app config directory. Preserve atomic replacement, this app's version 1
-  migration, and rejection of malformed/unknown schemas without overwriting the original file.
-- Current precedence is saved global configuration → optional request quality override → resolved
-  `LaunchSpec` → fixed command for that run. `quality: null` inherits the saved default; resolve this in
-  Rust, not React.
-- Saving settings does not mutate running processes. Explicit restart resolves current executable/player
-  settings and requested quality (or the current default when absent), retaining session identity without a
-  fresh Helix lookup.
-- Preserve the user's configured path/symlink; resolve its target at use. Failed probes must not save a
-  replacement path. React holds editable drafts only.
-- Per-channel persisted overrides do not exist in this checkout. Do not assume a per-channel settings
-  service exists. If channel persistence is explicitly requested, key it by stable broadcaster/user ID, keep
-  inherit semantics explicit and resolve precedence in Rust with tests, never by display name or duplicated
-  UI logic.
+- `SettingsStore` owns strict version 3 settings: global Streamlink/player/quality/chat/theme preferences
+  and sparse channel overrides, under Tauri's app config directory. Preserve atomic replacement, in-memory
+  migrations from this app's versions 1 and 2, and rejection of malformed/unknown schemas without overwrite.
+  Files are bounded to 256 KiB and channel overrides to 1,000 records.
+- Precedence is global defaults → optional channel overrides → optional request quality → immutable
+  effective snapshot in `LaunchSpec` and the session. `quality: null` inherits; resolve only in Rust.
+- Channel overrides use stable positive decimal broadcaster IDs. Quality/chat null means inherit; false
+  explicitly disables chat. Remove fully inherited records. These local preferences apply across accounts;
+  they never grant authentication or playback authority.
+- Saving settings does not mutate running processes. Explicit restart resolves current settings, retaining
+  trusted session identity without a fresh Helix lookup. Chat opens once per enabled launch/restart;
+  generation-checked browser errors must not hide or fail playback.
+- Preserve configured paths/symlinks; resolve their targets at use. Failed/unsupported Streamlink probes or
+  invalid player paths must not replace valid preferences. Global updates preserve channel records; path
+  probes update only the path. React holds editable drafts and displays Rust effective previews.
 
 ## Frontend and desktop UX
 
@@ -188,8 +189,9 @@ user.
   themes, CSS tokens, readable contrast and visible focus. Avoid mobile-sized cards, excessive whitespace,
   gratuitous animation, decorative glass/gradients, unnecessary containers and imitation of the Twitch
   website.
-- Appearance alone currently persists in localStorage. Do not store account, query, cursor, credential or
-  playback-setting authority there.
+- No preference authority lives in localStorage. Theme follows the Rust snapshot and native
+  `prefers-color-scheme`. App-local shortcuts reuse navigation/focus and pause in inputs, editable content,
+  composition/repeats and modal dialogs; preserve Control versus Command conventions.
 
 ## Cross-platform and dependency discipline
 
@@ -245,6 +247,8 @@ TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --deb
 git diff --check
 ```
 
+On Linux, also run `cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_browser_open --features test-support`. It isolates XDG associations and uses the native fixture; it must never open the real browser. The `linux_startup` regression is ignored in headless runs; explicitly run it with `-- --ignored` in a graphical session after changing native setup/error handling.
+
 `npm run build` includes TypeScript checking. The local build command above uses a synthetic public ID for
 compilation only. CI uses the repository secret `TWITCH_CLIENT_ID_BUILD` when available, otherwise the
 synthetic ID for non-publishing checks. Never use that fallback in a release workflow. For PowerShell, set
@@ -281,11 +285,11 @@ cross-compilation or process status does not prove native behavior.
 - `docs/authentication.md`: OAuth/storage, build/runtime ID precedence and native checks.
 - `docs/helix.md`: HTTP, retry, pagination, cache and session-isolation contracts.
 - `docs/phase-0-validation.md`, `docs/phase-1-validation.md`, `docs/phase-2-validation.md`,
-  `docs/phase-3-validation.md`: historical evidence and manual gaps, not proof of a current run. Use current
+  `docs/phase-3-validation.md`, `docs/phase-4-validation.md`: historical evidence and manual gaps, not proof of a current run. Use current
   README/CI build commands.
 
-The current tree implements browsing and basic playback through Phase 3; there is no Phase 4
-implementation/validation document. Background monitoring, notifications/tray, advanced transports/chat
+The current tree implements the Phase 4 MVP: browsing/playback, persistent global/channel preferences,
+restricted browser chat, themes and focused shortcuts. Background monitoring, notifications/tray, advanced transports/chat
 clients, legacy import and release and updater polish remain deferred. There is no publishing workflow. Do not
 start another phase as incidental cleanup. Keep detailed architecture, user setup and validation history in
 their respective documents rather than expanding this guide.
