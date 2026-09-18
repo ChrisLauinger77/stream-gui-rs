@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { CategorySummary, ChannelSummary, StreamSummary } from "../lib/generated";
 import { errorText } from "./errors";
+import type { Watch } from "./Workspace";
 import type { usePage } from "./usePage";
 
 export function Media({ src, retryGeneration = 0, shape = "preview" }: { src: string | null; retryGeneration?: number; shape?: "preview" | "avatar" | "artwork" }) {
@@ -23,27 +24,32 @@ export type OpenCategory = (id: string, name: string) => void;
 export function StreamPreview({ stream, retryGeneration }: { stream: StreamSummary; retryGeneration: number }) {
   return <div className="stream-preview"><Media retryGeneration={retryGeneration} src={stream.previewUrl} /><span className="live-tag">LIVE</span><span className="viewer-count">{viewers.format(stream.viewerCount)} viewers</span></div>;
 }
-export function StreamCard({ stream, channel, category, retryGeneration }: { stream: StreamSummary; retryGeneration: number; channel: OpenChannel; category: OpenCategory }) {
+export function StreamCard({ stream, channel, category, retryGeneration, ...watch }: { stream: StreamSummary; retryGeneration: number; channel: OpenChannel; category: OpenCategory } & Watch) {
   return <article className="stream-card">
     <button className="item-link" data-focus={`stream:${stream.streamId}`} onClick={() => channel(stream.broadcasterId, stream.displayName)} aria-label={`Open channel ${stream.displayName}`}>
       <StreamPreview retryGeneration={retryGeneration} stream={stream} />
       <h3>{stream.displayName}</h3><p className="stream-title" title={stream.title}>{stream.title || "Untitled stream"}</p>
     </button>
     <div className="stream-meta">{stream.categoryId ? <button className="text-button" onClick={() => category(stream.categoryId!, stream.categoryName ?? "Category")}>{stream.categoryName ?? "Category"}</button> : <span>Uncategorized</span>}{stream.language && <span>{stream.language.toUpperCase()}</span>}</div>
+    <WatchButton id={stream.broadcasterId} name={stream.displayName} {...watch} />
   </article>;
 }
-export function StreamList({ items, channel, category, retryGeneration }: { items: StreamSummary[]; retryGeneration: number; channel: OpenChannel; category: OpenCategory }) {
-  return <div className="stream-grid">{items.map(stream => <StreamCard retryGeneration={retryGeneration} key={stream.streamId} stream={stream} channel={channel} category={category} />)}</div>;
+export function StreamList({ items, channel, category, retryGeneration, ...watch }: { items: StreamSummary[]; retryGeneration: number; channel: OpenChannel; category: OpenCategory } & Watch) {
+  return <div className="stream-grid">{items.map(stream => <StreamCard retryGeneration={retryGeneration} key={stream.streamId} stream={stream} channel={channel} category={category} {...watch} />)}</div>;
+}
+export function WatchButton({ id, name, watch, pending }: Watch & { id: string; name: string }) {
+  const busy = pending.has(`launch:${id}`);
+  return <button className="watch-button" aria-label={`Watch ${name}`} disabled={busy} onClick={() => watch(id)}>{busy ? "Starting…" : "▶ Watch"}</button>;
 }
 export function CategoryList({ items, open, retryGeneration }: { items: CategorySummary[]; retryGeneration: number; open: OpenCategory }) {
   return <div className="category-grid">{items.map(category => <button key={category.id} className="item-link category-card" data-focus={`category:${category.id}`} onClick={() => open(category.id, category.name)} aria-label={`Open category ${category.name}`}><Media retryGeneration={retryGeneration} src={category.imageUrl} shape="artwork" /><h3>{category.name}</h3></button>)}</div>;
 }
-export function ChannelList({ items, open, retryGeneration }: { items: ChannelSummary[]; retryGeneration: number; open: OpenChannel }) {
-  return <div className="channel-list">{items.map(channel => <button key={channel.broadcasterId} className="item-link channel-row" data-focus={`channel:${channel.broadcasterId}`} onClick={() => open(channel.broadcasterId, channel.displayName)} aria-label={`Open channel ${channel.displayName}`}>
+export function ChannelList({ items, open, retryGeneration, ...watch }: { items: ChannelSummary[]; retryGeneration: number; open: OpenChannel } & Watch) {
+  return <div className="channel-list">{items.map(channel => <div className="channel-entry" key={channel.broadcasterId}><button className="item-link channel-row" data-focus={`channel:${channel.broadcasterId}`} onClick={() => open(channel.broadcasterId, channel.displayName)} aria-label={`Open channel ${channel.displayName}`}>
     <Media retryGeneration={retryGeneration} src={channel.imageUrl} shape="avatar" /><span><h3>{channel.displayName}<span className={channel.liveState === "live" ? "live-tag" : "muted"}> · {channel.liveState === "unknown" ? "Status unavailable" : channel.liveState === "live" ? "LIVE" : "Offline"}</span></h3>
     <p>{channel.title ?? `@${channel.login}`}</p><p>{channel.categoryName}{channel.language && ` · ${channel.language.toUpperCase()}`}</p>
     {channel.followedAt && <p>Followed {dateLabel(channel.followedAt)}</p>}</span>
-  </button>)}</div>;
+  </button>{channel.liveState === "live" && <WatchButton id={channel.broadcasterId} name={channel.displayName} {...watch} />}</div>)}</div>;
 }
 export function PageFrame<T>({ query, children, empty, detail = false }: { query: ReturnType<typeof usePage<T>>; children: ReactNode; empty: string; detail?: boolean }) {
   const results = useRef<HTMLDivElement>(null);

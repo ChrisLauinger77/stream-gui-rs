@@ -11,9 +11,10 @@ type Visit = { route: Route; section: Section; scroll: number; focus?: string;
   search: string; searchType: "channels" | "categories"; following: "live" | "channels" };
 const routeKey = (route: Route) => route.kind + ("id" in route ? `:${route.id}` : "");
 export type QueryContext = { sessionId: string; memory: ViewMemory; onAuthLost: () => void };
-export type Links = { channel: (id: string, name: string) => void; category: (id: string, name: string) => void };
+export type Watch = { watch: (id: string) => void; pending: ReadonlySet<string> };
+export type Links = Watch & { channel: (id: string, name: string) => void; category: (id: string, name: string) => void };
 export const pageRequest = (sessionId: string, cursor: string | null, refresh: boolean): BrowseRequest => ({ sessionId, cursor, refresh });
-export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAuthLost }: { sessionId: string; onAuthLost: () => void }) {
+export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAuthLost, watch, pending }: { sessionId: string; onAuthLost: () => void } & Watch) {
   const memory = useRef(new ViewMemory()).current;
   const [route, setRoute] = useState<Route>({ kind: "following" });
   const [section, setSection] = useState<Section>("following");
@@ -43,7 +44,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
     if (content.current) content.current.scrollTop = target?.scroll ?? 0;
   }, [route]);
   const context = { sessionId, memory, onAuthLost };
-  const links: Links = { channel: (id, name) => navigate({ kind: "channel", id, name }), category: (id, name) => navigate({ kind: "category", id, name }) };
+  const links: Links = { watch, pending, channel: (id, name) => navigate({ kind: "channel", id, name }), category: (id, name) => navigate({ kind: "category", id, name }) };
   const title = "name" in route ? route.name : ({ following: "Following", live: "Live now", categories: "Categories", search: "Search" }[route.kind]);
   const subtitle = { following: "The channels you choose to keep up with.", live: "Popular streams, happening right now.", categories: "Find a game. Find your community.", search: "Discover channels and categories on Twitch.", category: "Live streams in this category.", channel: "Channel details" }[route.kind];
   return <div className="workspace">
@@ -69,7 +70,7 @@ function Streams({ mode, context, links }: { mode: "live" | "followed"; context:
 function Follows({ context, links }: { context: QueryContext; links: Links }) {
   const query = usePage<ChannelSummary>({ ...context, viewKey: "followed-channels", identify: channel => channel.broadcasterId,
     load: (cursor, refresh) => api.followedChannels(pageRequest(context.sessionId, cursor, refresh)) });
-  return <PageFrame query={query} empty="You aren’t following any channels yet"><ChannelList retryGeneration={query.imageRetryGeneration} items={query.page?.items ?? []} open={links.channel} /></PageFrame>;
+  return <PageFrame query={query} empty="You aren’t following any channels yet"><ChannelList retryGeneration={query.imageRetryGeneration} items={query.page?.items ?? []} open={links.channel} watch={links.watch} pending={links.pending} /></PageFrame>;
 }
 function Categories({ context, links }: { context: QueryContext; links: Links }) {
   const query = usePage<CategorySummary>({ ...context, viewKey: "categories", identify: category => category.id,

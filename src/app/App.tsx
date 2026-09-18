@@ -1,10 +1,15 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { DeveloperTools } from "./DeveloperTools";
 import { useAuthentication } from "./useAuthentication";
 import { BrowserWorkspace } from "../browse/Workspace";
 import { friendlyError } from "../browse/errors";
 import type { Account, AuthStatus } from "../lib/generated";
+
+import { usePlayback } from "../playback/usePlayback";
+import { Playback } from "../features/Playback";
+import { PlaybackSettings } from "../features/PlaybackSettings";
+import { api } from "../lib/ipc";
 
 type Theme = "system" | "dark" | "light";
 function initialTheme(): Theme {
@@ -18,28 +23,43 @@ export function App() {
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem("stream-gui-theme", theme); } catch { /* no persistence required */ }
   }, [theme]);
-  if (developer) return <><div className="developer-banner"><button onClick={() => setDeveloper(false)}>← Back to browsing</button><span>Developer tools · isolated playback prototype</span></div><DeveloperTools /></>;
+  if (developer) return <><div className="developer-banner"><button onClick={() => setDeveloper(false)}>← Back to browsing</button><span>Developer tools · backend diagnostics</span></div><DeveloperTools /></>;
   return <Application theme={theme} setTheme={setTheme} developer={() => setDeveloper(true)} />;
 }
 function Application({ theme, setTheme, developer }: { theme: Theme; setTheme: (value: Theme) => void; developer: () => void }) {
   const auth = useAuthentication();
   const [settings, setSettings] = useState(false);
+  const [watching, setWatching] = useState(false);
+  const playback = usePlayback();
+  const { run } = playback;
+  const watch = useCallback((broadcasterId: string) => {
+    if (!auth.sessionId) return;
+    setWatching(true); setSettings(false);
+    void run(`launch:${broadcasterId}`, () => api.launch({ authSessionId: auth.sessionId!, broadcasterId, quality: null }), "Streamlink started. Check Watching for status.");
+  }, [auth.sessionId, run]);
+  const activeCount = playback.sessions.filter(session => session.restarting || ["starting", "running", "stopping"].includes(session.phase)).length;
   const controls = <div className="account-controls">
     <span className="connection-dot" aria-hidden="true" />
     <span>{auth.account?.displayName ?? auth.status?.user?.login ?? "Not connected"}</span>
     {auth.sessionId && <button className="quiet" disabled={auth.busy === "logout"} onClick={() => { void auth.run("logout"); }}>Sign out</button>}
-    <button className="quiet" aria-expanded={settings} onClick={() => setSettings(!settings)}>Settings</button>
+    <button className="quiet" aria-label="Watching" aria-expanded={watching} onClick={() => { setWatching(!watching); if (!watching) setSettings(false); }}>Watching{activeCount > 0 && ` (${activeCount})`}</button>
+    <button className="quiet" aria-expanded={settings} onClick={() => { setSettings(!settings); if (!settings) setWatching(false); }}>Settings</button>
   </div>;
   return <div className="application">
     <header className="app-bar"><div className="brand"><span aria-hidden="true">▶</span> Stream GUI RS</div>{controls}</header>
     {settings && <section className="settings-panel" aria-label="Settings">
       <label>Appearance<select value={theme} onChange={e => setTheme(e.target.value as Theme)}><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
-      <p>Streamlink is installed separately. Its existing path and playback controls are available in developer tools.</p>
+      <PlaybackSettings saved={playback.settings} onSaved={playback.setSettings} />
       <button onClick={developer}>Developer tools</button>
       {auth.status?.phase === "not_configured" && <p>Set the public <code>TWITCH_CLIENT_ID</code> in the backend environment and restart. No client secret is needed.</p>}
     </section>}
+    {(playback.error || playback.message) && <div className={playback.error ? "error playback-feedback" : "notice playback-feedback"} role={playback.error ? "alert" : "status"}>{playback.error ?? playback.message}<button className="quiet" onClick={playback.dismiss}>Dismiss</button></div>}
+    {watching && <div className="watching-panel"><Playback sessions={playback.sessions}
+      isStopping={id => playback.pending.has(`stop:${id}`)} isRestarting={id => playback.pending.has(`restart:${id}`)}
+      stop={id => { void playback.run(`stop:${id}`, () => api.stop(id), "Playback stopped."); }}
+      restart={(session, quality) => { void playback.run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), "Streamlink restarted."); }} /></div>}
     {auth.error && <p className="error" role="alert">{auth.error}</p>}
-    {auth.sessionId ? <BrowserWorkspace key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} /> :
+    {auth.sessionId ? <BrowserWorkspace key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} pending={playback.pending} /> :
       <SignIn status={auth.status} account={auth.account} busy={auth.busy} run={auth.run} />}
     <footer className="app-footer"><span>Twitch browsing · Streamlink desktop</span><span>{auth.sessionId ? "Connected to Twitch" : "Connect your Twitch account"}</span></footer>
   </div>;

@@ -34,6 +34,8 @@ async function type(value: string) {
 async function render(strict = false) { await act(async () => { root.render(strict ? <StrictMode><App /></StrictMode> : <App />); }); }
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
+  vi.mocked(api.sessions).mockResolvedValue([]);
+  vi.mocked(api.playbackSettings).mockResolvedValue({ version: 2, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
   vi.mocked(api.authStatus).mockResolvedValue(signedIn);
   vi.mocked(api.account).mockResolvedValue({ id: "viewer", login: "viewer", displayName: "Viewer", profileImageUrl: null });
   vi.mocked(api.followedStreams).mockResolvedValue(page([])); vi.mocked(api.streams).mockResolvedValue(page([stream]));
@@ -316,4 +318,148 @@ test.each(["followed channels", "categories", "category details", "channel detai
   await act(async () => { images.forEach(img => img.dispatchEvent(new Event("error"))); }); expect(container.querySelectorAll(".media img")).toHaveLength(0);
   await click("Refresh"); expect(container.querySelectorAll(".media img")).toHaveLength(images.length);
   expect([...container.querySelectorAll<HTMLImageElement>(".media img")].every(img => img.src === imageUrl)).toBe(true);
+});
+
+// Phase 3 uses the same application and navigation surfaces as the Phase 2 tests.
+const playing = (id = "play-one", broadcasterId = "channel-one"): import("../lib/generated").SessionSnapshot => ({
+  id, generation: 1, restarting: false, stream: { streamId: "stream-one", broadcasterId, login: "example", displayName: id === "play-one" ? "Example Channel" : "Second Channel", title: "A live broadcast", category: "Example Game" },
+  qualityPolicy: "source", startedAt: 100, endedAt: null, failure: null, phase: "running", pid: 123,
+  url: "https://www.twitch.tv/example", quality: "best", exitCode: null, stopRequested: false,
+  logs: [{ sequence: 1, source: "stderr", text: "Synthetic diagnostic warning" }], droppedLogEntries: 5,
+});
+const playbackSettings: import("../lib/generated").Settings = { version: 2, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
+async function editControl(label: string, value: string, kind: "input" | "select" = "input") {
+  const control = [...container.querySelectorAll<HTMLInputElement | HTMLSelectElement>(kind)].find(el => el.labels?.[0]?.textContent?.startsWith(label));
+  if (!control) throw new Error(`Missing control: ${label}`);
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(kind === "input" ? HTMLInputElement.prototype : HTMLSelectElement.prototype, "value")!.set!.call(control, value);
+    control.dispatchEvent(new Event(kind === "input" ? "input" : "change", { bubbles: true }));
+  });
+}
+test.each(["Following", "Live", "Category"])("Watch launches trusted broadcaster identity from %s and keeps browsing mounted", async location => {
+  vi.mocked(api.followedStreams).mockResolvedValue(page([stream]));
+  vi.mocked(api.launch).mockResolvedValue(playing());
+  await render();
+  if (location === "Live") await click("Live");
+  if (location === "Category") { await click("Categories"); await click("Open category Example Game"); }
+  await click("Watch Example Channel");
+  expect(api.launch).toHaveBeenCalledWith({ authSessionId: "1", broadcasterId: "channel-one", quality: null });
+  expect(container.querySelector(".workspace")).not.toBeNull();
+  expect(container.querySelector(".watching-panel")?.textContent).toContain("running");
+  expect(text()).toContain("Streamlink started");
+});
+test("live search and Channel details offer Watch but offline and unknown channels do not", async () => {
+  vi.mocked(api.searchChannels).mockResolvedValue(page([{ ...channel, liveState: "live" }, { ...channel, broadcasterId: "offline", displayName: "Offline" }, { ...channel, broadcasterId: "unknown", displayName: "Unknown", liveState: "unknown" }]));
+  vi.mocked(api.launch).mockResolvedValue(playing());
+  vi.mocked(api.channel).mockResolvedValue({ ...details, channel: { ...channel, liveState: "live" }, stream });
+  await render(); await click("Search"); await type("example"); await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+  expect(container.querySelectorAll(".watch-button")).toHaveLength(1);
+  await click("Watch Example Channel"); await click("Open channel Example Channel");
+  await click("Watch Example Channel"); expect(api.launch).toHaveBeenCalledTimes(2);
+  vi.mocked(api.channel).mockResolvedValue(details); await click("Refresh");
+  expect(container.querySelector(".watch-button")).toBeNull();
+});
+test("a keyboard-focusable native Watch button supports keyboard activation and blocks repeat pending launches", async () => {
+  const launch = deferred<ReturnType<typeof playing>>(); vi.mocked(api.launch).mockReturnValue(launch.promise);
+  await render(); await click("Live");
+  const watch = button("Watch Example Channel"); watch.focus();
+  expect(document.activeElement).toBe(watch); expect(watch.tagName).toBe("BUTTON"); expect(watch.tabIndex).toBe(0);
+  // jsdom has no native key default actions; a keyboard-generated click has detail 0.
+  await act(async () => { watch.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 })); watch.click(); });
+  expect(api.launch).toHaveBeenCalledOnce(); expect(watch.disabled).toBe(true);
+  await act(async () => { launch.resolve(playing()); }); expect(watch.disabled).toBe(false);
+});
+test.each([
+  ["streamlink_not_found", "Streamlink was not found"], ["player_not_found", "selected player was not found"],
+  ["unsupported_streamlink", "Streamlink 8 or newer"], ["stream_offline", "no longer live"],
+])("launch failure %s is useful without displaying raw backend errors", async (code, message) => {
+  vi.mocked(api.launch).mockRejectedValue({ code, message: "PRIVATE BACKEND PAYLOAD" });
+  await render(); await click("Live"); await click("Watch Example Channel");
+  expect(text()).toContain(message); expect(text()).not.toContain("PRIVATE BACKEND PAYLOAD");
+  expect(container.querySelectorAll(".session")).toHaveLength(0); expect(button("Watch Example Channel").disabled).toBe(false);
+});
+test("Watching reconstructs multiple sessions and stops only the selected one", async () => {
+  const first = playing(); const second = playing("play-two", "channel-two");
+  vi.mocked(api.sessions).mockResolvedValue([first, second]);
+  vi.mocked(api.stop).mockResolvedValue({ ...second, phase: "exited", stopRequested: true, endedAt: 160 });
+  await render(); await click("Watching");
+  expect(container.querySelectorAll(".session")).toHaveLength(2);
+  expect(button("Watching").textContent).toContain("2");
+  await click("Stop", '[aria-label="Playback Second Channel"]');
+  expect(api.stop).toHaveBeenCalledWith("play-two");
+  expect(container.querySelector('[aria-label="Playback Example Channel"] .session-heading strong')?.textContent).toBe("running");
+  expect(button("Stop", '[aria-label="Playback Second Channel"]').disabled).toBe(true);
+  expect(button("Watching").textContent).toContain("1");
+});
+test("quality changes require an explicit restart and send the observed generation", async () => {
+  vi.mocked(api.sessions).mockResolvedValue([playing()]);
+  vi.mocked(api.restart).mockResolvedValue({ ...playing(), generation: 2, qualityPolicy: "audio", quality: "audio,audio_only" });
+  await render(); await click("Watching"); await editControl("Restart quality", "audio", "select");
+  expect(api.restart).not.toHaveBeenCalled();
+  await click("Restart");
+  expect(api.restart).toHaveBeenCalledWith({ sessionId: "play-one", generation: 1, quality: "audio" });
+  expect(container.querySelector(".session")?.textContent).toContain("Audio");
+});
+test("Stop remains usable while Restart is pending and unrelated sessions remain usable", async () => {
+  const pending = deferred<ReturnType<typeof playing>>();
+  vi.mocked(api.sessions).mockResolvedValue([playing(), playing("play-two")]);
+  vi.mocked(api.restart).mockReturnValue(pending.promise);
+  vi.mocked(api.stop).mockResolvedValue({ ...playing(), generation: 2, phase: "exited", endedAt: 200 });
+  await render(); await click("Watching"); await click("Restart", '[aria-label="Playback Example Channel"]');
+  expect(button("Restart", '[aria-label="Playback Example Channel"]').disabled).toBe(true);
+  expect(button("Stop", '[aria-label="Playback Example Channel"]').disabled).toBe(false);
+  expect(button("Restart", '[aria-label="Playback Second Channel"]').disabled).toBe(false);
+  await click("Stop", '[aria-label="Playback Example Channel"]'); expect(api.stop).toHaveBeenCalledWith("play-one");
+  await act(async () => { pending.resolve({ ...playing(), generation: 2, phase: "exited", endedAt: 200 }); });
+});
+test("session diagnostics are collapsed, scoped and show bounded-log truncation", async () => {
+  vi.mocked(api.sessions).mockResolvedValue([playing()]); await render(); await click("Watching");
+  const diagnostics = container.querySelector<HTMLDetailsElement>(".session-diagnostics")!;
+  expect(diagnostics.open).toBe(false);
+  await act(async () => { diagnostics.querySelector("summary")!.click(); });
+  expect(diagnostics.open).toBe(true);
+  expect(diagnostics.querySelector('pre[aria-label="Diagnostics for session play-one"]')?.textContent).toContain("[stderr] Synthetic diagnostic warning");
+  expect(diagnostics.textContent).toContain("5 older log entries discarded");
+});
+test("a late pre-launch session poll cannot erase the resulting active session", async () => {
+  const old = deferred<ReturnType<typeof playing>[]>(); vi.mocked(api.sessions).mockReturnValueOnce(old.promise);
+  vi.mocked(api.launch).mockResolvedValue(playing()); await render(); await click("Live"); await click("Watch Example Channel");
+  await act(async () => { old.resolve([]); });
+  expect(container.querySelectorAll(".session")).toHaveLength(1);
+  expect(button("Watching").textContent).toContain("1");
+});
+test("frontend remount and logout recover and preserve Rust playback without relaunching or stopping", async () => {
+  vi.mocked(api.sessions).mockResolvedValue([playing()]); await render(); await click("Watching");
+  await act(async () => { root.render(null); }); await render(); await click("Watching");
+  expect(container.querySelectorAll(".session")).toHaveLength(1);
+  vi.mocked(api.logout).mockResolvedValue(signedOut); vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  await click("Sign out");
+  expect(container.querySelector(".workspace")).toBeNull(); expect(container.querySelectorAll(".session")).toHaveLength(1);
+  expect(api.launch).not.toHaveBeenCalled(); expect(api.stop).not.toHaveBeenCalled();
+});
+test("settings save literal player arguments and restore persisted choices when reopened", async () => {
+  await render(); await click("Settings"); await editControl("Player", "custom", "select");
+  await editControl("Player executable", "/Applications/My Player/日本語");
+  await editControl("Default quality", "low", "select"); await click("Add argument");
+  await editControl("Player argument 1", `spaces 'quotes' {playerinput} $literal`); await click("Add argument");
+  const saved = { ...playbackSettings, player: { mode: "custom" as const, executable: "/Applications/My Player/日本語", arguments: ["spaces 'quotes' {playerinput} $literal", ""] }, defaultQuality: "low" as const };
+  vi.mocked(api.savePlaybackSettings).mockResolvedValue(saved);
+  await click("Save playback settings"); expect(api.savePlaybackSettings).toHaveBeenCalledWith(saved);
+  expect(text()).toContain("Playback settings saved"); await click("Settings"); await click("Settings");
+  expect(container.querySelector<HTMLInputElement>('input[aria-label="Player executable"]')?.value).toBe(saved.player.executable);
+  expect(container.querySelectorAll(".argument-row")).toHaveLength(2);
+});
+test("settings probe reports native path and version, and player discovery reports missing players", async () => {
+  vi.mocked(api.probe).mockResolvedValue({ executable: "/opt/homebrew/bin/streamlink", version: "8.6.1" });
+  vi.mocked(api.discoverPlayers).mockResolvedValue({ mpv: "/opt/homebrew/bin/mpv", vlc: null });
+  await render(); await click("Settings"); await click("Test and save Streamlink path");
+  expect(api.probe).toHaveBeenCalledWith({ customPath: null }); expect(text()).toContain("8.6.1"); expect(text()).toContain("/opt/homebrew/bin/streamlink");
+  await click("Find installed players"); expect(text()).toContain("mpv: /opt/homebrew/bin/mpv"); expect(text()).toContain("VLC: Not found");
+});
+test("invalid player settings fail visibly without replacing saved settings", async () => {
+  vi.mocked(api.savePlaybackSettings).mockRejectedValue({ code: "player_not_found", message: "PRIVATE" });
+  await render(); await click("Settings"); await editControl("Player", "mpv", "select"); await click("Save playback settings");
+  expect(text()).toContain("selected player was not found"); expect(text()).not.toContain("PRIVATE");
+  await click("Settings"); await click("Settings");
+  expect([...container.querySelectorAll<HTMLSelectElement>("select")].find(el => el.labels?.[0]?.textContent?.startsWith("Player"))?.value).toBe("default");
 });
