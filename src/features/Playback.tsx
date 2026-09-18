@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { QualityPolicy, SessionSnapshot } from "../lib/generated";
 import { Panel } from "../components/Panel";
-import { QualitySelect, qualityLabels } from "../playback/QualitySelect";
+import { qualityLabels } from "../playback/QualitySelect";
 import { playbackError } from "../playback/usePlayback";
 
 type Props = {
@@ -9,7 +9,7 @@ type Props = {
   isStopping: (id: string) => boolean;
   isRestarting: (id: string) => boolean;
   stop: (id: string) => void;
-  restart: (session: SessionSnapshot, quality: QualityPolicy) => void;
+  restart: (session: SessionSnapshot, quality: QualityPolicy | null) => void;
 };
 export function Playback(props: Props) {
   return <Panel title="Watching">
@@ -19,8 +19,8 @@ export function Playback(props: Props) {
   </Panel>;
 }
 function Session({ session, isStopping, isRestarting, stop, restart }: Props & { session: SessionSnapshot }) {
-  const [quality, setQuality] = useState<QualityPolicy>(session.qualityPolicy ?? "source");
-  useEffect(() => setQuality(session.qualityPolicy ?? "source"), [session.generation, session.qualityPolicy]);
+  const [quality, setQuality] = useState<QualityPolicy | null>(null);
+  useEffect(() => setQuality(null), [session.generation, session.qualityPolicy]);
   const active = session.restarting || ["starting", "running", "stopping"].includes(session.phase);
   const busy = isRestarting(session.id) || session.restarting;
   const name = session.stream?.displayName ?? session.url;
@@ -34,7 +34,9 @@ function Session({ session, isStopping, isRestarting, stop, restart }: Props & {
     {session.failure && <p className="error">{playbackError({ code: session.failure })}</p>}
     <div className="session-actions">
       <button disabled={isStopping(session.id) || !active} onClick={() => stop(session.id)}>Stop</button>
-      <QualitySelect label="Restart quality" value={quality} change={setQuality} disabled={busy} />
+      <label>Restart quality<select value={quality ?? "inherit"} onChange={event => setQuality(event.target.value === "inherit" ? null : event.target.value as QualityPolicy)} disabled={busy}>
+        <option value="inherit">Use current channel/default</option>{Object.entries(qualityLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+      </select></label>
       <button disabled={busy || isStopping(session.id) || !session.stream} onClick={() => restart(session, quality)}>Restart</button>
       <span className="muted">Quality changes apply when you restart.</span>
     </div>

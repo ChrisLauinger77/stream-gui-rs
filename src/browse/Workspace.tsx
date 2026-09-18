@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useRef, useState } from "react";
+import { memo, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { api } from "../lib/ipc";
 import type { BrowseRequest, CategorySummary, ChannelSummary, StreamSummary } from "../lib/generated";
 import { ViewMemory, usePage } from "./usePage";
@@ -6,15 +6,16 @@ import { CategoryList, ChannelList, Media, PageFrame, StreamList } from "./compo
 import { SearchView, ChannelView } from "./details";
 
 type Section = "following" | "live" | "categories" | "search";
+export type BrowserActions = { navigate: (section: Section) => void; back: () => void; refresh: () => void };
 type Route = { kind: Section } | { kind: "category" | "channel"; id: string; name: string };
 type Visit = { route: Route; section: Section; scroll: number; focus?: string;
   search: string; searchType: "channels" | "categories"; following: "live" | "channels" };
 const routeKey = (route: Route) => route.kind + ("id" in route ? `:${route.id}` : "");
-export type QueryContext = { sessionId: string; memory: ViewMemory; onAuthLost: () => void };
+export type QueryContext = { sessionId: string; memory: ViewMemory; onAuthLost: () => void; settingsRevision: number };
 export type Watch = { watch: (id: string) => void; pending: ReadonlySet<string> };
 export type Links = Watch & { channel: (id: string, name: string) => void; category: (id: string, name: string) => void };
 export const pageRequest = (sessionId: string, cursor: string | null, refresh: boolean): BrowseRequest => ({ sessionId, cursor, refresh });
-export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAuthLost, watch, pending }: { sessionId: string; onAuthLost: () => void } & Watch) {
+export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAuthLost, watch, pending, actionsRef, settingsRevision }: { sessionId: string; onAuthLost: () => void; actionsRef: Ref<BrowserActions>; settingsRevision: number } & Watch) {
   const memory = useRef(new ViewMemory()).current;
   const [route, setRoute] = useState<Route>({ kind: "following" });
   const [section, setSection] = useState<Section>("following");
@@ -23,6 +24,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
   const [search, setSearch] = useState("");
   const [searchType, setSearchType] = useState<"channels" | "categories">("channels");
   const content = useRef<HTMLElement>(null);
+  const focusSearch = useRef(false);
   const restore = useRef<{ scroll: number; focus?: string } | null>(null);
   const navigate = (next: Route) => {
     if (routeKey(next) === routeKey(route)) return;
@@ -37,13 +39,23 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
     restore.current = previous; setHistory(history.slice(0, -1)); setSection(previous.section); setRoute(previous.route);
     setSearch(previous.search); setSearchType(previous.searchType); setFollowing(previous.following);
   };
+  useImperativeHandle(actionsRef, () => ({
+    navigate: next => {
+      focusSearch.current = next === "search";
+      if (next === "search" && route.kind === "search") { content.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus(); focusSearch.current = false; }
+      else navigate({ kind: next });
+    },
+    back,
+    refresh: () => content.current?.querySelector<HTMLButtonElement>("[data-browse-refresh]")?.click(),
+  }));
   useLayoutEffect(() => {
     const target = restore.current;
     const focus = target?.focus ? [...(content.current?.querySelectorAll<HTMLElement>("[data-focus]") ?? [])].find(el => el.dataset.focus === target.focus) : undefined;
     (focus ?? content.current?.querySelector<HTMLElement>("h1"))?.focus({ preventScroll: true });
     if (content.current) content.current.scrollTop = target?.scroll ?? 0;
+    if (focusSearch.current && route.kind === "search") { content.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus(); focusSearch.current = false; }
   }, [route]);
-  const context = { sessionId, memory, onAuthLost };
+  const context = { sessionId, memory, onAuthLost, settingsRevision };
   const links: Links = { watch, pending, channel: (id, name) => navigate({ kind: "channel", id, name }), category: (id, name) => navigate({ kind: "category", id, name }) };
   const title = "name" in route ? route.name : ({ following: "Following", live: "Live now", categories: "Categories", search: "Search" }[route.kind]);
   const subtitle = { following: "The channels you choose to keep up with.", live: "Popular streams, happening right now.", categories: "Find a game. Find your community.", search: "Discover channels and categories on Twitch.", category: "Live streams in this category.", channel: "Channel details" }[route.kind];

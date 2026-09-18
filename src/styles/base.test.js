@@ -36,3 +36,17 @@ test("button hover keeps non-primary styling, disabled opacity and visible focus
   const focus = styles.find(rule => rule.selectorText === ":focus-visible");
   expect(focus.style.outline).toBe("2px solid var(--focus)"); expect(focus.style.getPropertyValue("outline-offset")).toBe("3px");
 });
+
+test("light and dark text and focus tokens remain readable across application surfaces", () => {
+  const styles = rules();
+  const palettes = [styles.find(rule => rule.selectorText === ":root"), styles.find(rule => rule.selectorText === ':root[data-theme="light"]')];
+  for (const palette of palettes) {
+    for (const surface of ["--bg", "--surface", "--raised", "--danger-bg"]) {
+      const background = luminance(palette.style.getPropertyValue(surface).trim());
+      for (const token of ["--text", "--muted", "--focus"]) {
+        const foreground = luminance(palette.style.getPropertyValue(token).trim());
+        expect((Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05), `${surface}/${token}`).toBeGreaterThanOrEqual(token === "--focus" ? 3 : 4.5);
+      }
+    }
+  }
+});

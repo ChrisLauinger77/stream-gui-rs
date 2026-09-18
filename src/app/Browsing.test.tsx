@@ -33,9 +33,11 @@ async function type(value: string) {
 }
 async function render(strict = false) { await act(async () => { root.render(strict ? <StrictMode><App /></StrictMode> : <App />); }); }
 beforeEach(() => {
+  Object.defineProperty(navigator, "platform", { configurable: true, value: "Linux x86_64" });
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
   vi.mocked(api.sessions).mockResolvedValue([]);
   vi.mocked(api.playbackSettings).mockResolvedValue({ theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
+  vi.mocked(api.channelSettings).mockImplementation(async broadcasterId => ({ broadcasterId, overrides: { quality: null, automaticChat: null }, defaultQuality: "source", defaultAutomaticChat: false, effective: { streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, quality: "source", automaticChat: false } }));
   vi.mocked(api.authStatus).mockResolvedValue(signedIn);
   vi.mocked(api.account).mockResolvedValue({ id: "viewer", login: "viewer", displayName: "Viewer", profileImageUrl: null });
   vi.mocked(api.followedStreams).mockResolvedValue(page([])); vi.mocked(api.streams).mockResolvedValue(page([stream]));
@@ -44,7 +46,7 @@ beforeEach(() => {
   vi.mocked(api.searchChannels).mockResolvedValue(page([channel])); vi.mocked(api.searchCategories).mockResolvedValue(page([category]));
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); });
+afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 test("signed-out view offers login without fetching browsing data", async () => {
   vi.mocked(api.authStatus).mockResolvedValue(signedOut); await render();
@@ -296,7 +298,11 @@ test("repeated image failures wait for another successful refresh", async () => 
   const fail = async () => { await act(async () => container.querySelector(".media img")!.dispatchEvent(new Event("error"))); };
   await fail(); vi.mocked(api.streams).mockRejectedValueOnce({ code: "network" }); await click("Refresh"); expect(container.querySelector(".media img")).toBeNull();
   await click("Retry"); expect(container.querySelectorAll(".media img")).toHaveLength(1); await fail();
-  await click("Settings"); await act(async () => { const select = container.querySelector<HTMLSelectElement>(".settings-panel select")!; select.value = "light"; select.dispatchEvent(new Event("change", { bubbles: true })); await vi.advanceTimersByTimeAsync(1000); });
+  await click("Settings"); await click("Appearance", ".settings-nav");
+  await editControl("Appearance", "light", "select");
+  vi.mocked(api.savePlaybackSettings).mockResolvedValue({ ...playbackSettings, theme: "light" });
+  await click("Save settings");
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
   expect(container.querySelector(".media img")).toBeNull(); expect(api.streams).toHaveBeenCalledTimes(3);
   await click("Refresh"); expect(container.querySelectorAll(".media img")).toHaveLength(1); await fail();
   expect(container.querySelector(".media img")).toBeNull(); expect(container.querySelector(".media.preview.failed")).not.toBeNull();
@@ -444,8 +450,8 @@ test("settings save literal player arguments and restore persisted choices when 
   await editControl("Player argument 1", `spaces 'quotes' {playerinput} $literal`); await click("Add argument");
   const saved = { ...playbackSettings, player: { mode: "custom" as const, executable: "/Applications/My Player/日本語", arguments: ["spaces 'quotes' {playerinput} $literal", ""] }, defaultQuality: "low" as const };
   vi.mocked(api.savePlaybackSettings).mockResolvedValue(saved);
-  await click("Save playback settings"); expect(api.savePlaybackSettings).toHaveBeenCalledWith(saved);
-  expect(text()).toContain("Playback settings saved"); await click("Settings"); await click("Settings");
+  await click("Save settings"); expect(api.savePlaybackSettings).toHaveBeenCalledWith(saved);
+  expect(text()).toContain("Settings saved"); await click("Settings"); await click("Settings");
   expect(container.querySelector<HTMLInputElement>('input[aria-label="Player executable"]')?.value).toBe(saved.player.executable);
   expect(container.querySelectorAll(".argument-row")).toHaveLength(2);
 });
@@ -458,8 +464,181 @@ test("settings probe reports native path and version, and player discovery repor
 });
 test("invalid player settings fail visibly without replacing saved settings", async () => {
   vi.mocked(api.savePlaybackSettings).mockRejectedValue({ code: "player_not_found", message: "PRIVATE" });
-  await render(); await click("Settings"); await editControl("Player", "mpv", "select"); await click("Save playback settings");
+  await render(); await click("Settings"); await editControl("Player", "mpv", "select"); await click("Save settings");
   expect(text()).toContain("selected player was not found"); expect(text()).not.toContain("PRIVATE");
   await click("Settings"); await click("Settings");
   expect([...container.querySelectorAll<HTMLSelectElement>("select")].find(el => el.labels?.[0]?.textContent?.startsWith("Player"))?.value).toBe("default");
+});
+
+async function keypress(key: string, modifiers: KeyboardEventInit = { ctrlKey: true }, target: EventTarget = window) {
+  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...modifiers });
+  await act(async () => { target.dispatchEvent(event); });
+  return event;
+}
+
+test("Settings sections preserve drafts, cancel them explicitly, and save through Rust", async () => {
+  await render(); await click("Settings");
+  expect(document.activeElement).toBe(container.querySelector(".settings-header h2"));
+  expect(container.querySelector('.settings-nav [aria-current="page"]')?.textContent).toBe("Playback");
+  await editControl("Default quality", "high", "select");
+  await click("Player", ".settings-nav"); await editControl("Player", "mpv", "select");
+  await click("Playback", ".settings-nav");
+  expect(container.querySelector<HTMLSelectElement>('label select')?.value).toBe("high");
+  expect(api.savePlaybackSettings).not.toHaveBeenCalled();
+  await click("Cancel changes");
+  const saved = { ...playbackSettings, defaultQuality: "low" as const };
+  await editControl("Default quality", "low", "select");
+  vi.mocked(api.savePlaybackSettings).mockResolvedValue(saved);
+  await click("Save settings"); expect(api.savePlaybackSettings).toHaveBeenCalledWith(saved);
+  expect(container.querySelectorAll(".settings-content .setting-group:not([hidden])")).toHaveLength(1);
+  await click("Shortcuts", ".settings-nav"); expect(text()).toContain("Ctrl+K");
+});
+
+test("settings loading waits for the backend and duplicate saves are guarded", async () => {
+  const loading = deferred<typeof playbackSettings>(); vi.mocked(api.playbackSettings).mockReturnValue(loading.promise);
+  await render(); await click("Settings"); expect(text()).toContain("Loading settings");
+  await act(async () => loading.resolve(playbackSettings));
+  const saving = deferred<typeof playbackSettings>(); vi.mocked(api.savePlaybackSettings).mockReturnValue(saving.promise);
+  await act(async () => { button("Save settings").click(); button("Save settings").click(); });
+  expect(api.savePlaybackSettings).toHaveBeenCalledOnce();
+  await act(async () => saving.resolve(playbackSettings)); expect(text()).toContain("Settings saved");
+});
+
+function channelPreferences(broadcasterId = "channel-one", quality: "source" | "high" | "low" = "source") {
+  return { broadcasterId, overrides: { quality: null, automaticChat: null }, defaultQuality: quality, defaultAutomaticChat: false,
+    effective: { streamlinkPath: null, player: playbackSettings.player, quality, automaticChat: false } };
+}
+
+test("channel preferences display Rust defaults, save overrides, and return to inheritance", async () => {
+  vi.mocked(api.channelSettings).mockResolvedValue(channelPreferences("channel-one", "high"));
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  expect(text()).toContain("Use global default (High");
+  await editControl("Channel quality", "low", "select"); await editControl("Channel browser chat", "on", "select");
+  const saved = { ...channelPreferences("channel-one", "high"), overrides: { quality: "low" as const, automaticChat: true }, effective: { ...channelPreferences().effective, quality: "low" as const, automaticChat: true } };
+  vi.mocked(api.saveChannelSettings).mockResolvedValue(saved);
+  await click("Save channel settings");
+  expect(api.saveChannelSettings).toHaveBeenCalledWith({ broadcasterId: "channel-one", overrides: { quality: "low", automaticChat: true } });
+  expect(text()).toContain("Saved effective quality: Low");
+  await editControl("Channel quality", "inherit", "select"); await editControl("Channel browser chat", "inherit", "select");
+  vi.mocked(api.saveChannelSettings).mockResolvedValue(channelPreferences("channel-one", "high"));
+  await click("Save channel settings");
+  expect(api.saveChannelSettings).toHaveBeenLastCalledWith({ broadcasterId: "channel-one", overrides: { quality: null, automaticChat: null } });
+  expect(text()).toContain("Saved effective quality: High");
+  expect(api.launch).not.toHaveBeenCalled(); expect(api.restart).not.toHaveBeenCalled();
+});
+
+test("channel settings errors preserve the draft and never expose backend messages", async () => {
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await editControl("Channel quality", "audio", "select");
+  vi.mocked(api.saveChannelSettings).mockRejectedValue({ code: "settings", message: "PRIVATE" });
+  await click("Save channel settings"); expect(text()).not.toContain("PRIVATE");
+  const select = [...container.querySelectorAll("label")].find(label => label.textContent?.startsWith("Channel quality"))!.querySelector("select")!;
+  expect(select.value).toBe("audio"); expect(text()).toContain("could not be saved or read");
+});
+
+test("late channel settings cannot populate a different channel or a signed-out workspace", async () => {
+  const pending = deferred<ReturnType<typeof channelPreferences>>();
+  vi.mocked(api.channelSettings).mockReturnValueOnce(pending.promise);
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await click("Go back");
+  await act(async () => pending.resolve(channelPreferences("channel-one", "low")));
+  expect(container.querySelector(".channel-preferences")).toBeNull();
+  vi.mocked(api.channelSettings).mockResolvedValue(channelPreferences("channel-one", "high"));
+  await click("Open channel Example Channel"); expect(text()).toContain("Saved effective quality: High");
+  vi.mocked(api.logout).mockResolvedValue(signedOut); await click("Sign out");
+  expect(container.querySelector(".channel-preferences")).toBeNull();
+});
+
+test("global saves refresh the current channel's backend inheritance preview", async () => {
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await click("Settings"); await editControl("Default quality", "high", "select");
+  vi.mocked(api.savePlaybackSettings).mockResolvedValue({ ...playbackSettings, defaultQuality: "high" });
+  vi.mocked(api.channelSettings).mockResolvedValue(channelPreferences("channel-one", "high"));
+  await click("Save settings"); await click("Settings");
+  expect(text()).toContain("Use global default (High"); expect(api.channelSettings).toHaveBeenCalledTimes(2);
+});
+
+test("manual browser chat supplies only broadcaster and session IDs and prevents duplicate requests", async () => {
+  const pending = deferred<null>(); vi.mocked(api.openChat).mockReturnValue(pending.promise);
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await act(async () => { button("Open chat in browser").click(); button("Open chat in browser").click(); });
+  expect(api.openChat).toHaveBeenCalledExactlyOnceWith({ broadcasterId: "channel-one", authSessionId: "1" });
+  await act(async () => pending.resolve(null)); expect(text()).toContain("Twitch chat opened");
+});
+
+test("automatic chat remains backend-owned and browser failure does not hide playback", async () => {
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, automaticChat: true });
+  vi.mocked(api.launch).mockResolvedValue({ ...playing(), chatError: "browser_open" });
+  await render(); await click("Live"); await click("Watch Example Channel");
+  expect(api.openChat).not.toHaveBeenCalled();
+  expect(text()).toContain("Browser chat did not open"); expect(button("Stop").disabled).toBe(false);
+});
+
+test("Restart inherits current Rust preferences unless the user explicitly selects a quality", async () => {
+  vi.mocked(api.sessions).mockResolvedValue([playing()]); vi.mocked(api.restart).mockResolvedValue({ ...playing(), generation: 2, qualityPolicy: "high" });
+  await render(); await click("Watching"); await click("Restart");
+  expect(api.restart).toHaveBeenCalledWith({ sessionId: "play-one", generation: 1, quality: null });
+  expect(text()).toContain("High");
+});
+
+test.each(["Linux x86_64", "Win32"])("focused Control shortcuts navigate, focus Search, refresh and go Back on %s", async platform => {
+  Object.defineProperty(navigator, "platform", { configurable: true, value: platform });
+  await render(); await keypress("2"); expect(button("Live").getAttribute("aria-current")).toBe("page");
+  expect(document.activeElement).toBe(container.querySelector("h1"));
+  await keypress("r"); expect(api.streams).toHaveBeenCalledTimes(2);
+  await keypress("3"); expect(button("Categories").getAttribute("aria-current")).toBe("page");
+  await keypress("ArrowLeft", { altKey: true }); expect(button("Live").getAttribute("aria-current")).toBe("page");
+  await keypress("1"); expect(button("Following").getAttribute("aria-current")).toBe("page");
+  await keypress("k"); expect(document.activeElement).toBe(container.querySelector('input[type="search"]'));
+  await keypress("4"); expect(container.querySelector(".watching-panel")).not.toBeNull();
+  await keypress(","); expect(container.querySelector(".settings-panel")).not.toBeNull();
+  await keypress("ArrowLeft", { altKey: true }); expect(container.querySelector(".settings-panel")).toBeNull();
+});
+
+test("macOS uses Command shortcuts and ignores Control navigation", async () => {
+  Object.defineProperty(navigator, "platform", { configurable: true, value: "MacIntel" });
+  await render(); await keypress("2"); expect(api.streams).not.toHaveBeenCalled();
+  await keypress("2", { metaKey: true }); expect(api.streams).toHaveBeenCalledOnce();
+  await keypress("[", { metaKey: true }); expect(button("Following").getAttribute("aria-current")).toBe("page");
+  await keypress("k", { metaKey: true }); expect(document.activeElement).toBe(container.querySelector('input[type="search"]'));
+  await keypress(",", { metaKey: true }); await click("Shortcuts", ".settings-nav"); expect(text()).toContain("⌘K");
+});
+
+test("shortcuts ignore typing, editable content, composition, repeats and modal dialogs", async () => {
+  Object.defineProperty(navigator, "platform", { configurable: true, value: "Linux" });
+  await render(); await click("Search");
+  const input = container.querySelector("input")!;
+  expect((await keypress("2", { ctrlKey: true }, input)).defaultPrevented).toBe(false);
+  for (const tag of ["textarea", "select", "div"]) {
+    const element = document.createElement(tag); if (tag === "div") element.contentEditable = "true";
+    if (tag === "div") element.setAttribute("contenteditable", "true");
+    container.append(element); await keypress("2", { ctrlKey: true }, element); element.remove();
+  }
+  await keypress("2", { ctrlKey: true, isComposing: true }); await keypress("2", { ctrlKey: true, repeat: true });
+  const dialog = document.createElement("div"); dialog.setAttribute("role", "dialog"); dialog.setAttribute("aria-modal", "true"); container.append(dialog);
+  await keypress("2"); dialog.remove(); expect(api.streams).not.toHaveBeenCalled();
+  await keypress("2"); expect(api.streams).toHaveBeenCalledOnce();
+});
+
+test("saved theme follows System changes and persists explicit Light and Dark through remount", async () => {
+  let dark = false;
+  const listeners = new Set<() => void>();
+  vi.stubGlobal("matchMedia", vi.fn(() => ({ get matches() { return dark; }, addEventListener: (_: string, listener: () => void) => listeners.add(listener), removeEventListener: (_: string, listener: () => void) => listeners.delete(listener) })));
+  let settings = { ...playbackSettings };
+  vi.mocked(api.playbackSettings).mockImplementation(async () => settings);
+  vi.mocked(api.savePlaybackSettings).mockImplementation(async value => { settings = value; return value; });
+  await render(); expect(document.documentElement.dataset.theme).toBe("system"); expect(document.documentElement.dataset.resolvedTheme).toBe("light");
+  await act(async () => { dark = true; listeners.forEach(listener => listener()); }); expect(document.documentElement.dataset.resolvedTheme).toBe("dark");
+  for (const theme of ["light", "dark"] as const) {
+    await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Appearance", theme, "select");
+    expect(document.documentElement.dataset.theme).toBe(settings.theme);
+    await click("Save settings"); expect(document.documentElement.dataset.theme).toBe(theme);
+    await act(async () => { dark = !dark; listeners.forEach(listener => listener()); }); expect(document.documentElement.dataset.resolvedTheme).toBe(theme);
+    await act(async () => root.unmount()); root = createRoot(container); await render();
+    expect(document.documentElement.dataset.theme).toBe(theme);
+    expect(localStorage.getItem("stream-gui-theme")).toBeNull();
+  }
+  await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Appearance", "system", "select"); await click("Save settings");
+  expect(document.documentElement.dataset.theme).toBe("system");
+  vi.unstubAllGlobals();
 });

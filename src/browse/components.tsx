@@ -63,7 +63,7 @@ export function PageFrame<T>({ query, children, empty, detail = false }: { query
     (appended ?? results.current)?.focus();
   }, [query.page, query.pending, query.error]);
   return <div aria-busy={query.pending}>
-    <div className="query-toolbar"><span role="status">{(query.retained || (query.error && query.page)) ? "Previous results · refresh to check for updates" : query.page?.freshness === "stale" ? "Stale data" : query.page?.freshness === "cached" ? `Cached · ${query.page.ageSeconds}s old` : query.page ? "Updated from Twitch" : ""}{query.error && query.page ? " · update failed" : ""}</span><button disabled={query.pending} onClick={query.refresh}>Refresh</button></div>
+    <div className="query-toolbar"><span role="status">{(query.retained || (query.error && query.page)) ? "Previous results · refresh to check for updates" : query.page?.freshness === "stale" ? "Stale data" : query.page?.freshness === "cached" ? `Cached · ${query.page.ageSeconds}s old` : query.page ? "Updated from Twitch" : ""}{query.error && query.page ? " · update failed" : ""}</span><button data-browse-refresh disabled={query.pending} onClick={query.refresh}>Refresh</button></div>
     {query.error && <div className="error" role="alert">{errorText(query.error)}<button onClick={query.retry} disabled={query.pending}>Retry</button></div>}
     {query.page?.warnings.map(code => <p className="notice" role="status" key={code}>Some details are unavailable. {errorText(code)}</p>)}
     {query.pending && <p className="loading" role="status">{query.page ? "Loading more information…" : "Loading…"}</p>}
