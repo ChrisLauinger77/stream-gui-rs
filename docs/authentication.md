@@ -40,16 +40,17 @@ The `keyring` dependency enables each platform backend explicitly. There is **no
 
 The secure entry uses service `io.github.twitch-gui-rs.oauth` and the public client ID as its account key. A private versioned record stores only the client ID and access/refresh pair. The empty `authentication.lock` in the app configuration directory contains no credentials and is held for the store's lifetime to prevent concurrent local instances rotating an entry. Changing client IDs selects a different secure entry; log out under the old configuration first if that entry should be removed.
 
-Blocking storage operations run off Tokio workers and are serialized. Save replaces the token pair in one entry. The old one-use pair is **deleted before refresh is dispatched**, and the replacement is saved before validation. Consequently an ambiguous network failure or crash cannot restore and replay a possibly consumed refresh token. The tradeoff is deliberate: a crash after deletion and before saving the response requires login again. If deletion fails, no refresh request is sent. There is no retry of an uncertain token exchange.
+Blocking storage operations run off Tokio workers and are serialized. Save replaces the token pair in one entry. The old one-use pair is **deleted before refresh is dispatched**, and the replacement is saved before validation. Consequently an ambiguous network failure or crash cannot restore and replay a possibly consumed refresh token. The tradeoff is deliberate: a crash after deletion and before saving the response requires login again. Deletion is followed by a read that must report an absent entry; a retained or unreadable entry is a storage error even if the native delete call reported success. If deletion cannot be verified, no refresh request is sent. There is no retry of an uncertain token exchange.
 
 Normal application exit waits for an already-running rotation/write without revoking the session. An OS storage prompt can therefore delay exit. Force termination cannot guarantee completion; the clear-before-refresh rule still prevents stale-token replay. The filesystem lock coordinates instances sharing the normal application directory; custom forks using the same credential service must also share that lock protocol.
 
 ## Lifecycle and errors
 
-- Startup restores credentials, validates them, and only then exposes identity. A rejected stored access token gets one coordinated refresh attempt; invalid/revoked refresh credentials are cleared.
+- Startup restores credentials, validates them, and only then exposes identity. A rejected access token gets one coordinated refresh attempt, including after offline restoration or explicit validation at expiry; invalid/revoked refresh credentials are cleared. Identity/client/scope mismatches remain terminal. Validation of a newly issued pair cannot recursively refresh again.
 - Successful device authorization and refresh persist the pair and validate identity, public client ID, required scopes, and expiry. A refreshed token cannot change the authenticated account.
 - Device polling honors the provider interval, slows down on 429, backs off transient failures, and expires locally. Login reuses an active grant. Cancel/logout cannot be followed by a late grant completion that restores identity.
 - Hourly validation and known-expiry refresh run without a UI. A transient validation failure hides identity and retries after 60 seconds while preserving the unconsumed refresh token. A Helix 401 triggers one shared refresh and one retry; another 401 invalidates the session.
+- Authentication deadlines reconcile wall-clock elapsed time with monotonic time so system sleep counts. Backward wall-clock steps cannot postpone deadlines; short task waits remain monotonic.
 - Concurrent validation/refresh work is coalesced. Service-owned operations continue safely if an IPC caller disappears. Read-only auth snapshots and playback do not wait behind network/keychain operations.
 - Logout cancels the grant and outstanding account requests, deletes local credentials, clears identity, and then attempts [remote revocation](https://dev.twitch.tv/docs/authentication/revoke-tokens/). Offline revocation reports that local deletion succeeded but remote revocation was not confirmed. Storage deletion failure is an explicit error, not successful logout; retry after unlocking the store.
 
@@ -57,12 +58,13 @@ OAuth and Helix share a fixed-endpoint HTTPS pool with redirects disabled, a 5-s
 
 ## Opt-in live acceptance checklist
 
-Normal tests use synthetic credentials, mock storage and loopback HTTP only. No live client ID was supplied during implementation; these checks remain manual:
+Normal tests use synthetic credentials, mock storage and loopback HTTP only. On 2026-09-18, live macOS testing successfully verified Device Flow login, authenticated account retrieval, and restoration across a complete application restart. The registered public application is `stream-gui-rs`; the project remains **Twitch GUI RS** / `twitch-gui-rs`. These display names do not need to match. The following checklist is retained for other platforms and the remaining manual cases; see [the validation record](phase-1-validation.md):
 
-1. Register/configure the new public client, authorize `user:read:follows`, and confirm account/avatar/scopes.
-2. Restart the desktop app with the same client ID and confirm automatic restoration plus validation.
+1. Register/configure the new public client, authorize `user:read:follows`, and confirm account/avatar/scopes. **Login and account retrieval verified on macOS.**
+2. Restart the desktop app with the same client ID and confirm automatic restoration plus validation. **Complete restart persistence verified on macOS.**
 3. Refresh twice and restart again to check rotation with the platform store.
 4. Cancel during device authorization; test denial/expiry and try again.
 5. Disconnect the app in Twitch account settings, then Validate; local auth must clear.
 6. Test an offline startup, recovery, and online/offline logout. After successful local logout, restart signed out.
 7. On each OS, test denied/locked credential access, multiple app instances, and closing during refresh. Inspect settings and UI state for public data only; never copy real tokens into test output or bug reports.
+8. Suspend past validation, token-expiry, cache and rate-reset deadlines, then resume. Deterministic clock tests cover these contracts; actual OS suspend/resume remains a manual check.
