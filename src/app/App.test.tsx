@@ -20,7 +20,7 @@ const signedOut: AuthStatus = {
   phase: "signed_out", sessionId: null, user: null, authorization: null, error: null, credentialStorage: "memory",
 };
 const session = (id: string): SessionSnapshot => ({
-  id, generation: 1, restarting: false, effectiveSettings: null, stream: null, qualityPolicy: "source", startedAt: 1, endedAt: null, failure: null, phase: "running", pid: 123, url: "https://www.twitch.tv/example", quality: "best",
+  id, generation: 1, restarting: false, effectiveSettings: null, chatError: null, stream: null, qualityPolicy: "source", startedAt: 1, endedAt: null, failure: null, phase: "running", pid: 123, url: "https://www.twitch.tv/example", quality: "best",
   exitCode: null, stopRequested: false, logs: [], droppedLogEntries: 0,
 });
 

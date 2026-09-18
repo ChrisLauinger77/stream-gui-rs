@@ -12,12 +12,19 @@ struct Lifecycle {
     auth_stop: Mutex<Option<tokio::sync::watch::Sender<bool>>>,
 }
 
+struct NativeChatOpener;
+impl crate::domain::chat::ChatOpener for NativeChatOpener {
+    fn open(&self, target: &crate::domain::chat::ChatTarget) -> crate::domain::Result<()> {
+        webbrowser::open(target.url()).map_err(|_| crate::domain::chat::open_error())
+    }
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .setup(|app| {
             let directory = app.path().app_config_dir()?;
             let client_id = crate::config::twitch_client_id::from_environment()?;
-            let services = Arc::new(Services::new(&directory, Some(client_id))?);
+            let services = Arc::new(Services::new(&directory, Some(client_id))?.with_chat_opener(Arc::new(NativeChatOpener)));
             let lifecycle = Arc::new(Lifecycle::default());
             app.manage(services.clone());
             app.manage(lifecycle.clone());
@@ -31,7 +38,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::backend_diagnostics, commands::streamlink_probe,
-            commands::channel_settings, commands::save_channel_settings,
+            commands::open_channel_chat, commands::channel_settings, commands::save_channel_settings,
             commands::playback_settings, commands::save_playback_settings, commands::discover_players, commands::streamlink_restart,
             commands::streamlink_launch, commands::streamlink_stop, commands::streamlink_sessions,
             commands::auth_status, commands::auth_login, commands::auth_open_verification,

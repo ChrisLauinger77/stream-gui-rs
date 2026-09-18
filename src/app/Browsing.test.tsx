@@ -322,7 +322,7 @@ test.each(["followed channels", "categories", "category details", "channel detai
 
 // Phase 3 uses the same application and navigation surfaces as the Phase 2 tests.
 const playing = (id = "play-one", broadcasterId = "channel-one"): import("../lib/generated").SessionSnapshot => ({
-  id, generation: 1, restarting: false, effectiveSettings: null, stream: { streamId: "stream-one", broadcasterId, login: "example", displayName: id === "play-one" ? "Example Channel" : "Second Channel", title: "A live broadcast", category: "Example Game" },
+  id, generation: 1, restarting: false, effectiveSettings: null, chatError: null, stream: { streamId: "stream-one", broadcasterId, login: "example", displayName: id === "play-one" ? "Example Channel" : "Second Channel", title: "A live broadcast", category: "Example Game" },
   qualityPolicy: "source", startedAt: 100, endedAt: null, failure: null, phase: "running", pid: 123,
   url: "https://www.twitch.tv/example", quality: "best", exitCode: null, stopRequested: false,
   logs: [{ sequence: 1, source: "stderr", text: "Synthetic diagnostic warning" }], droppedLogEntries: 5,

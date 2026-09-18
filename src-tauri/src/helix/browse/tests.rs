@@ -424,3 +424,89 @@ async fn logout_during_playback_identity_lookup_cancels_the_pending_launch() {
     let (result, ()) = tokio::join!(lookup, logout);
     assert_eq!(result.unwrap_err().code, ErrorCode::Unauthenticated);
 }
+
+#[tokio::test]
+async fn chat_identity_uses_fresh_bound_users_including_offline_channels() {
+    let renamed = USER.replace("\"example\"", "\"new_login\"");
+    let (server, client, page) = client(vec![
+        Reply::json(200, USER),
+        Reply::json(200, renamed),
+        Reply::json(200, USER),
+    ])
+    .await;
+    let cancel = CancellationToken::new();
+    assert_eq!(
+        client
+            .chat_login(page.session_id.clone(), "123".into(), &cancel)
+            .await
+            .unwrap(),
+        "example"
+    );
+    assert_eq!(
+        client
+            .chat_login(page.session_id.clone(), "123".into(), &cancel)
+            .await
+            .unwrap(),
+        "new_login"
+    );
+    assert_eq!(
+        client
+            .chat_login(page.session_id.clone(), "456".into(), &cancel)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::NotFound
+    );
+    assert!(
+        client
+            .chat_login(page.session_id, "url/attack".into(), &cancel)
+            .await
+            .is_err()
+    );
+    assert_eq!(server.requests().len(), 3);
+    assert!(
+        server
+            .requests()
+            .iter()
+            .all(|request| request.starts_with("GET /helix/users?id="))
+    );
+}
+
+#[tokio::test]
+async fn chat_identity_rejects_url_metadata_and_logout_during_lookup() {
+    let (server, client, page) = client(vec![Reply::json(
+        200,
+        USER.replace("\"example\"", "\"evil.example/path\""),
+    )])
+    .await;
+    assert_eq!(
+        client
+            .chat_login(page.session_id, "123".into(), &CancellationToken::new())
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::InvalidInput
+    );
+    assert_eq!(server.requests().len(), 1);
+    let gate = Arc::new(tokio::sync::Notify::new());
+    let (server, client, page) =
+        self::client(vec![Reply::json(200, USER).gated(gate.clone())]).await;
+    let cancel = CancellationToken::new();
+    let lookup = client.chat_login(page.session_id.clone(), "123".into(), &cancel);
+    let logout = async {
+        server.wait_for_requests(1).await;
+        client.auth.logout().await.unwrap();
+        gate.notify_one();
+    };
+    let (result, ()) = tokio::join!(lookup, logout);
+    assert_eq!(result.unwrap_err().code, ErrorCode::Unauthenticated);
+    assert_eq!(
+        client
+            .chat_login(page.session_id, "123".into(), &cancel)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::Unauthenticated
+    );
+    assert_eq!(server.requests().len(), 1);
+}

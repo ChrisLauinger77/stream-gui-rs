@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+pub mod chat;
 pub mod services;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
     InvalidInput,
+    BrowserOpen,
     StreamlinkNotFound,
     UnsupportedStreamlink,
     PlayerNotFound,
@@ -94,6 +96,7 @@ pub fn typescript_bindings() -> String {
     use crate::{config::*, diagnostics::BackendDiagnostics, streamlink::*, twitch::*};
     let declarations = [
         ErrorCode::decl(),
+        chat::ChatRequest::decl(),
         QualityPolicy::decl(),
         PlayerMode::decl(),
         PlayerSettings::decl(),

@@ -1056,3 +1056,152 @@ async fn unsupported_streamlink_probe_does_not_replace_saved_path() {
     assert_eq!(std::fs::read(services.settings.path()).unwrap(), before);
     services.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn automatic_chat_uses_effective_preferences_once_per_successful_run() {
+    use stream_gui_rs::{
+        config::{ChannelOverrides, SaveChannelSettingsRequest},
+        domain::chat::{ChatOpener, ChatTarget},
+    };
+    #[derive(Default)]
+    struct Recorder(std::sync::Mutex<Vec<String>>);
+    impl ChatOpener for Recorder {
+        fn open(&self, target: &ChatTarget) -> stream_gui_rs::domain::Result<()> {
+            self.0.lock().unwrap().push(target.url().into());
+            Ok(())
+        }
+    }
+    let recorder = std::sync::Arc::new(Recorder::default());
+    let root = tempfile::tempdir().unwrap();
+    let services = std::sync::Arc::new(
+        Services::new(root.path(), None)
+            .unwrap()
+            .with_chat_opener(recorder.clone()),
+    );
+    services
+        .settings
+        .set_streamlink_path(Some(helper().to_string_lossy().into_owned()))
+        .unwrap();
+    let mut session = services
+        .sessions
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    for (global, override_value, expected_opens) in [
+        (false, None, 0),
+        (true, None, 1),
+        (true, Some(false), 1),
+        (false, Some(true), 2),
+        (false, None, 2),
+    ] {
+        let mut settings = services.settings.snapshot();
+        settings.automatic_chat = global;
+        services.save_settings(settings).await.unwrap();
+        services
+            .save_channel_settings(SaveChannelSettingsRequest {
+                broadcaster_id: "123".into(),
+                overrides: ChannelOverrides {
+                    automatic_chat: override_value,
+                    quality: None,
+                },
+            })
+            .await
+            .unwrap();
+        assert_eq!(services.sessions.sessions().await[0].pid, session.pid);
+        session = services
+            .restart_playback(RestartRequest {
+                session_id: session.id,
+                generation: session.generation,
+                quality: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(session.phase, SessionPhase::Running);
+        assert!(session.chat_error.is_none());
+        assert_eq!(recorder.0.lock().unwrap().len(), expected_opens);
+    }
+    assert!(
+        recorder
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|url| url == "https://www.twitch.tv/popout/hold/chat")
+    );
+    let stale = services
+        .sessions
+        .record_chat_result(
+            &session.id,
+            session.generation - 1,
+            Some(ErrorCode::BrowserOpen),
+        )
+        .await
+        .unwrap();
+    assert!(stale.chat_error.is_none());
+    services.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn failed_browser_open_keeps_playback_running_and_failed_restart_opens_nothing() {
+    use stream_gui_rs::domain::chat::{ChatOpener, ChatTarget};
+    #[derive(Default)]
+    struct Failing(std::sync::atomic::AtomicUsize);
+    impl ChatOpener for Failing {
+        fn open(&self, _: &ChatTarget) -> stream_gui_rs::domain::Result<()> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Err(stream_gui_rs::domain::AppError::new(
+                ErrorCode::Internal,
+                "synthetic private native detail",
+            ))
+        }
+    }
+    let recorder = std::sync::Arc::new(Failing::default());
+    let root = tempfile::tempdir().unwrap();
+    let services = std::sync::Arc::new(
+        Services::new(root.path(), None)
+            .unwrap()
+            .with_chat_opener(recorder.clone()),
+    );
+    let mut settings = services.settings.snapshot();
+    settings.automatic_chat = true;
+    settings.streamlink_path = Some(helper().to_string_lossy().into_owned());
+    services.save_settings(settings).await.unwrap();
+    let session = services
+        .sessions
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let next = services
+        .restart_playback(RestartRequest {
+            session_id: session.id.clone(),
+            generation: 1,
+            quality: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(next.phase, SessionPhase::Running);
+    assert_eq!(next.chat_error, Some(ErrorCode::BrowserOpen));
+    assert!(
+        !serde_json::to_string(&next)
+            .unwrap()
+            .contains("private native detail")
+    );
+    services
+        .settings
+        .set_streamlink_path(Some(
+            root.path().join("missing").to_string_lossy().into_owned(),
+        ))
+        .unwrap();
+    assert!(
+        services
+            .restart_playback(RestartRequest {
+                session_id: session.id,
+                generation: next.generation,
+                quality: None
+            })
+            .await
+            .is_err()
+    );
+    assert_eq!(recorder.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+    services.shutdown().await.unwrap();
+}

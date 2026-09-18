@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
+  ChatRequest, ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
   BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
   Account, AppError, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
   ProbeResult, SessionSnapshot, StopRequest,
@@ -22,6 +22,7 @@ type Commands = {
   streamlink_launch: [PlaybackRequest, SessionSnapshot];
   streamlink_restart: [RestartRequest, SessionSnapshot];
   playback_settings: [undefined, Settings];
+  open_channel_chat: [ChatRequest, null];
   channel_settings: [ChannelSettingsRequest, ChannelSettings];
   save_channel_settings: [SaveChannelSettingsRequest, ChannelSettings];
   save_playback_settings: [Settings, Settings];
@@ -60,6 +61,7 @@ export const api = {
   launch: (request: PlaybackRequest) => call("streamlink_launch", request),
   restart: (request: RestartRequest) => call("streamlink_restart", request),
   playbackSettings: () => call("playback_settings"),
+  openChat: (request: ChatRequest) => call("open_channel_chat", request),
   channelSettings: (broadcasterId: string) => call("channel_settings", { broadcasterId }),
   saveChannelSettings: (request: SaveChannelSettingsRequest) => call("save_channel_settings", request),
   savePlaybackSettings: (request: Settings) => call("save_playback_settings", request),

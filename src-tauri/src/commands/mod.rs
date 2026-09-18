@@ -245,3 +245,11 @@ pub async fn save_channel_settings(
 ) -> Result<crate::config::ChannelSettings> {
     services.save_channel_settings(request).await
 }
+
+#[tauri::command]
+pub async fn open_channel_chat(
+    services: State<'_, Arc<Services>>,
+    request: crate::domain::chat::ChatRequest,
+) -> Result<()> {
+    services.open_chat(request).await
+}

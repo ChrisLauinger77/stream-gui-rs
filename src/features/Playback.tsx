@@ -30,6 +30,7 @@ function Session({ session, isStopping, isRestarting, stop, restart }: Props & {
     <div className="session-heading"><h3>{name}</h3><strong>{session.phase}</strong></div>
     <p className="session-title" title={session.stream?.title ?? undefined}>{session.stream?.title}</p>
     <p className="muted">{session.stream?.category && `${session.stream.category} · `}{session.qualityPolicy ? qualityLabels[session.qualityPolicy] : session.quality} · Started {new Date(session.startedAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {Math.floor(elapsed / 60)}m {elapsed % 60}s{busy && " · Restarting…"}</p>
+    {session.chatError && <p className="notice">Browser chat did not open. Playback is unaffected; you can open chat from channel details.</p>}
     {session.failure && <p className="error">{playbackError({ code: session.failure })}</p>}
     <div className="session-actions">
       <button disabled={isStopping(session.id) || !active} onClick={() => stop(session.id)}>Stop</button>

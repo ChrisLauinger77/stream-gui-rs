@@ -133,6 +133,41 @@ fn merge_freshness<T>(result: &mut PagedResult<T>, f: Freshness, elapsed: Durati
     }
 }
 impl<A: TwitchApi + 'static> HelixClient<A> {
+    pub async fn chat_login(
+        &self,
+        auth_session_id: String,
+        broadcaster_id: String,
+        cancel: &CancellationToken,
+    ) -> Result<String> {
+        crate::config::validate_broadcaster_id(&broadcaster_id)?;
+        let request = BrowseRequest {
+            session_id: auth_session_id,
+            cursor: None,
+            refresh: true,
+        };
+        let mut session = self.browse_session(&request).await?;
+        let source = self
+            .get_bound::<User>(
+                "users",
+                params("id", std::slice::from_ref(&broadcaster_id))?,
+                false,
+                CacheClass::Metadata,
+                CachePolicy::Refresh,
+                cancel,
+                &mut session,
+            )
+            .await?;
+        check_session(&session)?;
+        let user = source
+            .value
+            .data
+            .into_iter()
+            .find(|user| user.id == broadcaster_id)
+            .ok_or_else(|| error(ErrorCode::NotFound))?;
+        crate::streamlink::playback::channel_url(&user.login)?;
+        Ok(user.login)
+    }
+
     /// Revalidate live identity in Rust; the webview supplies only a broadcaster ID.
     pub async fn playback_stream(
         &self,

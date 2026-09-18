@@ -31,6 +31,7 @@ pub struct Services {
     pub sessions: Supervisor,
     pub auth: Arc<AuthService>,
     pub helix: HelixClient,
+    chat: super::chat::BrowserChat,
     streamlink_operation: Mutex<()>,
     closing: AtomicBool,
     auth_configured: bool,
@@ -79,12 +80,67 @@ impl Services {
             sessions: Supervisor::default(),
             helix: HelixClient::new(http, auth.clone()),
             auth,
+            chat: super::chat::BrowserChat::default(),
             streamlink_operation: Mutex::new(()),
             closing: AtomicBool::new(false),
             auth_configured,
             browse_slots: Arc::new(tokio::sync::Semaphore::new(8)),
             playback_slots: Arc::new(tokio::sync::Semaphore::new(8)),
         })
+    }
+
+    pub fn with_chat_opener(mut self, opener: Arc<dyn super::chat::ChatOpener>) -> Self {
+        self.chat = super::chat::BrowserChat::new(opener);
+        self
+    }
+
+    pub async fn open_chat(&self, request: super::chat::ChatRequest) -> Result<()> {
+        let _permit = self.browse_permit()?;
+        let login = self
+            .helix
+            .chat_login(
+                request.auth_session_id.clone(),
+                request.broadcaster_id,
+                &tokio_util::sync::CancellationToken::new(),
+            )
+            .await?;
+        let session = request.auth_session_id.parse().map_err(|_| {
+            AppError::new(ErrorCode::InvalidInput, "Invalid authentication session.")
+        })?;
+        let lease = self.auth.lease_for_session(session).await?;
+        self.ensure_open()?;
+        self.chat
+            .open(super::chat::ChatTarget::for_login(&login)?, lease.cancel)
+            .await
+    }
+
+    async fn automatic_chat(
+        &self,
+        snapshot: SessionSnapshot,
+        cancel: tokio_util::sync::CancellationToken,
+    ) -> SessionSnapshot {
+        if !snapshot
+            .effective_settings
+            .as_ref()
+            .is_some_and(|settings| settings.automatic_chat)
+        {
+            return snapshot;
+        }
+        let Some(stream) = &snapshot.stream else {
+            return snapshot;
+        };
+        let result = match super::chat::ChatTarget::for_login(&stream.login) {
+            Ok(target) => self.chat.open(target, cancel).await,
+            Err(error) => Err(error),
+        };
+        self.sessions
+            .record_chat_result(
+                &snapshot.id,
+                snapshot.generation,
+                result.err().map(|error| error.code),
+            )
+            .await
+            .unwrap_or(snapshot)
     }
 
     pub fn browse_permit(&self) -> Result<tokio::sync::OwnedSemaphorePermit> {
@@ -201,10 +257,12 @@ impl Services {
             // A logout while discovery/probing was pending must not launch a stale request.
             let lease = services.auth.lease_for_session(session).await?;
             services.ensure_open()?;
-            services
+            let snapshot = services
                 .sessions
                 .launch_authenticated(spec, &lease.cancel)
-                .await
+                .await?;
+            drop(_operation);
+            Ok(services.automatic_chat(snapshot, lease.cancel).await)
         })
         .await
         .map_err(|_| {
@@ -223,13 +281,16 @@ impl Services {
         let services = self.clone();
         tokio::spawn(async move {
             let _permit = permit;
-            services
+            let snapshot = services
                 .sessions
                 .restart(&request.session_id, request.generation, |stream| async {
                     let _operation = services.streamlink_operation.lock().await;
                     services.prepare_playback(stream, request.quality).await
                 })
-                .await
+                .await?;
+            Ok(services
+                .automatic_chat(snapshot, tokio_util::sync::CancellationToken::new())
+                .await)
         })
         .await
         .map_err(|_| {
@@ -272,10 +333,11 @@ impl Services {
         // Probe owns its child until it exits or its five-second timeout kills
         // and reaps it. Wait for that ownership to end before Tauri exits, while
         // stopping playback immediately. Queued operations recheck closing.
-        let (_, sessions, ()) = tokio::join!(
+        let (_, sessions, (), ()) = tokio::join!(
             self.streamlink_operation.lock(),
             self.sessions.shutdown(),
             self.auth.shutdown(),
+            self.chat.shutdown(),
         );
         sessions
     }

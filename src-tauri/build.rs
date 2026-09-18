@@ -42,6 +42,7 @@ fn main() {
             "streamlink_restart",
             "playback_settings",
             "channel_settings",
+            "open_channel_chat",
             "save_channel_settings",
             "save_playback_settings",
             "discover_players",

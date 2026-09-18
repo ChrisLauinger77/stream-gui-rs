@@ -14,6 +14,7 @@
     "allow-streamlink-restart",
     "allow-playback-settings",
     "allow-channel-settings",
+    "allow-open-channel-chat",
     "allow-save-channel-settings",
     "allow-save-playback-settings",
     "allow-discover-players",

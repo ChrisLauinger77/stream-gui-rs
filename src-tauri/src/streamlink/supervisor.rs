@@ -71,6 +71,7 @@ pub struct SessionSnapshot {
     pub stream: Option<PlaybackStream>,
     pub quality_policy: Option<QualityPolicy>,
     pub effective_settings: Option<crate::config::EffectivePlaybackSettings>,
+    pub chat_error: Option<ErrorCode>,
     #[ts(type = "number")]
     pub started_at: u64,
     #[ts(type = "number | null")]
@@ -327,6 +328,7 @@ impl Supervisor {
             stream: spec.stream,
             quality_policy: spec.policy,
             effective_settings: spec.effective_settings,
+            chat_error: None,
             started_at: now(),
             ended_at: None,
             failure: None,
@@ -436,6 +438,21 @@ impl Supervisor {
             run.done.send_replace(true);
         });
         Ok(initial)
+    }
+
+    pub async fn record_chat_result(
+        &self,
+        id: &str,
+        generation: u32,
+        error: Option<ErrorCode>,
+    ) -> Option<SessionSnapshot> {
+        let registry = self.registry.lock().await;
+        let session = registry.sessions.get(id)?;
+        let mut state = session.state.lock().expect("session mutex poisoned");
+        if state.generation == generation {
+            state.chat_error = error;
+        }
+        Some(state.clone())
     }
 
     pub async fn sessions(&self) -> Vec<SessionSnapshot> {
