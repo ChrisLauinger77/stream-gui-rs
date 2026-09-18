@@ -3,49 +3,45 @@ mod client_id_value;
 #[cfg(any(feature = "desktop", test))]
 pub(crate) mod twitch_client_id;
 
+use crate::{
+    domain::{AppError, ErrorCode, Result},
+    streamlink::playback::{PlayerSettings, QualityPolicy},
+};
+use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeMap,
     fs,
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     sync::Mutex,
 };
-
-use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::domain::{AppError, ErrorCode, Result};
+pub const SETTINGS_VERSION: u32 = 3;
+const MAX_SETTINGS_BYTES: u64 = 256 * 1024;
+const MAX_CHANNEL_OVERRIDES: usize = 1000;
 
-pub const SETTINGS_VERSION: u32 = 2;
-use crate::streamlink::playback::{PlayerSettings, QualityPolicy};
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum Theme {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+/// Global preferences only. Channel records have their own narrow update operation.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Settings {
-    pub version: u32,
     pub streamlink_path: Option<String>,
     pub player: PlayerSettings,
     pub default_quality: QualityPolicy,
+    pub automatic_chat: bool,
+    pub theme: Theme,
 }
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            version: SETTINGS_VERSION,
-            streamlink_path: None,
-            player: PlayerSettings::default(),
-            default_quality: QualityPolicy::Source,
-        }
-    }
-}
-
 impl Settings {
     pub fn validate(&self) -> Result<()> {
-        if self.version != SETTINGS_VERSION {
-            return Err(AppError::new(
-                ErrorCode::SettingsVersion,
-                "Unsupported settings version.",
-            ));
-        }
         if self.streamlink_path.as_ref().is_some_and(|p| {
             p.len() > 4096 || p.chars().any(char::is_control) || !Path::new(p).is_absolute()
         }) {
@@ -55,49 +51,193 @@ impl Settings {
         }
         self.player.validate()
     }
-    pub fn from_json(input: &str) -> Result<Self> {
-        let mut value: serde_json::Value = serde_json::from_str(input).map_err(|_| {
-            settings_error("Settings contain invalid JSON; the file was not changed.")
-        })?;
-        // The sole migration is our own Phase 0 schema; unknown versions stay intact.
-        if value.get("version").and_then(|v| v.as_u64()) == Some(1) {
-            #[derive(Deserialize)]
-            #[serde(rename_all = "camelCase", deny_unknown_fields)]
-            struct VersionOne {
-                version: u32,
-                streamlink_path: Option<String>,
-            }
-            let old: VersionOne = serde_json::from_value(value)
-                .map_err(|_| settings_error("Invalid version 1 settings."))?;
-            debug_assert_eq!(old.version, 1);
-            value = serde_json::to_value(Self {
-                streamlink_path: old.streamlink_path,
-                ..Self::default()
-            })
-            .expect("settings serialization");
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChannelOverrides {
+    pub quality: Option<QualityPolicy>,
+    pub automatic_chat: Option<bool>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChannelSettingsRequest {
+    pub broadcaster_id: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SaveChannelSettingsRequest {
+    pub broadcaster_id: String,
+    pub overrides: ChannelOverrides,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectivePlaybackSettings {
+    pub streamlink_path: Option<String>,
+    pub player: PlayerSettings,
+    pub quality: QualityPolicy,
+    pub automatic_chat: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelSettings {
+    pub broadcaster_id: String,
+    pub overrides: ChannelOverrides,
+    pub default_quality: QualityPolicy,
+    pub default_automatic_chat: bool,
+    pub effective: EffectivePlaybackSettings,
+}
+pub fn validate_broadcaster_id(id: &str) -> Result<()> {
+    if id.is_empty()
+        || id.len() > 32
+        || !id.bytes().all(|c| c.is_ascii_digit())
+        || id.starts_with('0')
+    {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            "Invalid Twitch broadcaster ID.",
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SettingsDocument {
+    version: u32,
+    settings: Settings,
+    channel_overrides: BTreeMap<String, ChannelOverrides>,
+}
+impl Default for SettingsDocument {
+    fn default() -> Self {
+        Self {
+            version: SETTINGS_VERSION,
+            settings: Settings::default(),
+            channel_overrides: BTreeMap::new(),
         }
-        if value.get("version").and_then(|v| v.as_u64()) != Some(SETTINGS_VERSION.into()) {
+    }
+}
+impl SettingsDocument {
+    fn validate(&self) -> Result<()> {
+        if self.version != SETTINGS_VERSION {
             return Err(AppError::new(
                 ErrorCode::SettingsVersion,
-                "Unsupported or missing settings version; the file was not changed.",
+                "Unsupported settings version; the file was not changed.",
             ));
         }
-        serde_json::from_value(value)
-            .map_err(|_| settings_error("Settings schema is invalid; the file was not changed."))
+        self.settings.validate()?;
+        if self.channel_overrides.len() > MAX_CHANNEL_OVERRIDES {
+            return Err(settings_error("Too many channel overrides."));
+        }
+        for id in self.channel_overrides.keys() {
+            validate_broadcaster_id(id)?;
+        }
+        Ok(())
+    }
+    fn from_json(input: &str) -> Result<Self> {
+        let value: serde_json::Value = serde_json::from_str(input).map_err(|_| {
+            settings_error("Settings contain invalid JSON; the file was not changed.")
+        })?;
+        // Migrate only this application's schemas, in memory until the next save.
+        let result = match value.get("version").and_then(|v| v.as_u64()) {
+            Some(1) => {
+                #[derive(Deserialize)]
+                #[serde(rename_all = "camelCase", deny_unknown_fields)]
+                struct Legacy {
+                    version: u32,
+                    streamlink_path: Option<String>,
+                }
+                let old: Legacy = serde_json::from_value(value)
+                    .map_err(|_| settings_error("Invalid version 1 settings."))?;
+                debug_assert_eq!(old.version, 1);
+                Self {
+                    settings: Settings {
+                        streamlink_path: old.streamlink_path,
+                        ..Settings::default()
+                    },
+                    ..Self::default()
+                }
+            }
+            Some(2) => {
+                #[derive(Deserialize)]
+                #[serde(rename_all = "camelCase", deny_unknown_fields)]
+                struct Legacy {
+                    version: u32,
+                    streamlink_path: Option<String>,
+                    player: PlayerSettings,
+                    default_quality: QualityPolicy,
+                }
+                let old: Legacy = serde_json::from_value(value)
+                    .map_err(|_| settings_error("Invalid version 2 settings."))?;
+                debug_assert_eq!(old.version, 2);
+                Self {
+                    settings: Settings {
+                        streamlink_path: old.streamlink_path,
+                        player: old.player,
+                        default_quality: old.default_quality,
+                        ..Settings::default()
+                    },
+                    ..Self::default()
+                }
+            }
+            Some(3) => serde_json::from_value(value).map_err(|_| {
+                settings_error("Settings schema is invalid; the file was not changed.")
+            })?,
+            _ => {
+                return Err(AppError::new(
+                    ErrorCode::SettingsVersion,
+                    "Unsupported or missing settings version; the file was not changed.",
+                ));
+            }
+        };
+        result.validate()?;
+        Ok(result)
+    }
+    fn effective(&self, id: &str, quality: Option<QualityPolicy>) -> EffectivePlaybackSettings {
+        let overrides = self.channel_overrides.get(id).cloned().unwrap_or_default();
+        EffectivePlaybackSettings {
+            streamlink_path: self.settings.streamlink_path.clone(),
+            player: self.settings.player.clone(),
+            quality: quality
+                .or(overrides.quality)
+                .unwrap_or(self.settings.default_quality),
+            automatic_chat: overrides
+                .automatic_chat
+                .unwrap_or(self.settings.automatic_chat),
+        }
+    }
+    fn channel(&self, id: &str) -> ChannelSettings {
+        ChannelSettings {
+            broadcaster_id: id.into(),
+            overrides: self.channel_overrides.get(id).cloned().unwrap_or_default(),
+            default_quality: self.settings.default_quality,
+            default_automatic_chat: self.settings.automatic_chat,
+            effective: self.effective(id, None),
+        }
     }
 }
 
 pub struct SettingsStore {
     path: PathBuf,
-    value: Mutex<Settings>,
+    value: Mutex<SettingsDocument>,
 }
-
 impl SettingsStore {
     pub fn open(directory: &Path) -> Result<Self> {
         let path = directory.join("settings.json");
-        let settings = match fs::read_to_string(&path) {
-            Ok(text) => Settings::from_json(&text)?,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Settings::default(),
+        let settings = match fs::File::open(&path) {
+            Ok(file) => {
+                let mut text = String::new();
+                file.take(MAX_SETTINGS_BYTES + 1)
+                    .read_to_string(&mut text)
+                    .map_err(|_| settings_error("Could not read the application settings."))?;
+                if text.len() as u64 > MAX_SETTINGS_BYTES {
+                    return Err(settings_error(
+                        "Settings file is too large; it was not changed.",
+                    ));
+                }
+                SettingsDocument::from_json(&text)?
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => SettingsDocument::default(),
             Err(_) => return Err(settings_error("Could not read the application settings.")),
         };
         Ok(Self {
@@ -105,148 +245,95 @@ impl SettingsStore {
             value: Mutex::new(settings),
         })
     }
-
     pub fn snapshot(&self) -> Settings {
-        self.value.lock().expect("settings mutex poisoned").clone()
+        self.value
+            .lock()
+            .expect("settings mutex poisoned")
+            .settings
+            .clone()
     }
-
     pub fn path(&self) -> &Path {
         &self.path
     }
-
-    /// Persist only after successful executable validation. tempfile::persist
-    /// replaces atomically on Unix and Windows; no remove-then-rename gap.
+    pub fn channel(&self, id: &str) -> Result<ChannelSettings> {
+        validate_broadcaster_id(id)?;
+        Ok(self
+            .value
+            .lock()
+            .expect("settings mutex poisoned")
+            .channel(id))
+    }
+    pub fn effective(
+        &self,
+        id: &str,
+        quality: Option<QualityPolicy>,
+    ) -> Result<EffectivePlaybackSettings> {
+        validate_broadcaster_id(id)?;
+        Ok(self
+            .value
+            .lock()
+            .expect("settings mutex poisoned")
+            .effective(id, quality))
+    }
+    pub fn set_channel(&self, request: SaveChannelSettingsRequest) -> Result<ChannelSettings> {
+        validate_broadcaster_id(&request.broadcaster_id)?;
+        let mut value = self.value.lock().expect("settings mutex poisoned");
+        let mut next = value.clone();
+        if request.overrides == ChannelOverrides::default() {
+            next.channel_overrides.remove(&request.broadcaster_id);
+        } else {
+            next.channel_overrides
+                .insert(request.broadcaster_id.clone(), request.overrides);
+        }
+        self.persist(&next)?;
+        *value = next;
+        Ok(value.channel(&request.broadcaster_id))
+    }
     pub fn set_streamlink_path(&self, path: Option<String>) -> Result<()> {
         let mut value = self.value.lock().expect("settings mutex poisoned");
-        let next = Settings {
-            streamlink_path: path,
-            ..value.clone()
-        };
+        let mut next = value.clone();
+        next.settings.streamlink_path = path;
         self.persist(&next)?;
         *value = next;
         Ok(())
     }
-
-    pub fn update(&self, next: Settings) -> Result<Settings> {
-        next.validate()?;
+    pub fn update(&self, settings: Settings) -> Result<Settings> {
+        settings.validate()?;
         let mut value = self.value.lock().expect("settings mutex poisoned");
+        let next = SettingsDocument {
+            settings: settings.clone(),
+            ..value.clone()
+        };
         self.persist(&next)?;
-        *value = next.clone();
-        Ok(next)
+        *value = next;
+        Ok(settings)
     }
-
-    fn persist(&self, next: &Settings) -> Result<()> {
+    fn persist(&self, next: &SettingsDocument) -> Result<()> {
+        next.validate()?;
+        let data = serde_json::to_vec_pretty(next)
+            .map_err(|_| settings_error("Could not serialize settings."))?;
+        if data.len() as u64 + 1 > MAX_SETTINGS_BYTES {
+            return Err(settings_error("Settings file would be too large."));
+        }
         let directory = self.path.parent().expect("settings parent");
         fs::create_dir_all(directory)
             .map_err(|_| settings_error("Could not create the application settings directory."))?;
         let mut temporary = tempfile::NamedTempFile::new_in(directory)
             .map_err(|_| settings_error("Could not create a temporary settings file."))?;
-        serde_json::to_writer_pretty(&mut temporary, &next)
-            .map_err(|_| settings_error("Could not serialize settings."))?;
         temporary
-            .write_all(b"\n")
+            .write_all(&data)
+            .and_then(|_| temporary.write_all(b"\n"))
             .and_then(|_| temporary.as_file().sync_all())
             .map_err(|_| settings_error("Could not write settings."))?;
+        // Replace atomically on Unix and Windows; never remove the old file first.
         temporary
             .persist(&self.path)
             .map_err(|_| settings_error("Could not replace the settings file."))?;
         Ok(())
     }
 }
-
 fn settings_error(message: &str) -> AppError {
     AppError::new(ErrorCode::Settings, message)
 }
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn settings_version_and_round_trip() {
-        let value = Settings {
-            streamlink_path: Some("/path with spaces/streamlink".into()),
-            ..Settings::default()
-        };
-        assert_eq!(
-            Settings::from_json(&serde_json::to_string(&value).unwrap()).unwrap(),
-            value
-        );
-        for text in ["{}", r#"{"version":3}"#, r#"{"version":0}"#] {
-            assert_eq!(
-                Settings::from_json(text).unwrap_err().code,
-                ErrorCode::SettingsVersion
-            );
-        }
-        assert_eq!(
-            Settings::from_json("broken").unwrap_err().code,
-            ErrorCode::Settings
-        );
-    }
-
-    #[test]
-    fn persist_replace_clear_and_preserve_future_versions() {
-        let temp = tempfile::tempdir().unwrap();
-        let store = SettingsStore::open(temp.path()).unwrap();
-        assert!(!store.path().exists());
-        store.set_streamlink_path(Some("/one".into())).unwrap();
-        store.set_streamlink_path(Some("/two".into())).unwrap();
-        assert_eq!(
-            SettingsStore::open(temp.path())
-                .unwrap()
-                .snapshot()
-                .streamlink_path
-                .as_deref(),
-            Some("/two")
-        );
-        store.set_streamlink_path(None).unwrap();
-        assert_eq!(
-            SettingsStore::open(temp.path()).unwrap().snapshot(),
-            Settings::default()
-        );
-        fs::write(store.path(), r#"{"version":99}"#).unwrap();
-        assert!(SettingsStore::open(temp.path()).is_err());
-        assert_eq!(
-            fs::read_to_string(store.path()).unwrap(),
-            r#"{"version":99}"#
-        );
-    }
-    #[test]
-    fn migrates_only_our_version_one_path_and_roundtrips_playback_settings() {
-        let root = tempfile::tempdir().unwrap();
-        let path = root
-            .path()
-            .join("streamlink")
-            .to_string_lossy()
-            .into_owned();
-        fs::write(
-            root.path().join("settings.json"),
-            serde_json::json!({"version":1,"streamlinkPath":path}).to_string(),
-        )
-        .unwrap();
-        let store = SettingsStore::open(root.path()).unwrap();
-        let mut next = store.snapshot();
-        assert_eq!(next.version, 2);
-        assert_eq!(next.streamlink_path.as_deref(), Some(path.as_str()));
-        assert!(
-            fs::read_to_string(store.path())
-                .unwrap()
-                .contains("\"version\":1")
-        );
-        next.default_quality = QualityPolicy::Audio;
-        next.player = PlayerSettings {
-            mode: crate::streamlink::playback::PlayerMode::Mpv,
-            executable: None,
-            arguments: vec!["--volume=25".into(), "literal spaces".into(), String::new()],
-        };
-        store.update(next.clone()).unwrap();
-        assert_eq!(SettingsStore::open(root.path()).unwrap().snapshot(), next);
-        let before = fs::read_to_string(store.path()).unwrap();
-        next.player.arguments.push("bad\0argument".into());
-        assert!(store.update(next).is_err());
-        assert_eq!(fs::read_to_string(store.path()).unwrap(), before);
-        assert!(
-            Settings::from_json(r#"{"version":1,"streamlinkPath":null,"session":{}}"#).is_err()
-        );
-    }
-}
+mod tests;

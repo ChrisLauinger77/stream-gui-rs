@@ -20,7 +20,7 @@ const signedOut: AuthStatus = {
   phase: "signed_out", sessionId: null, user: null, authorization: null, error: null, credentialStorage: "memory",
 };
 const session = (id: string): SessionSnapshot => ({
-  id, generation: 1, restarting: false, stream: null, qualityPolicy: "source", startedAt: 1, endedAt: null, failure: null, phase: "running", pid: 123, url: "https://www.twitch.tv/example", quality: "best",
+  id, generation: 1, restarting: false, effectiveSettings: null, stream: null, qualityPolicy: "source", startedAt: 1, endedAt: null, failure: null, phase: "running", pid: 123, url: "https://www.twitch.tv/example", quality: "best",
   exitCode: null, stopRequested: false, logs: [], droppedLogEntries: 0,
 });
 
@@ -42,7 +42,7 @@ beforeEach(async () => {
   vi.resetAllMocks();
   vi.mocked(api.diagnostics).mockResolvedValue({
     name: "Stream GUI RS", version: "0.1.0", platform: "test", settingsPath: "settings.json",
-    settings: { version: 2, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" }, authConfigured: true,
+    settings: { theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" }, authConfigured: true,
   });
   vi.mocked(api.authStatus).mockResolvedValue(signedOut);
   vi.mocked(api.sessions).mockResolvedValue([session("one"), session("two")]);

@@ -91,7 +91,7 @@ pub struct StopRequest {
 pub fn typescript_bindings() -> String {
     use crate::helix::browse::*;
     use crate::streamlink::{discovery::PlayerDiscovery, playback::*};
-    use crate::{config::Settings, diagnostics::BackendDiagnostics, streamlink::*, twitch::*};
+    use crate::{config::*, diagnostics::BackendDiagnostics, streamlink::*, twitch::*};
     let declarations = [
         ErrorCode::decl(),
         QualityPolicy::decl(),
@@ -116,6 +116,12 @@ pub fn typescript_bindings() -> String {
         ProbeRequest::decl(),
         StopRequest::decl(),
         Settings::decl(),
+        Theme::decl(),
+        ChannelOverrides::decl(),
+        ChannelSettingsRequest::decl(),
+        SaveChannelSettingsRequest::decl(),
+        ChannelSettings::decl(),
+        EffectivePlaybackSettings::decl(),
         BackendDiagnostics::decl(),
         ProbeResult::decl(),
         SessionPhase::decl(),

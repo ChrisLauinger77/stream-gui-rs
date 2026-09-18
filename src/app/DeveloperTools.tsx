@@ -95,7 +95,7 @@ export function DeveloperTools() {
     {error && <p role="alert" className="error">{error}</p>}
     <Panel title="Backend">
       <p>{backend ? `Ready · ${backend.version} · ${backend.platform}` : "Not connected"}</p>
-      {backend && <p className="muted path">Settings v{backend.settings.version}: {backend.settingsPath}</p>}
+      {backend && <p className="muted path">Settings: {backend.settingsPath}</p>}
     </Panel>
     <Authentication status={auth} account={account} busy={pending.has("auth")}
       cancelling={pending.has("cancel")} cancel={() => run("cancel", api.cancel, refreshAuth)}

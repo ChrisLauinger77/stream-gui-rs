@@ -111,9 +111,8 @@ impl From<crate::helix::browse::StreamSummary> for PlaybackStream {
 pub struct LaunchSpec {
     pub executable: PathBuf,
     pub player: Option<PathBuf>,
-    pub player_settings: PlayerSettings,
+    pub settings: crate::config::EffectivePlaybackSettings,
     pub stream: PlaybackStream,
-    pub quality: QualityPolicy,
 }
 pub struct CommandSpec {
     pub executable: PathBuf,
@@ -122,6 +121,7 @@ pub struct CommandSpec {
     pub stream: Option<PlaybackStream>,
     pub quality: String,
     pub policy: Option<QualityPolicy>,
+    pub effective_settings: Option<crate::config::EffectivePlaybackSettings>,
 }
 
 pub fn channel_url(login: &str) -> Result<String> {
@@ -159,9 +159,10 @@ pub fn encode_player_arguments(arguments: &[String]) -> String {
 }
 
 pub fn build_command(spec: LaunchSpec) -> Result<CommandSpec> {
-    spec.player_settings.validate()?;
+    spec.settings.player.validate()?;
+    let effective_settings = spec.settings.clone();
     let url = channel_url(&spec.stream.login)?;
-    let (selection, exclude) = spec.quality.selection();
+    let (selection, exclude) = spec.settings.quality.selection();
     let mut arguments = vec![
         "--no-config".into(),
         "--no-plugin-sideloading".into(),
@@ -178,7 +179,7 @@ pub fn build_command(spec: LaunchSpec) -> Result<CommandSpec> {
         })?;
         arguments.extend(["--player".into(), path.into()]);
     }
-    let mut player_args: Vec<String> = match spec.player_settings.mode {
+    let mut player_args: Vec<String> = match spec.settings.player.mode {
         PlayerMode::Mpv => vec!["--keep-open=no".into(), "--quiet".into()],
         // macOS VLC always starts its native instance and does not expose
         // the one-instance option used on Linux/Windows.
@@ -186,7 +187,7 @@ pub fn build_command(spec: LaunchSpec) -> Result<CommandSpec> {
         PlayerMode::Vlc => vec!["--no-one-instance".into(), "--play-and-exit".into()],
         _ => vec![],
     };
-    player_args.extend(spec.player_settings.arguments);
+    player_args.extend(spec.settings.player.arguments);
     if !player_args.is_empty() {
         arguments.extend([
             "--player-args".into(),
@@ -203,7 +204,8 @@ pub fn build_command(spec: LaunchSpec) -> Result<CommandSpec> {
         url,
         stream: Some(spec.stream),
         quality: selection.into(),
-        policy: Some(spec.quality),
+        policy: Some(spec.settings.quality),
+        effective_settings: Some(effective_settings),
     })
 }
 
@@ -230,15 +232,20 @@ mod tests {
             executable: PathBuf::from("/tools/Stream link/streamlink"),
             player: (mode != PlayerMode::Default)
                 .then(|| PathBuf::from("/播放器 with spaces/player")),
-            player_settings: PlayerSettings {
-                mode,
-                executable: (mode == PlayerMode::Custom).then(|| {
-                    std::env::current_exe()
-                        .unwrap()
-                        .to_string_lossy()
-                        .into_owned()
-                }),
-                arguments: vec![],
+            settings: crate::config::EffectivePlaybackSettings {
+                streamlink_path: None,
+                automatic_chat: false,
+                quality,
+                player: PlayerSettings {
+                    mode,
+                    executable: (mode == PlayerMode::Custom).then(|| {
+                        std::env::current_exe()
+                            .unwrap()
+                            .to_string_lossy()
+                            .into_owned()
+                    }),
+                    arguments: vec![],
+                },
             },
             stream: PlaybackStream {
                 stream_id: Some("456".into()),
@@ -248,7 +255,6 @@ mod tests {
                 title: Some("$(never execute) {playerinput}".into()),
                 category: Some("game; nope".into()),
             },
-            quality,
         }
     }
     #[test]
@@ -360,7 +366,7 @@ mod tests {
             "'space value' '' 'a'\"'\"'b' '\"quoted\"' 'C:\\播放器\\file name' '{{playerinput}}' '{{unknown}}' '$HOME;$(command)' {playerinput}"
         );
         let mut launch = spec(QualityPolicy::Source, PlayerMode::Default);
-        launch.player_settings.arguments = input.map(String::from).to_vec();
+        launch.settings.player.arguments = input.map(String::from).to_vec();
         assert_eq!(build_command(launch).unwrap().arguments[6], encoded);
     }
     #[test]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-channel-settings"
+description = "Enables the save_channel_settings command without any pre-configured scope."
+commands.allow = ["save_channel_settings"]
+
+[[permission]]
+identifier = "deny-save-channel-settings"
+description = "Denies the save_channel_settings command without any pre-configured scope."
+commands.deny = ["save_channel_settings"]

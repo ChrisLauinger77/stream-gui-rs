@@ -31,6 +31,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::backend_diagnostics, commands::streamlink_probe,
+            commands::channel_settings, commands::save_channel_settings,
             commands::playback_settings, commands::save_playback_settings, commands::discover_players, commands::streamlink_restart,
             commands::streamlink_launch, commands::streamlink_stop, commands::streamlink_sessions,
             commands::auth_status, commands::auth_login, commands::auth_open_verification,

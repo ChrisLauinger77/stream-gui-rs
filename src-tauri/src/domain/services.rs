@@ -27,7 +27,7 @@ use std::{
 use tokio::sync::Mutex;
 
 pub struct Services {
-    pub settings: SettingsStore,
+    pub settings: Arc<SettingsStore>,
     pub sessions: Supervisor,
     pub auth: Arc<AuthService>,
     pub helix: HelixClient,
@@ -75,7 +75,7 @@ impl Services {
             store,
         ));
         Ok(Self {
-            settings: SettingsStore::open(settings_directory)?,
+            settings: Arc::new(SettingsStore::open(settings_directory)?),
             sessions: Supervisor::default(),
             helix: HelixClient::new(http, auth.clone()),
             auth,
@@ -112,7 +112,11 @@ impl Services {
         self.ensure_open()?;
         let custom_path = custom_path.filter(|p| !p.trim().is_empty());
         let result = streamlink::probe(custom_path.as_deref(), Duration::from_secs(5)).await?;
-        self.settings.set_streamlink_path(custom_path)?;
+        check_version(&result.version)?;
+        let settings = self.settings.clone();
+        tokio::task::spawn_blocking(move || settings.set_streamlink_path(custom_path))
+            .await
+            .map_err(|_| AppError::new(ErrorCode::Settings, "Settings operation failed."))??;
         Ok(result)
     }
 
@@ -129,7 +133,21 @@ impl Services {
             streamlink::validate_executable(Path::new(path))?;
         }
         resolve_player(&settings.player, &SearchLocations::system())?;
-        self.settings.update(settings)
+        let store = self.settings.clone();
+        tokio::task::spawn_blocking(move || store.update(settings))
+            .await
+            .map_err(|_| AppError::new(ErrorCode::Settings, "Settings operation failed."))?
+    }
+
+    pub async fn save_channel_settings(
+        &self,
+        request: crate::config::SaveChannelSettingsRequest,
+    ) -> Result<crate::config::ChannelSettings> {
+        self.ensure_open()?;
+        let store = self.settings.clone();
+        tokio::task::spawn_blocking(move || store.set_channel(request))
+            .await
+            .map_err(|_| AppError::new(ErrorCode::Settings, "Settings operation failed."))?
     }
 
     async fn prepare_playback(
@@ -138,8 +156,7 @@ impl Services {
         quality: Option<QualityPolicy>,
     ) -> Result<LaunchSpec> {
         self.ensure_open()?;
-        let settings = self.settings.snapshot();
-        settings.validate()?;
+        let settings = self.settings.effective(&stream.broadcaster_id, quality)?;
         let player = resolve_player(&settings.player, &SearchLocations::system())?;
         let probe =
             streamlink::probe(settings.streamlink_path.as_deref(), Duration::from_secs(5)).await?;
@@ -148,9 +165,8 @@ impl Services {
         Ok(LaunchSpec {
             executable: probe.executable.into(),
             player,
-            player_settings: settings.player,
+            settings,
             stream,
-            quality: quality.unwrap_or(settings.default_quality),
         })
     }
 

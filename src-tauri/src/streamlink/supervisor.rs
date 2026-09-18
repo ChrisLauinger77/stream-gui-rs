@@ -70,6 +70,7 @@ pub struct SessionSnapshot {
     pub restarting: bool,
     pub stream: Option<PlaybackStream>,
     pub quality_policy: Option<QualityPolicy>,
+    pub effective_settings: Option<crate::config::EffectivePlaybackSettings>,
     #[ts(type = "number")]
     pub started_at: u64,
     #[ts(type = "number | null")]
@@ -232,6 +233,7 @@ impl Supervisor {
             quality: request.quality,
             stream: None,
             policy: None,
+            effective_settings: None,
         })
         .await
     }
@@ -324,6 +326,7 @@ impl Supervisor {
             restarting: false,
             stream: spec.stream,
             quality_policy: spec.policy,
+            effective_settings: spec.effective_settings,
             started_at: now(),
             ended_at: None,
             failure: None,

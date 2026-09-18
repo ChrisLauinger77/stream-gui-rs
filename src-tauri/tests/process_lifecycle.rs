@@ -444,11 +444,15 @@ fn production_spec(channel: &str) -> LaunchSpec {
     LaunchSpec {
         executable: helper().to_path_buf(),
         player: None,
-        player_settings: PlayerSettings::default(),
-        quality: QualityPolicy::Source,
+        settings: stream_gui_rs::config::EffectivePlaybackSettings {
+            streamlink_path: None,
+            player: PlayerSettings::default(),
+            quality: QualityPolicy::Source,
+            automatic_chat: false,
+        },
         stream: PlaybackStream {
             stream_id: Some(format!("stream-{channel}")),
-            broadcaster_id: format!("broadcaster-{channel}"),
+            broadcaster_id: if channel == "holdb" { "456" } else { "123" }.into(),
             login: channel.into(),
             display_name: format!("Channel {channel}"),
             title: Some("A test stream".into()),
@@ -478,8 +482,8 @@ async fn starting(supervisor: &Supervisor, id: &str) {
 async fn production_launch_keeps_metadata_and_uses_exact_native_argv() {
     let supervisor = Supervisor::default();
     let mut spec = production_spec("arguments");
-    spec.quality = QualityPolicy::High;
-    spec.player_settings.arguments = vec![
+    spec.settings.quality = QualityPolicy::High;
+    spec.settings.player.arguments = vec![
         "one literal argument".into(),
         String::new(),
         "{playerinput}".into(),
@@ -493,10 +497,7 @@ async fn production_launch_keeps_metadata_and_uses_exact_native_argv() {
         ended.stream.as_ref().unwrap().stream_id.as_deref(),
         Some("stream-arguments")
     );
-    assert_eq!(
-        ended.stream.as_ref().unwrap().broadcaster_id,
-        "broadcaster-arguments"
-    );
+    assert_eq!(ended.stream.as_ref().unwrap().broadcaster_id, "123");
     let args: Vec<String> = serde_json::from_str(
         &ended
             .logs
@@ -598,7 +599,7 @@ async fn restart_reaps_previous_generation_preserves_identity_and_leaves_other_s
         .restart(&first.id, first.generation, |stream| async move {
             let mut spec = production_spec("hold");
             spec.stream = stream;
-            spec.quality = QualityPolicy::Audio;
+            spec.settings.quality = QualityPolicy::Audio;
             Ok(spec)
         })
         .await
@@ -939,4 +940,119 @@ async fn cancelled_authentication_cannot_spawn_a_prepared_launch() {
         ErrorCode::Unauthenticated
     );
     assert!(supervisor.sessions().await.is_empty());
+}
+
+#[tokio::test]
+async fn settings_changes_preserve_runs_and_restart_resolves_channel_then_request_overrides() {
+    use stream_gui_rs::config::{ChannelOverrides, SaveChannelSettingsRequest};
+    let root = tempfile::tempdir().unwrap();
+    let services = std::sync::Arc::new(Services::new(root.path(), None).unwrap());
+    services
+        .settings
+        .set_streamlink_path(Some(helper().to_string_lossy().into_owned()))
+        .unwrap();
+    let first = services
+        .sessions
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let second = services
+        .sessions
+        .launch_spec(production_spec("holdb"))
+        .await
+        .unwrap();
+    let original = first.effective_settings.clone().unwrap();
+    let mut global = services.settings.snapshot();
+    global.default_quality = QualityPolicy::High;
+    global.player.arguments = vec!["--volume=20".into()];
+    services.save_settings(global).await.unwrap();
+    services
+        .save_channel_settings(SaveChannelSettingsRequest {
+            broadcaster_id: "123".into(),
+            overrides: ChannelOverrides {
+                quality: Some(QualityPolicy::Low),
+                automatic_chat: None,
+            },
+        })
+        .await
+        .unwrap();
+    let current = services.sessions.sessions().await;
+    assert_eq!(current[0].pid, first.pid);
+    assert_eq!(current[0].effective_settings.as_ref().unwrap(), &original);
+    assert_eq!(current[1].pid, second.pid);
+    let restarted = services
+        .restart_playback(RestartRequest {
+            session_id: first.id.clone(),
+            generation: 1,
+            quality: None,
+        })
+        .await
+        .unwrap();
+    assert_process_exited(first.pid);
+    assert_eq!(restarted.id, first.id);
+    assert_eq!(restarted.quality_policy, Some(QualityPolicy::Low));
+    assert_eq!(
+        restarted
+            .effective_settings
+            .as_ref()
+            .unwrap()
+            .player
+            .arguments,
+        ["--volume=20"]
+    );
+    assert_eq!(services.sessions.sessions().await[1].pid, second.pid);
+    services
+        .save_channel_settings(SaveChannelSettingsRequest {
+            broadcaster_id: "123".into(),
+            overrides: ChannelOverrides::default(),
+        })
+        .await
+        .unwrap();
+    let inherited = services
+        .restart_playback(RestartRequest {
+            session_id: first.id.clone(),
+            generation: restarted.generation,
+            quality: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(inherited.quality_policy, Some(QualityPolicy::High));
+    let explicit = services
+        .restart_playback(RestartRequest {
+            session_id: first.id.clone(),
+            generation: inherited.generation,
+            quality: Some(QualityPolicy::Audio),
+        })
+        .await
+        .unwrap();
+    assert_eq!(explicit.quality_policy, Some(QualityPolicy::Audio));
+    assert_eq!(
+        services.settings.channel("123").unwrap().overrides,
+        ChannelOverrides::default()
+    );
+    services.shutdown().await.unwrap();
+    assert_process_exited(explicit.pid);
+    assert_process_exited(second.pid);
+}
+
+#[tokio::test]
+async fn unsupported_streamlink_probe_does_not_replace_saved_path() {
+    let root = tempfile::tempdir().unwrap();
+    let services = Services::new(root.path(), None).unwrap();
+    services
+        .probe(Some(helper().to_string_lossy().into_owned()))
+        .await
+        .unwrap();
+    let before = std::fs::read(services.settings.path()).unwrap();
+    let unsupported = renamed_helper(root.path(), "unsupported");
+    assert_eq!(
+        services
+            .probe(Some(unsupported.to_string_lossy().into_owned()))
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::UnsupportedStreamlink
+    );
+    assert_eq!(std::fs::read(services.settings.path()).unwrap(), before);
+    services.shutdown().await.unwrap();
 }

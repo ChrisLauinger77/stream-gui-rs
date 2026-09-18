@@ -41,6 +41,8 @@ fn main() {
             "streamlink_sessions",
             "streamlink_restart",
             "playback_settings",
+            "channel_settings",
+            "save_channel_settings",
             "save_playback_settings",
             "discover_players",
             "auth_status",

@@ -229,3 +229,19 @@ pub async fn get_channel(
         .browse_channel(request, &tokio_util::sync::CancellationToken::new())
         .await
 }
+
+#[tauri::command]
+pub fn channel_settings(
+    services: State<'_, Arc<Services>>,
+    request: crate::config::ChannelSettingsRequest,
+) -> Result<crate::config::ChannelSettings> {
+    services.settings.channel(&request.broadcaster_id)
+}
+
+#[tauri::command]
+pub async fn save_channel_settings(
+    services: State<'_, Arc<Services>>,
+    request: crate::config::SaveChannelSettingsRequest,
+) -> Result<crate::config::ChannelSettings> {
+    services.save_channel_settings(request).await
+}

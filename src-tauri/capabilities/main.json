@@ -13,6 +13,8 @@
     "allow-streamlink-sessions",
     "allow-streamlink-restart",
     "allow-playback-settings",
+    "allow-channel-settings",
+    "allow-save-channel-settings",
     "allow-save-playback-settings",
     "allow-discover-players",
     "allow-auth-status",
