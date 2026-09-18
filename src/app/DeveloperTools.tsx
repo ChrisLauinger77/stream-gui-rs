@@ -6,7 +6,7 @@ import { Playback } from "../features/Playback";
 import type { Account, AuthStatus, BackendDiagnostics, ProbeResult, SessionSnapshot } from "../lib/generated";
 import { api, errorMessage } from "../lib/ipc";
 
-type ActionKey = "auth" | "cancel" | "probe" | "launch" | `stop:${string}`;
+type ActionKey = "auth" | "cancel" | "probe" | `restart:${string}` | `stop:${string}`;
 
 export function DeveloperTools() {
   const [backend, setBackend] = useState<BackendDiagnostics | null>(null);
@@ -110,15 +110,14 @@ export function DeveloperTools() {
         });
       }}>
         <label>Custom executable path<input value={customPath} placeholder="Leave empty to discover on PATH" onChange={(event) => { setCustomPath(event.target.value); setProbe(null); }} /></label>
-        <button type="submit" disabled={pending.has("probe") || pending.has("launch") || !backend}>Probe and save</button>
+        <button type="submit" disabled={pending.has("probe") || !backend}>Probe and save</button>
       </form>
       <p>Detected executable: <span className="path">{probe?.executable ?? "Not probed"}</span></p>
       <p>Version: {probe?.version ?? "—"}</p>
       <p className="muted">A successful probe saves this choice. Launch checks the saved executable again.</p>
     </Panel>
-    <Playback sessions={sessions} launchBusy={pending.has("launch") || pending.has("probe")}
-      ready={!!backend && !!probe} isStopping={(id) => pending.has(`stop:${id}`)}
-      launch={(request) => run("launch", () => api.launch(request), refreshSessions)}
-      stop={(id) => run(`stop:${id}`, () => api.stop(id), refreshSessions)} />
+    <Playback sessions={sessions} isStopping={id => pending.has(`stop:${id}`)} isRestarting={id => pending.has(`restart:${id}`)}
+      restart={(session, quality) => run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), refreshSessions)}
+      stop={id => run(`stop:${id}`, () => api.stop(id), refreshSessions)} />
   </main>;
 }

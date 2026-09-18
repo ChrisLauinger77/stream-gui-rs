@@ -1,5 +1,13 @@
 import type { ErrorCode } from "../lib/generated";
 const messages: Record<ErrorCode, string> = {
+  streamlink_not_found: "Streamlink was not found. Install it separately or set its path in Settings.",
+  unsupported_streamlink: "Playback requires Streamlink 8 or newer. Update Streamlink and test it in Settings.",
+  player_not_found: "The selected player was not found. Check its executable path in Settings.",
+  invalid_player: "Check the player path and arguments in Settings. Enter one literal argument per row.",
+  startup_failed: "Streamlink exited during startup. Open the session diagnostics for details.",
+  streamlink_exited: "Streamlink exited with an error. Open the session diagnostics for details.",
+  restart_failed: "The session could not be restarted. Check its status and diagnostics, then try again.",
+  stream_offline: "This channel is no longer live. Refresh the browsing view.",
   network: "Twitch could not be reached. Check your connection and try again.",
   timeout: "Twitch took too long to respond. Try again.",
   twitch_server: "Twitch is temporarily unavailable. Try again shortly.",
