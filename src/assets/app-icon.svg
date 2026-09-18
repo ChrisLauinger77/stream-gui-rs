@@ -1,0 +1,5 @@
+<!-- Temporary developer icon; not final product branding. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect width="256" height="256" rx="40" fill="#303744" />
+  <path d="M84 60 194 128 84 196Z" fill="#a8bfff" />
+</svg>
