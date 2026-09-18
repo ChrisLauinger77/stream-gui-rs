@@ -1,6 +1,6 @@
 # Phase 2 validation — Twitch browsing
 
-Validated on macOS on 2026-09-18, after the Phase 1 cleanup and project rename. Phase 3 has not started. No dependencies were added.
+Validated on macOS on 2026-09-18, including the focused cleanup after the Phase 2 adversarial review. Phase 3 has not started. No dependencies were added.
 
 ## Implemented scope
 
@@ -17,7 +17,7 @@ All checks below passed:
 | Rust domain/HTTP/auth/query tests | 87 passed |
 | Native fake-Streamlink process tests | 12 passed |
 | **Total Rust tests** | **99 passed** |
-| Frontend behavior tests | **28 passed** (7 preserved prototype, 21 new browsing/shell) |
+| Frontend behavior tests | **51 passed** (7 preserved prototype, 42 browsing/shell, 2 CSS contracts; 23 cleanup regressions added) |
 | Rust formatting | Passed |
 | All-target desktop Rust check | Passed |
 | Strict all-target Clippy (`-D warnings`) | Passed |
@@ -34,9 +34,11 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo test --offline --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features test-support
 cargo check --offline --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support
 cargo clippy --offline --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support -- -D warnings
-npm run tauri build -- --debug --bundles app --ci --config '{"bundle":{"active":true}}'
+CARGO_NET_OFFLINE=true npm run tauri build -- --debug --bundles app --ci --config '{"bundle":{"active":true}}'
 git diff --check
 ```
+
+The Rust HTTP tests require loopback listeners. An initial sandboxed run could not bind those listeners; the complete rerun with local-listener permission passed all 99 tests. No live credentials or Twitch API requests were used by the tests.
 
 The temporary bundle override verifies `src-tauri/target/debug/bundle/macos/Stream GUI RS.app`; it does not enable release packaging, signing or publishing in the project configuration.
 
@@ -56,7 +58,19 @@ A temporary local fixture preview exercised the actual application components wi
 - Keyboard search submission, result activation and offline channel details.
 - Sign-out removes browsing content and shows the clean sign-in screen.
 
-This is fixture-based interface verification, not a live Twitch smoke test or proof of image delivery from Twitch's CDN. The native `.app` was built, but the new authenticated browsing flow has not yet been exercised against Twitch inside that bundle.
+These original interface checks used synthetic fixtures and do not establish live CDN delivery. Separately, the user has now confirmed real macOS smoke testing of Phase 2:
+
+- [x] Existing Twitch authentication restored successfully.
+- [x] Real followed streams and followed channels loaded.
+- [x] Browsing worked with real Twitch data; the application appeared functionally healthy during general browsing.
+
+This records the user's reported observations, not a claim that every detailed scenario below was exercised. The cleanup build was rebuilt successfully; no new live account operations were performed during cleanup verification.
+
+### Cleanup fixture checks
+
+A separate temporary browser fixture used the actual `PageFrame`, `usePage` and stylesheet with synthetic data and delayed responses. Keyboard Enter kept focus on Load more while pending, then moved it to the newly appended result. An empty final page moved focus to the labeled Results region. Pressing Tab during a pending request left focus on the chosen control after completion. The fixture server/tab were closed after verification.
+
+Manual browser palette inspection confirmed dark primary text `#102c23` on `#8bd8bd` (9.00:1), and light primary text `#ffffff` on `#216b54` (6.37:1). Both exceed 4.5:1. The explicit primary-hover selector uses these same foreground/background declarations; automated CSS tests check that rule and both theme palettes. Keyboard focus was observed with a 2px outline and 3px offset, and disabled primary opacity was 0.5. The preview browser's pointer actions did not establish a DOM `:hover` state, so an actual native pointer-hover check remains outstanding; computed palette inspection is not presented as that check. Non-primary hover declarations remain unchanged.
 
 ## Final scope/security review
 
@@ -70,13 +84,13 @@ Reviewed the full Phase 2 changes against the preceding rename commit (`30fbad0`
 - Search generations, component unmounts, public session keys and Rust lease cancellation prevent stale/account-crossing response reuse. Eight permits bound unfinished queries.
 - No browsing playback controls, new player configuration, background monitoring, chat, follow mutations, teams UI or Phase 3 code was introduced.
 
-## Live Twitch smoke checklist — still required
+## Detailed live Twitch smoke checklist — still outstanding
 
 Use a local public client-ID configuration following [authentication setup](authentication.md). Do not record account names, credentials, authorization codes, tokens or account screenshots in the repository.
 
 - [ ] Authenticate through Device Code flow; check account identity in the shell.
-- [ ] Load followed live streams; check display names, titles, category, viewers and language.
-- [ ] Load all followed channels, including offline channels and follow dates.
+- [ ] Inspect followed-live display names, titles, category, viewers and language individually (general loading is confirmed above).
+- [ ] Inspect offline followed channels and follow dates individually (general loading is confirmed above).
 - [ ] Load popular streams.
 - [ ] Browse top categories and open a category's live streams.
 - [ ] Load another page; confirm earlier results remain, duplicates do not accumulate and Refresh resets the view.
@@ -86,12 +100,55 @@ Use a local public client-ID configuration following [authentication setup](auth
 - [ ] Open an offline channel; compare with a simulated network error, which must show unavailable rather than offline.
 - [ ] Verify real preview/profile/category images, sizes, placeholders and failed-image behavior.
 - [ ] Use Tab/Enter throughout, including Search and Back focus restoration.
-- [ ] Restart the native app and verify authentication persistence and fresh browsing data.
+- [ ] Repeat restart with the cleanup build and verify fresh browsing data (restoration of existing authentication is confirmed above).
 - [ ] Log out during a request; confirm account and browsing data disappear.
 - [ ] Re-login (also with another account if available); confirm old view snapshots are absent.
-- [ ] Repeat core interactions with light/system appearance and at the minimum window size.
+- [ ] Repeat core interactions with light/system appearance and at the minimum window size; verify actual native primary-button pointer hover in both themes.
 
-Earlier real authentication/account/restart verification predates the identity rename and Phase 2. It does not substitute for this checklist; the renamed app uses a separate credential namespace and requires a fresh login.
+The confirmed Phase 2 observations above supersede the earlier note that no real browsing had been exercised. They do not establish the detailed error, pagination, account-switching or accessibility scenarios in this checklist.
+
+## Focused cleanup regression tests
+
+All previous 28 frontend tests are retained. The following 23 cases were added; names below match the test runner, including expanded parameterized cases. New defect tests were run against the unfixed implementation first: history restoration, final-page focus, same-URL image recovery and the primary-hover rule failed as expected. Preservation cases verify previously working contracts. Focus responses are deliberately deferred, with assertions while requests are pending.
+
+In `src/app/Browsing.test.tsx`:
+
+1. `Back restores the historical search query, cursor, scroll and focus`
+2. `Back restores the historical search result type and its pagination`
+3. `Back restores the Following tab belonging to that visit`
+4. `a new session clears historical search and Following state`
+5. `final pagination focuses the first newly appended result`
+6. `an empty final page focuses the stable accessible results target`
+7. `reaching 300 items focuses a result from the final permitted page`
+8. `a pending pagination error preserves control focus, results and retry cursor`
+9. `final pagination does not steal focus after moving to another control`
+10. `final pagination does not steal focus after moving to the document body`
+11. `final pagination does not move focus when Load more was not focused`
+12. `successful manual refresh retries the same failed image URL without resetting loaded images`
+13. `ordinary image rerenders preserve the failed placeholder without retrying`
+14. `changing image src retries naturally with the original layout shape`
+15. `repeated image failures wait for another successful refresh`
+16. `successful refresh retries failed images in followed channels`
+17. `successful refresh retries failed images in categories`
+18. `successful refresh retries failed images in category details`
+19. `successful refresh retries failed images in channel details`
+20. `successful refresh retries failed images in channel search`
+21. `successful refresh retries failed images in category search`
+
+In `src/styles/base.test.js` (CSSOM rules and palette contrast, not simulated browser hover):
+
+22. `primary hover explicitly retains a readable palette in dark and light themes`
+23. `button hover keeps non-primary styling, disabled opacity and visible focus`
+
+### Cleanup diff review
+
+The four fixes preserve the existing architecture. History still holds at most twelve visits, now adding only a query and two tab choices; it does not duplicate results or TTL data. Restoring those choices in the Back event selects the matching bounded query snapshot and cursor before scroll/focus restoration. Session-keyed workspace replacement still drops both history and snapshots.
+
+Pagination retains only a set of up to 300 visible focus IDs while a focused request is pending. Blur, completion or unmount discards it. The pending button uses `aria-disabled` plus dispatch guards so disabling it does not itself lose keyboard focus. Failed pagination leaves results/cursor/control intact; the existing Rust ownership and request-generation checks are unchanged.
+
+Image retry generation advances only after an accepted successful refresh, including retrying a failed refresh. Failed refreshes, ordinary renders, pagination and theme changes do not advance it. Only failed media reset; loaded images keep their nodes and loaded state. URLs and fixed-shape placeholders are unchanged. The primary hover selector preserves its palette without changing other hover selectors or keyboard focus styling.
+
+No backend, IPC, credential, dependency, CI or playback code changed. No Phase 3 work was introduced.
 
 ## Platform gaps and intentional limitations
 
