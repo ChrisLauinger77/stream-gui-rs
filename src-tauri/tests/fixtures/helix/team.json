@@ -1,0 +1,23 @@
+{
+  "data": [
+    {
+      "id": "team-1",
+      "team_name": "example",
+      "team_display_name": "Example Team",
+      "background_image_url": null,
+      "banner": null,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "info": "<b>Public team info</b>",
+      "thumbnail_url": "",
+      "users": [
+        {
+          "user_id": "123",
+          "user_login": "example",
+          "user_name": "Example"
+        }
+      ]
+    }
+  ],
+  "pagination": {}
+}

@@ -1,0 +1,12 @@
+{
+  "data": [
+    {
+      "broadcaster_id": "123",
+      "broadcaster_login": "example",
+      "broadcaster_name": "Example",
+      "followed_at": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "pagination": {},
+  "total": 1
+}

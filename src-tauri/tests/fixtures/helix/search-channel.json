@@ -1,0 +1,18 @@
+{
+  "data": [
+    {
+      "id": "123",
+      "broadcaster_login": "example",
+      "display_name": "Example",
+      "broadcaster_language": "en",
+      "game_id": "",
+      "game_name": "",
+      "is_live": false,
+      "tags": [],
+      "thumbnail_url": "",
+      "title": "Title",
+      "started_at": ""
+    }
+  ],
+  "pagination": {}
+}

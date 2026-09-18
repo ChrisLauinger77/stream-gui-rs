@@ -1,0 +1,20 @@
+{
+  "data": [
+    {
+      "broadcaster_id": "123",
+      "broadcaster_login": "example",
+      "broadcaster_name": "Example",
+      "broadcaster_language": "en",
+      "game_id": "game-1",
+      "game_name": "Example game",
+      "title": "Title",
+      "delay": 0,
+      "tags": [
+        "English"
+      ],
+      "content_classification_labels": [],
+      "is_branded_content": false
+    }
+  ],
+  "pagination": {}
+}

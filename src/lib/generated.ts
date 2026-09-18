@@ -15,3 +15,4 @@ export type AuthPhase = "not_configured" | "restoring" | "signed_out" | "authori
 export type DeviceAuthorization = { userCode: string, verificationUri: string, expiresIn: number, };
 export type AuthUser = { id: string, login: string, scopes: Array<string>, expiresIn: number, };
 export type AuthStatus = { phase: AuthPhase, user: AuthUser | null, authorization: DeviceAuthorization | null, error: AppError | null, credentialStorage: string, };
+export type Account = { id: string, login: string, displayName: string, profileImageUrl: string | null, };
