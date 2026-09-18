@@ -7,6 +7,14 @@ pub mod services;
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
     InvalidInput,
+    StreamlinkNotFound,
+    UnsupportedStreamlink,
+    PlayerNotFound,
+    InvalidPlayer,
+    StartupFailed,
+    StreamlinkExited,
+    RestartFailed,
+    StreamOffline,
     NotFound,
     InvalidExecutable,
     ProbeFailed,
@@ -64,6 +72,7 @@ pub struct ProbeRequest {
     pub custom_path: Option<String>,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LaunchRequest {
@@ -81,9 +90,17 @@ pub struct StopRequest {
 /// alongside commands/mod.rs. Tokens deliberately do not implement TS/Serialize.
 pub fn typescript_bindings() -> String {
     use crate::helix::browse::*;
+    use crate::streamlink::{discovery::PlayerDiscovery, playback::*};
     use crate::{config::Settings, diagnostics::BackendDiagnostics, streamlink::*, twitch::*};
     let declarations = [
         ErrorCode::decl(),
+        QualityPolicy::decl(),
+        PlayerMode::decl(),
+        PlayerSettings::decl(),
+        PlaybackRequest::decl(),
+        RestartRequest::decl(),
+        PlaybackStream::decl(),
+        PlayerDiscovery::decl(),
         BrowseRequest::decl(),
         EntityRequest::decl(),
         SearchRequest::decl(),
@@ -97,7 +114,6 @@ pub fn typescript_bindings() -> String {
         CategoryDetails::decl(),
         AppError::decl(),
         ProbeRequest::decl(),
-        LaunchRequest::decl(),
         StopRequest::decl(),
         Settings::decl(),
         BackendDiagnostics::decl(),

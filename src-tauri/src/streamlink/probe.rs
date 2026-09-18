@@ -100,7 +100,16 @@ pub fn discover(custom_path: Option<&str>) -> Result<PathBuf> {
     if let Some(path) = custom_path.filter(|p| !p.trim().is_empty()) {
         return validate_executable(Path::new(path));
     }
-    discover_on_path(env::var_os("PATH").as_deref())
+    discover_on_path(env::var_os("PATH").as_deref()).or_else(|_| {
+        super::discovery::SearchLocations::system()
+            .find("streamlink")
+            .ok_or_else(|| {
+                AppError::new(
+                    ErrorCode::StreamlinkNotFound,
+                    "Streamlink was not found. Install it or set a custom executable path.",
+                )
+            })
+    })
 }
 
 fn discover_on_path(path: Option<&std::ffi::OsStr>) -> Result<PathBuf> {
