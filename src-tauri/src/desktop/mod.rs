@@ -16,8 +16,8 @@ pub fn run() {
     let app = tauri::Builder::default()
         .setup(|app| {
             let directory = app.path().app_config_dir()?;
-            let client_id = std::env::var("TWITCH_CLIENT_ID").ok().map(|id| id.trim().to_owned());
-            let services = Arc::new(Services::new(&directory, client_id)?);
+            let client_id = crate::config::twitch_client_id::from_environment()?;
+            let services = Arc::new(Services::new(&directory, Some(client_id))?);
             let lifecycle = Arc::new(Lifecycle::default());
             app.manage(services.clone());
             app.manage(lifecycle.clone());

@@ -1,3 +1,8 @@
+#[cfg(any(feature = "desktop", test))]
+mod client_id_value;
+#[cfg(any(feature = "desktop", test))]
+pub(crate) mod twitch_client_id;
+
 use std::{
     fs,
     io::Write,
