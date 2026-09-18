@@ -38,9 +38,21 @@ async fn terminal(supervisor: &Supervisor, id: &str) -> SessionSnapshot {
     .expect("session should finish")
 }
 
+fn helper_directory() -> tempfile::TempDir {
+    // Keep renamed helpers on the binary's filesystem so hard links work even
+    // when the system temporary directory is on a different mount.
+    tempfile::Builder::new()
+        .prefix("streamlink paths ")
+        .tempdir_in(helper().parent().unwrap())
+        .unwrap()
+}
+
 fn renamed_helper(directory: &Path, name: &str) -> PathBuf {
     let path = directory.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
-    std::fs::copy(helper(), &path).unwrap();
+    // Avoid writing executable bytes while other tests spawn children: Linux
+    // can reject immediate execution of freshly copied helpers with ETXTBSY.
+    // These fixtures need distinct names and never modify the helper bytes.
+    std::fs::hard_link(helper(), &path).unwrap();
     path
 }
 
@@ -50,7 +62,7 @@ async fn probe_success_invalid_version_nonzero_and_timeout() {
         .await
         .unwrap();
     assert_eq!(result.version, "8.6.1");
-    let directory = tempfile::tempdir().unwrap();
+    let directory = helper_directory();
     for (name, code) in [
         ("badversion", ErrorCode::InvalidExecutable),
         ("badexit", ErrorCode::ProbeFailed),
@@ -60,7 +72,7 @@ async fn probe_success_invalid_version_nonzero_and_timeout() {
         let error = streamlink::probe(helper.to_str(), Duration::from_millis(300))
             .await
             .unwrap_err();
-        assert_eq!(error.code, code);
+        assert_eq!(error.code, code, "{name}: {error:?}");
     }
 }
 
@@ -217,7 +229,7 @@ async fn stop_cleans_up_inherited_descendant_pipes() {
 }
 
 async fn shutdown_during_probe(launch: bool) {
-    let directory = tempfile::tempdir().unwrap();
+    let directory = helper_directory();
     let executable = renamed_helper(directory.path(), "timeout");
     let services = std::sync::Arc::new(Services::new(directory.path(), None).unwrap());
     let playing = services
@@ -350,10 +362,7 @@ async fn service_shutdown_waits_for_launch_probe_without_creating_session() {
 
 #[tokio::test]
 async fn custom_path_with_spaces_roundtrips_and_launches() {
-    let directory = tempfile::Builder::new()
-        .prefix("streamlink paths ")
-        .tempdir()
-        .unwrap();
+    let directory = helper_directory();
     let executable = renamed_helper(directory.path(), "custom streamlink");
     let selected = executable.to_str().unwrap().to_owned();
     let services = Services::new(directory.path(), None).unwrap();
@@ -373,7 +382,7 @@ async fn custom_path_with_spaces_roundtrips_and_launches() {
 #[tokio::test]
 async fn saved_symlink_survives_retargeting_and_removal_of_old_version() {
     use std::os::unix::fs::symlink;
-    let directory = tempfile::tempdir().unwrap();
+    let directory = helper_directory();
     let old = renamed_helper(directory.path(), "streamlink-v1");
     let new = renamed_helper(directory.path(), "streamlink-v2");
     let selected = directory.path().join("streamlink");
@@ -1037,7 +1046,7 @@ async fn settings_changes_preserve_runs_and_restart_resolves_channel_then_reques
 
 #[tokio::test]
 async fn unsupported_streamlink_probe_does_not_replace_saved_path() {
-    let root = tempfile::tempdir().unwrap();
+    let root = helper_directory();
     let services = Services::new(root.path(), None).unwrap();
     services
         .probe(Some(helper().to_string_lossy().into_owned()))

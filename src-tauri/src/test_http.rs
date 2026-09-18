@@ -16,6 +16,7 @@ pub struct Reply {
     pub headers: Vec<(String, String)>,
     pub delay: Duration,
     gate: Option<Arc<tokio::sync::Notify>>,
+    disconnect: bool,
 }
 impl Reply {
     pub fn json(status: u16, body: impl Into<String>) -> Self {
@@ -25,6 +26,13 @@ impl Reply {
             headers: Vec::new(),
             delay: Duration::ZERO,
             gate: None,
+            disconnect: false,
+        }
+    }
+    pub fn disconnect() -> Self {
+        Self {
+            disconnect: true,
+            ..Self::json(200, "")
         }
     }
     pub fn gated(mut self, gate: Arc<tokio::sync::Notify>) -> Self {
@@ -129,6 +137,11 @@ async fn serve(
         .unwrap()
         .pop_front()
         .unwrap_or_else(|| Reply::json(418, "unexpected request"));
+    // An accepted request followed by EOF gives tests a controlled transport
+    // failure without relying on OS-specific refused-connection timing.
+    if reply.disconnect {
+        return;
+    }
     if let Some(gate) = reply.gate {
         gate.notified().await;
     }

@@ -107,7 +107,7 @@ async fn server_failure_has_one_bounded_retry() {
 #[tokio::test]
 async fn timeout_cancellation_and_network_failures_are_distinct() {
     let server = Server::new(
-        (0..3)
+        (0..2)
             .map(|_| Reply::json(200, "late").delayed(Duration::from_secs(1)))
             .collect(),
     )
@@ -120,19 +120,26 @@ async fn timeout_cancellation_and_network_failures_are_distinct() {
             .code,
         ErrorCode::Timeout
     );
+    // Cancellation is synchronized with receipt of the request, independently
+    // of the deliberately short timeout used above.
+    let server = Server::new(vec![
+        Reply::json(200, "held").gated(Arc::new(tokio::sync::Notify::new())),
+    ])
+    .await;
+    let http = TwitchHttp::for_test(&server.base, Duration::from_secs(5));
     let cancel = CancellationToken::new();
     let request = http.get("users", &[], "client", "token", &cancel);
     tokio::pin!(request);
     let cancel_later = async {
-        server.wait_for_requests(3).await;
+        server.wait_for_requests(1).await;
         cancel.cancel();
     };
     let (result, ()) = tokio::join!(request, cancel_later);
     assert_eq!(result.unwrap_err().code, ErrorCode::Cancelled);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    drop(listener);
-    let http = TwitchHttp::for_test(&base, Duration::from_millis(50));
+    // Windows may take longer than 50 ms to reject a closed loopback port.
+    // Close accepted requests instead, retaining the listener across both tries.
+    let server = Server::new(vec![Reply::disconnect(), Reply::disconnect()]).await;
+    let http = TwitchHttp::for_test(&server.base, Duration::from_secs(5));
     assert_eq!(
         http.get("users", &[], "client", "token", &CancellationToken::new())
             .await
@@ -140,6 +147,7 @@ async fn timeout_cancellation_and_network_failures_are_distinct() {
             .code,
         ErrorCode::Network
     );
+    assert_eq!(server.requests().len(), 2);
 }
 fn headers(remaining: u32, reset: u64) -> HeaderMap {
     let mut headers = HeaderMap::new();

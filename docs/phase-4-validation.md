@@ -88,3 +88,13 @@ Rust remains authoritative for settings and effective resolution. Channel prefer
 Native Windows/macOS were not run here; their existing CI matrix and OS-specific adapters remain structurally supported, which is not a claim of new native validation. Not every empty/error/diagnostic state was visually rechecked in both themes; shared CSS contrast and behavior tests cover these surfaces. Audio audibility, custom/default-player variations, every quality rendition, real logout/refresh, offline manual chat, and native webview reload remain manual follow-ups; they are not claimed as observed successes.
 
 No media transport, embedded chat/video, chat-client launcher, profile framework, recording/VOD feature, legacy import, updater, publishing workflow or Phase 5 behavior was introduced.
+
+## CI fixture follow-up — 2026-09-18
+
+[Actions run 35365353122](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35365353122), at `b568504e17cbf13de92b3575a8c4c1053b9ed1db`, passed the Ubuntu and macOS jobs, including native compilation. Windows passed the frontend build/tests and Rust formatting, then failed one HTTP contract: 118 unit tests passed and `timeout_cancellation_and_network_failures_are_distinct` reported `Timeout` where the fixture expected `Network`. Later Windows steps were skipped. These CI results do not establish interactive macOS/Windows acceptance.
+
+The network-error fixture assumed a closed loopback port would fail within 50 ms. It now accepts each request and closes the connection without a response, preserving the two-attempt retry assertion without depending on platform refusal timing or releasing the port for reuse. The cancellation case now waits for a request held by a response gate, independently of the short timeout case. Production HTTP classification and retry behavior are unchanged.
+
+Local validation also reproduced Linux `ETXTBSY` (`Text file busy`) when parallel process tests immediately executed freshly copied fake binaries. Renamed helpers now use hard links in temporary directories on the build binary's filesystem; their executable bytes are never rewritten. The existing path-with-spaces, symlink, version, shutdown and process contracts exercise these aliases. Five consecutive runs of all 28 process tests passed after this fixture change.
+
+Final local validation passed all 148 backend/build-script/process tests, Rust formatting, strict all-target Clippy and `git diff --check`. Only test fixtures and this record changed; the frontend and interactive native smoke checks were not repeated. The corrected fixtures still require a new Windows CI run; this local Linux verification does not claim that result.
