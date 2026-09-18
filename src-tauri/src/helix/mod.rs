@@ -38,6 +38,18 @@ struct RequestSession {
     cancel: CancellationToken,
 }
 
+// One canonical key for network requests and cross-view reuse of fresh pages.
+fn cache_key(id: u64, user_id: &str, endpoint: &str, query: &[(String, String)]) -> Result<String> {
+    let encoded = url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(query)
+        .finish();
+    if encoded.len() > 7000 {
+        return Err(error(ErrorCode::InvalidInput));
+    }
+    // Public session identity, never credentials, isolates account generations.
+    Ok(format!("{id}:{user_id}:{endpoint}?{encoded}"))
+}
+
 pub struct HelixClient<A: TwitchApi = HttpTwitchApi> {
     http: TwitchHttp,
     auth: Arc<AuthService<A>>,
@@ -120,18 +132,7 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
                 query.retain(|(key, _)| key != "user_id");
                 query.push(("user_id".into(), lease.user_id.clone()));
             }
-            let encoded = url::form_urlencoded::Serializer::new(String::new())
-                .extend_pairs(&query)
-                .finish();
-            if encoded.len() > 7000 {
-                return Err(error(ErrorCode::InvalidInput));
-            }
-            // No token forms part of a cache key. Session identity isolates both
-            // account changes and logout/re-login; invalid leases cannot hit it.
-            let key = format!(
-                "{}:{}:{endpoint}?{encoded}",
-                lease.session_id, lease.user_id
-            );
+            let key = cache_key(lease.session_id, &lease.user_id, endpoint, &query)?;
             if let Some(cached) = self
                 .cache
                 .lock()

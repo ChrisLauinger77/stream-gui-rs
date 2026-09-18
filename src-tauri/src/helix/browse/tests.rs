@@ -285,3 +285,60 @@ fn images_reject_foreign_urls_and_request_bounded_dimensions() {
             .ends_with("70x70.png")
     );
 }
+
+#[tokio::test]
+async fn followed_channels_reuse_fresh_live_matches_but_refresh_rechecks_them() {
+    let (server, client, request) = client(vec![
+        Reply::json(200, STREAM),
+        Reply::json(200, FOLLOWED),
+        Reply::json(200, USER),
+        Reply::json(200, FOLLOWED),
+        Reply::json(200, r#"{"data":[]}"#),
+    ])
+    .await;
+    let cancel = CancellationToken::new();
+    client
+        .browse_followed_streams(request.clone(), &cancel)
+        .await
+        .unwrap();
+    let result = client
+        .browse_followed_channels(request.clone(), &cancel)
+        .await
+        .unwrap();
+    assert_eq!(result.items[0].live_state, LiveState::Live);
+    assert_eq!(result.freshness, DataFreshness::Cached);
+    assert_eq!(server.requests().len(), 3);
+    let result = client
+        .browse_followed_channels(
+            BrowseRequest {
+                refresh: true,
+                ..request
+            },
+            &cancel,
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.items[0].live_state, LiveState::Offline);
+    assert_eq!(server.requests().len(), 5);
+}
+#[tokio::test]
+async fn followed_stream_page_omissions_do_not_establish_offline_state() {
+    let (server, client, request) = client(vec![
+        Reply::json(200, r#"{"data":[],"pagination":{"cursor":"more"}}"#),
+        Reply::json(200, FOLLOWED),
+        Reply::json(200, USER),
+        Reply::json(200, STREAM),
+    ])
+    .await;
+    let cancel = CancellationToken::new();
+    client
+        .browse_followed_streams(request.clone(), &cancel)
+        .await
+        .unwrap();
+    let result = client
+        .browse_followed_channels(request, &cancel)
+        .await
+        .unwrap();
+    assert_eq!(result.items[0].live_state, LiveState::Live);
+    assert_eq!(server.requests().len(), 4);
+}

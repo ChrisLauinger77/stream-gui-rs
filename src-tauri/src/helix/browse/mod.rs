@@ -370,6 +370,54 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
                 Err(e) if terminal(&e) => return Err(e),
                 Err(e) => result.warnings.push(e.code),
             }
+            // Reuse only positive live matches in the freshly cached first
+            // followed-stream page. Its omissions cannot establish offline state.
+            // Refresh bypasses this reuse, and TTL/session keys stay Rust-owned.
+            let bound = session.as_ref().expect("browse session");
+            let key = cache_key(
+                bound.id,
+                &bound.user_id,
+                "streams/followed",
+                &[
+                    ("first".into(), PAGE_SIZE.to_string()),
+                    ("user_id".into(), bound.user_id.clone()),
+                ],
+            )?;
+            let cached = self
+                .cache
+                .lock()
+                .expect("cache mutex poisoned")
+                .get(&key, request.policy());
+            if let Some(cached) = cached {
+                let streams: Page<Stream> = decode_page(&cached.value)?;
+                let mut reused = false;
+                for channel in &mut result.items {
+                    if let Some(stream) = streams
+                        .data
+                        .iter()
+                        .find(|s| s.user_id == channel.broadcaster_id)
+                    {
+                        channel.live_state = LiveState::Live;
+                        channel.title = optional(stream.title.clone());
+                        channel.category_name = optional(stream.game_name.clone());
+                        channel.language = optional(stream.language.clone());
+                        reused = true;
+                    }
+                }
+                if reused {
+                    merge_freshness(&mut result, cached.freshness, cached.age);
+                }
+            }
+            let ids: Vec<_> = result
+                .items
+                .iter()
+                .filter(|c| c.live_state == LiveState::Unknown)
+                .map(|c| c.broadcaster_id.clone())
+                .collect();
+            if ids.is_empty() {
+                check_session(&session)?;
+                return Ok(result);
+            }
             let mut query = params("user_id", &ids)?;
             query.push(("first".into(), "100".into()));
             match self
@@ -398,7 +446,11 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
                         .into_iter()
                         .map(|s| (s.user_id.clone(), s))
                         .collect();
-                    for channel in &mut result.items {
+                    for channel in result
+                        .items
+                        .iter_mut()
+                        .filter(|c| c.live_state == LiveState::Unknown)
+                    {
                         if let Some(stream) = streams.get(&channel.broadcaster_id) {
                             channel.live_state = LiveState::Live;
                             channel.title = optional(stream.title.clone());
@@ -480,6 +532,9 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
                     .into_iter()
                     .find(|c| c.broadcaster_id == request.id)
                 {
+                    if channels.freshness == Freshness::Cached {
+                        result.freshness = DataFreshness::Cached;
+                    }
                     result.channel.title = optional(channel.title);
                     result.channel.category_name = optional(channel.game_name);
                     result.channel.language = optional(channel.broadcaster_language);

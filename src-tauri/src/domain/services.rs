@@ -144,3 +144,27 @@ impl Services {
         sessions
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn browsing_capacity_is_bounded_released_and_closed_on_shutdown() {
+        let directory = tempfile::tempdir().unwrap();
+        let services = Services::new(directory.path(), None).unwrap();
+        let mut permits: Vec<_> = (0..8).map(|_| services.browse_permit().unwrap()).collect();
+        assert_eq!(
+            services.browse_permit().unwrap_err().code,
+            ErrorCode::Capacity
+        );
+        permits.pop();
+        let replacement = services.browse_permit().unwrap();
+        services.shutdown().await.unwrap();
+        drop(replacement);
+        assert_eq!(
+            services.browse_permit().unwrap_err().code,
+            ErrorCode::ProcessFailed
+        );
+    }
+}
