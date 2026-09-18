@@ -27,7 +27,7 @@ Final macOS suite (2026-09-18):
 | Native macOS debug Tauri `.app` bundle | passed |
 | Patch whitespace check | passed |
 
-The unchanged CI matrix runs frontend checks, backend/native process tests, desktop checks, strict Clippy and a Tauri binary build on Ubuntu 24.04, Windows and macOS. This document does **not** claim a remote CI run or native Linux/Windows playback verification.
+The unchanged CI matrix runs frontend checks, backend/native process tests, desktop checks, strict Clippy and a Tauri binary build on Ubuntu 24.04, Windows and macOS. The macOS run above does **not** establish a remote CI result or native Linux/Windows playback verification; the separate Linux run is recorded below.
 
 Command tests assert exact argv for all five quality policies, all four player modes, spaces/Unicode paths, quotes, Windows-style backslashes, braces, empty arguments and malicious-looking metadata. Invalid types, control characters, excessive argument counts/length and malformed channel identities are rejected. Settings tests preserve the app's own version 1 path, round-trip version 2 fields, reject unknown schemas, and leave persisted settings intact on invalid updates.
 
@@ -61,6 +61,41 @@ Real authenticated browsing and real Twitch streams were used locally. Account i
 - Bounded diagnostic output and discarded-entry reporting were inspected. Real mpv progress output was noisy, so the final mpv preset uses its documented `--quiet` option to suppress the status meter while retaining useful messages.
 - Streamlink default mode launched two retained sessions with automatic player discovery. Before closing the window, the two Streamlink and two VLC process identities/groups were recorded. Closing the main window ended the application and **all four owned child/descendant processes**; a subsequent process-table check found none remaining. The earlier explicit Quit path also exited cleanly.
 - Original automatic Streamlink/default-player/Source preferences were restored after the smoke test. No active process/session state was persisted. Frontend reconstruction and logout independence were tested automatically; live logout was not performed, to preserve the existing login. Native webview reload and keyboard-only launch remain manual follow-ups.
+
+## Native Linux baseline verification — 2026-09-18
+
+Baseline: `f650bab50780f3a029c1d8b819f2c0d1d42a05d5` on `main`. The working tree was clean before testing, and a live `git ls-remote` check confirmed that HEAD and `origin/main` matched GitHub's current `main`. No application source, dependency declarations, lockfiles or repository configuration were changed. This validation record is the only tracked change; no Phase 4 work was started.
+
+Environment: Debian GNU/Linux forky/sid, x86_64, kernel `7.1.13+deb14-amd64`, GNOME Wayland session; Debian Rust/Cargo 1.95.0, Node 24.20.0 and npm 12.0.2. The native prerequisites included build-essential, WebKitGTK 4.1 (2.52.6), GTK 3.24.52, OpenSSL 3.6.4, D-Bus 1.16.2, librsvg 2.62.1 and libxdo development files. The user session provided GNOME Keyring's Secret Service.
+
+Rustfmt, Clippy and patchelf were initially absent. Matching Debian rustfmt/Clippy 1.95.0 packages and patchelf 0.18.0 were downloaded and extracted under a temporary directory, then added to PATH for verification. No system packages were installed. Future checks require these tools on PATH; this was an environment setup gap, not an application compatibility defect. Tauri's rustup warning reflects the Debian-managed Rust installation; the native checks and build succeeded with that installation.
+
+| Check | Result |
+| --- | --- |
+| Locked frontend installation (`npm ci`) | passed |
+| Frontend behavior and CSS contracts (`npm test`) | 69 passed |
+| Explicit TypeScript check and production frontend build | passed |
+| Rust backend/unit/HTTP contracts | 106 passed |
+| Actual client-ID build-script guard test | 1 passed |
+| Native fake-executable process contracts | 24 passed |
+| Total Rust tests | 131 passed |
+| Rust formatting, desktop all-target checks | passed |
+| Strict Clippy (`-D warnings`) | passed |
+| Native Linux Tauri debug executable (`--debug --no-bundle --ci`) | passed |
+| Patch whitespace check | passed |
+
+Checks used the repository's documented locked Cargo commands and `test-support` only for tests/checks. The initial compilation check used the synthetic public client ID; the app was then rebuilt with the registered public ID supplied for this run, without `test-support`. Native acceptance used that second binary with embedded configuration. Network-dependent dependency setup, loopback HTTP tests and native session access ran outside the execution sandbox. Tests used synthetic credentials; real authentication was exercised only through the native app.
+
+Native acceptance evidence:
+
+- The app launched successfully. The user confirmed completing fresh Twitch sign-in during this run. Authenticated Following results then loaded in the native webview.
+- Settings' automatic Streamlink probe reported `/usr/bin/streamlink`, version **8.5.0**. The app's player discovery reported `/usr/bin/mpv` and `/usr/bin/vlc`; installed versions were **mpv 0.41.0** and **VLC 3.0.23**.
+- Native UI accessibility inspection verified real Following results, 30 Live results, a live channel's details, 30 categories and a category's live streams. The query status reported **Updated from Twitch**, with no visible error alerts. Back navigation returned from channel details.
+- A real stream launched from the app with the mpv preset and Source quality. Process inspection observed Streamlink parented by Stream GUI RS and mpv parented by Streamlink, sharing the owned playback process group. Both remained running for several minutes. **Moving video and audible audio remain pending user confirmation; process existence alone is not visual or audio acceptance.**
+- Stop was exercised through the native Watching control. The UI reported **Playback stopped** and **exited**. Both recorded Streamlink/mpv PIDs disappeared, and a process-table check found no remaining member of their process group; the app remained running.
+- Normal window close exited the app successfully. After relaunch with the same embedded public ID, authentication restored automatically and fresh Following results loaded without another sign-in. This verifies persistence/restoration through Linux Secret Service. No playback processes remained after restart.
+
+No Linux application defect was found in the completed checks. Full playback acceptance remains open until video/audio is confirmed. VLC playback, live token rotation/logout and locked-store cases, all quality/player variants, keyboard-only interaction, concurrent real streams and closing with active playback were not verified in this run. Native Windows and macOS were not retested. Historical platform results and the broader checklist remain separate evidence.
 
 ## Repeatable manual checklist
 
