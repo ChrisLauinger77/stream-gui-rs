@@ -20,31 +20,8 @@ impl crate::domain::chat::ChatOpener for NativeChatOpener {
     }
 }
 
-pub fn run() -> std::result::Result<(), tauri::Error> {
+pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let app = tauri::Builder::default()
-        .setup(|app| {
-            let directory = app.path().app_config_dir()?;
-            let client_id = crate::config::twitch_client_id::from_environment()?;
-            let services = Arc::new(
-                Services::new(&directory, Some(client_id))?
-                    .with_chat_opener(Arc::new(NativeChatOpener)),
-            );
-            let lifecycle = Arc::new(Lifecycle::default());
-            app.manage(services.clone());
-            app.manage(lifecycle.clone());
-            tauri::async_runtime::spawn(async move {
-                let stop = services.auth.start();
-                let mut stored = lifecycle
-                    .auth_stop
-                    .lock()
-                    .expect("lifecycle mutex poisoned");
-                if lifecycle.stopping.load(Ordering::SeqCst) {
-                    stop.send_replace(true);
-                }
-                *stored = Some(stop);
-            });
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![
             commands::backend_diagnostics,
             commands::streamlink_probe,
@@ -77,6 +54,28 @@ pub fn run() -> std::result::Result<(), tauri::Error> {
         ])
         .build(tauri::generate_context!())?;
 
+    // Tauri panics when a setup hook returns an error. Validate and install our
+    // services before entering its event loop so malformed settings fail cleanly.
+    let directory = app.path().app_config_dir()?;
+    let client_id = crate::config::twitch_client_id::from_environment()?;
+    let services = Arc::new(
+        Services::new(&directory, Some(client_id))?.with_chat_opener(Arc::new(NativeChatOpener)),
+    );
+    let lifecycle = Arc::new(Lifecycle::default());
+    app.manage(services.clone());
+    app.manage(lifecycle.clone());
+    tauri::async_runtime::spawn(async move {
+        let stop = services.auth.start();
+        let mut stored = lifecycle
+            .auth_stop
+            .lock()
+            .expect("lifecycle mutex poisoned");
+        if lifecycle.stopping.load(Ordering::SeqCst) {
+            stop.send_replace(true);
+        }
+        *stored = Some(stop);
+    });
+
     app.run(|app, event| match event {
         tauri::RunEvent::ExitRequested { api, .. } => {
             if app
@@ -101,7 +100,7 @@ pub fn run() -> std::result::Result<(), tauri::Error> {
     Ok(())
 }
 
-// Phase 3 has no background/tray mode: closing the window and Quit both reap
+// There is no background/tray mode: closing the window and Quit both reap
 // owned playback before exiting. Navigation or webview reload does not enter here.
 fn begin_shutdown(app: &tauri::AppHandle) {
     let lifecycle = app.state::<Arc<Lifecycle>>().inner().clone();
