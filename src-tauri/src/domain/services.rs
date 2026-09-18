@@ -1,4 +1,4 @@
-use super::{LaunchRequest, Result};
+use super::{AppError, ErrorCode, LaunchRequest, Result};
 use crate::{
     config::SettingsStore,
     credentials::MemoryCredentialStore,
@@ -6,7 +6,14 @@ use crate::{
     streamlink::{self, ProbeResult, SessionSnapshot, Supervisor},
     twitch::{AuthService, HttpTwitchApi},
 };
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 use tokio::sync::Mutex;
 
 pub struct Services {
@@ -14,6 +21,7 @@ pub struct Services {
     pub sessions: Supervisor,
     pub auth: Arc<AuthService>,
     streamlink_operation: Mutex<()>,
+    closing: AtomicBool,
     auth_configured: bool,
 }
 
@@ -29,6 +37,7 @@ impl Services {
                 Box::<MemoryCredentialStore>::default(),
             )),
             streamlink_operation: Mutex::new(()),
+            closing: AtomicBool::new(false),
             auth_configured,
         })
     }
@@ -45,7 +54,9 @@ impl Services {
     }
 
     pub async fn probe(&self, custom_path: Option<String>) -> Result<ProbeResult> {
+        self.ensure_open()?;
         let _operation = self.streamlink_operation.lock().await;
+        self.ensure_open()?;
         let custom_path = custom_path.filter(|p| !p.trim().is_empty());
         let result = streamlink::probe(custom_path.as_deref(), Duration::from_secs(5)).await?;
         self.settings
@@ -57,11 +68,34 @@ impl Services {
         // Validate arguments before any process is started, then re-probe the
         // configured executable instead of accepting a frontend executable/argv.
         streamlink::build_arguments(&request)?;
+        self.ensure_open()?;
         let _operation = self.streamlink_operation.lock().await;
+        self.ensure_open()?;
         let path = self.settings.snapshot().streamlink_path;
         let result = streamlink::probe(path.as_deref(), Duration::from_secs(5)).await?;
+        self.ensure_open()?;
         self.sessions
             .launch(Path::new(&result.executable), request)
             .await
+    }
+
+    fn ensure_open(&self) -> Result<()> {
+        if self.closing.load(Ordering::SeqCst) {
+            return Err(AppError::new(
+                ErrorCode::ProcessFailed,
+                "The application is shutting down.",
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn shutdown(&self) -> Result<()> {
+        self.closing.store(true, Ordering::SeqCst);
+        // Probe owns its child until it exits or its five-second timeout kills
+        // and reaps it. Wait for that ownership to end before Tauri exits, while
+        // stopping playback immediately. Queued operations recheck closing.
+        let (_, sessions) =
+            tokio::join!(self.streamlink_operation.lock(), self.sessions.shutdown());
+        sessions
     }
 }

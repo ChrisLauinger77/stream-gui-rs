@@ -40,7 +40,7 @@ Per session, 200 log entries are retained. Individual lines are bounded to 2,048
 
 Unix children start in a separate process group. Windows children are attached to a kill-on-close Job Object. Stop and normal parent exit clean up owned descendants, while the direct child is reaped. Readers are canceled if an inherited pipe stays open after cleanup. Intentionally detached external players are outside this prototype's ownership boundary. Windows job assignment happens just after spawn, so a descendant that escapes before assignment is a known prototype race; no suspended-process launcher is implemented.
 
-Desktop exit first stops new launches, signals all owned sessions, and awaits cleanup. `kill_on_drop` and process group/job ownership are backups. An uncatchable Unix app kill cannot guarantee cleanup; this is not a daemon/process recovery implementation.
+Desktop exit closes the service-level probe/launch gate, signals all owned sessions, and awaits both session cleanup and any active version probe (including pre-launch probes). Probes retain their five-second timeout and reap their child before releasing the operation lock. Queued requests recheck the gate and cannot spawn after shutdown. `kill_on_drop` and process group/job ownership are backups. An uncatchable Unix app kill cannot guarantee cleanup; this is not a daemon/process recovery implementation.
 
 ## Authentication and settings
 

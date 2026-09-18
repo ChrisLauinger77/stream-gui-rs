@@ -59,8 +59,8 @@ pub fn run() {
             let services = app.state::<Arc<Services>>().inner().clone();
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                if services.sessions.shutdown().await.is_err() {
-                    eprintln!("Streamlink session cleanup did not complete within its deadline.");
+                if services.shutdown().await.is_err() {
+                    eprintln!("Streamlink cleanup did not complete within its deadline.");
                 }
                 lifecycle.finished.store(true, Ordering::SeqCst);
                 app.exit(0);

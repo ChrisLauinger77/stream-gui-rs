@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 use twitch_gui_rs::{
-    domain::{ErrorCode, LaunchRequest},
+    domain::{ErrorCode, LaunchRequest, services::Services},
     streamlink::{self, LogSource, SessionPhase, SessionSnapshot, Supervisor},
 };
 
@@ -214,4 +214,136 @@ async fn stop_cleans_up_inherited_descendant_pipes() {
             .iter()
             .any(|line| line.text.contains("pipe remained open"))
     );
+}
+
+async fn shutdown_during_probe(launch: bool) {
+    let directory = tempfile::tempdir().unwrap();
+    let executable = renamed_helper(directory.path(), "timeout");
+    let services = std::sync::Arc::new(Services::new(directory.path(), None).unwrap());
+    let playing = services
+        .sessions
+        .launch(helper(), request("hold"))
+        .await
+        .unwrap();
+    services
+        .settings
+        .set_streamlink_path(Some(executable.to_str().unwrap().into()))
+        .unwrap();
+    let operation = {
+        let services = services.clone();
+        tokio::spawn(async move {
+            if launch {
+                services.launch(request("hold")).await.map(|_| ())
+            } else {
+                services
+                    .probe(Some(executable.to_str().unwrap().into()))
+                    .await
+                    .map(|_| ())
+            }
+        })
+    };
+    let marker = directory.path().join("timeout.pid");
+    let pid: u32 = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Ok(pid) = std::fs::read_to_string(&marker) {
+                if let Ok(pid) = pid.parse() {
+                    break pid;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    // Queue work behind the active probe before shutdown starts.
+    let queued = services.probe(Some(helper().to_str().unwrap().into()));
+    tokio::pin!(queued);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), &mut queued)
+            .await
+            .is_err()
+    );
+    let shutdown = services.shutdown();
+    tokio::pin!(shutdown);
+    // Shutdown must remain pending while the child is alive.
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), &mut shutdown)
+            .await
+            .is_err()
+    );
+    // Existing playback stops without waiting for the unrelated probe timeout.
+    let ended = tokio::time::timeout(
+        Duration::from_secs(1),
+        terminal(&services.sessions, &playing.id),
+    )
+    .await
+    .unwrap();
+    assert!(ended.stop_requested);
+    assert_eq!(
+        services.probe(None).await.unwrap_err().code,
+        ErrorCode::ProcessFailed
+    );
+    assert_eq!(
+        services.launch(request("hold")).await.unwrap_err().code,
+        ErrorCode::ProcessFailed
+    );
+    let (closed, queued) = tokio::join!(shutdown, queued);
+    closed.unwrap();
+    assert_eq!(queued.unwrap_err().code, ErrorCode::ProcessFailed);
+    assert_eq!(
+        operation.await.unwrap().unwrap_err().code,
+        ErrorCode::Timeout
+    );
+    let sessions = services.sessions.sessions().await;
+    assert_eq!(
+        sessions.len(),
+        1,
+        "shutdown must not launch another session"
+    );
+    assert_eq!(sessions[0].phase, SessionPhase::Exited);
+    assert_process_exited(pid);
+    services.shutdown().await.unwrap();
+}
+
+fn assert_process_exited(pid: u32) {
+    #[cfg(unix)]
+    {
+        // SAFETY: signal 0 only queries the helper process we created.
+        assert_eq!(unsafe { libc::kill(pid as i32, 0) }, -1);
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::ESRCH)
+        );
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::{
+            Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, WAIT_OBJECT_0},
+            System::Threading::*,
+        };
+        // SAFETY: query-only handle for our helper PID; close it exactly once.
+        unsafe {
+            let process = OpenProcess(PROCESS_SYNCHRONIZE, 0, pid);
+            if !process.is_null() {
+                let result = WaitForSingleObject(process, 5000);
+                CloseHandle(process);
+                assert_eq!(result, WAIT_OBJECT_0);
+            } else {
+                assert_eq!(
+                    std::io::Error::last_os_error().raw_os_error(),
+                    Some(ERROR_INVALID_PARAMETER as i32)
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn service_shutdown_waits_for_standalone_probe_and_rejects_queued_work() {
+    shutdown_during_probe(false).await;
+}
+
+#[tokio::test]
+async fn service_shutdown_waits_for_launch_probe_without_creating_session() {
+    shutdown_during_probe(true).await;
 }

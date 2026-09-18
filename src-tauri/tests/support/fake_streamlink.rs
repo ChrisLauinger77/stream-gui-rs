@@ -10,6 +10,11 @@ fn main() {
     let name = executable.file_stem().unwrap().to_string_lossy();
     if args == ["--version"] {
         if name.contains("timeout") {
+            std::fs::write(
+                executable.with_extension("pid"),
+                std::process::id().to_string(),
+            )
+            .unwrap();
             std::thread::sleep(Duration::from_secs(30));
         }
         if name.contains("badversion") {
