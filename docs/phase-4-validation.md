@@ -134,3 +134,9 @@ Regression coverage now includes:
 Local Linux validation passed the complete application checks: 148 backend/build-script/process tests, 84 frontend tests, two isolated browser regression tests, TypeScript and production frontend build, Rust formatting, all-target desktop checking, strict Clippy, native Tauri debug build without bundling, workflow lint and `git diff --check`. No IPC/DTO contract changed. Windows-only tests and the PE workflow step require the next Windows CI run; macOS was not rerun locally.
 
 **Final Windows acceptance is pending a fresh CI installer containing this fix.** Install/update it in the Windows 11 VM and check normal app launch, Streamlink probing and real playback without consoles; then verify Stop, Restart, two concurrent streams and application close with active playback clean up owned processes. The earlier successful credential-persistence result is recorded above, but no post-fix native Windows result is claimed here. No Phase 5 work was started.
+
+## Windows publisher metadata — 2026-09-18
+
+The user's Windows Programs and Features screenshot showed `github` as the publisher. `bundle.publisher` was absent, so Tauri used the second component of `io.github.stream-gui-rs`. The bundle now explicitly names `Christian Lauinger` as publisher. The application identifier and runtime behavior are unchanged.
+
+The Tauri CLI accepted the configuration and the native Linux debug/no-bundle build passed, including TypeScript and the production frontend build; `git diff --check` also passed. This metadata-only change adds no runtime tests. Verify the publisher label by installing a newly generated Windows CI installer; the existing installation does not change until updated. This finding does not establish completion of the pending console acceptance checks above.
