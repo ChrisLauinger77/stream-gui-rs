@@ -156,3 +156,11 @@ Local Linux validation passed all 148 backend/build-script/process tests, 84 fro
 The Tauri CLI does not implicitly enable this crate's optional `custom-protocol` feature for `tauri build --debug`. The entry-point condition therefore remained false even though the resulting executable was intended for the debug NSIS package. CI now passes `--features custom-protocol` to both `tauri build` and `tauri bundle`. Release builds already select the GUI subsystem through `not(debug_assertions)`, while ordinary debug development still retains its console. The embedded-client-ID guard uses the same explicit feature signal.
 
 The exact feature-enabled native debug/no-bundle command passed locally on Linux, together with TypeScript and the production frontend build. Workflow lint, Rust formatting and `git diff --check` also passed. The CI PE guard remains the authoritative regression for the actual Windows executable; a fresh Windows CI run and manual VM acceptance of its installer are still required.
+
+## Windows CI artifact confirmation — 2026-09-18
+
+[Actions run 35380433220](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35380433220), at `9e68549b4b9efc9a100fe990610eca110bc36210`, passed the Ubuntu, macOS and Windows jobs. Windows passed all frontend, Rust, process, desktop and strict-Clippy checks, the actual executable PE guard, NSIS packaging and artifact upload.
+
+Artifact `stream-gui-rs-windows-x86_64` (ID `10562945315`) contains `Stream GUI RS_0.1.0_x64-setup.exe`. Read-only inspection of the uploaded installer found an x86-64 `stream-gui-rs.exe` with PE subsystem 2 (`Windows GUI`), rather than the subsystem 3 (`Windows CUI`) found in the defective installer. Installer SHA-256 is `0520a4f394526d7dff0527c3082e15ba5cda1090817104908a425540f3722946`; the extracted application SHA-256 is `353399e1d34ca7a414c2732e77c3b91cb4f7c61fbeb70ca388f1491a8146b10f`.
+
+This confirms the CI build and package structure, not visible behavior in Windows 11. Final acceptance still requires installing this exact artifact in the VM and verifying no console on normal launch or Streamlink probe/playback, publisher `ChrisLauinger77`, real video, Stop/Restart, two concurrent streams and application-close cleanup. No post-fix native result is claimed until those observations are reported.
