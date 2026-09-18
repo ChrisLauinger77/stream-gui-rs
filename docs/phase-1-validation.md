@@ -71,7 +71,7 @@ Real provider/native-store testing successfully verified:
 - Authenticated account retrieval in the application.
 - Login persistence across a complete application exit and restart, confirmed by the user.
 
-The registered public Twitch application is named **stream-gui-rs**. The project remains **Twitch GUI RS** / `twitch-gui-rs`; the registered application name does not need to match the project name. The same public client ID was supplied to the backend on restart. This records the live acceptance already performed before cleanup, not an additional live run of the cleanup build. Cleanup tests did not access or modify the real credential entry.
+The registered public Twitch application is named **stream-gui-rs**. The project is now **Stream GUI RS** / `stream-gui-rs`; the registered application name does not need to match the project name. The same public client ID was supplied to the backend on restart. This records the live acceptance already performed before cleanup and the application identity rename, not a live run under the new bundle/credential identity. Cleanup tests did not access or modify the real credential entry. The new identity requires one fresh login.
 
 ## Remaining verification gaps and tradeoffs
 

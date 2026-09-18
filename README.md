@@ -1,6 +1,10 @@
-# Twitch GUI RS
+# Stream GUI RS
 
-An independent Rust/Tauri rewrite inspired by [Streamlink Twitch GUI](https://github.com/streamlink/streamlink-twitch-gui). It is not affiliated with Twitch or the original project. The project identifier is `twitch-gui-rs`.
+A modern Rust/Tauri desktop frontend for watching Twitch streams via Streamlink.
+
+Twitch is currently the supported streaming-service integration. Rust owns native/backend functionality; React and TypeScript provide the frontend. Streamlink remains an external runtime dependency.
+
+An independent rewrite inspired by [Streamlink Twitch GUI](https://github.com/streamlink/streamlink-twitch-gui). It is not affiliated with Twitch or the original project. The project identifier is `stream-gui-rs`.
 
 **Phase 1:** a Tauri 2 + Rust + React + TypeScript + Vite desktop foundation with persistent Twitch authentication, a reusable Rust Helix client, and the Phase 0 Streamlink process supervisor. The developer screen verifies authentication and playback contracts; browsing UI is reserved for Phase 2.
 
@@ -56,6 +60,8 @@ The tests use a native fake Streamlink executable and local HTTP fixtures; no Tw
 After editing Rust DTOs, run `npm run bindings` and commit the generated `src/lib/generated.ts`. A Rust contract test detects drift. Command names and their small TypeScript map live in `src/lib/ipc.ts` and must stay aligned with the Rust commands and capability allowlist.
 
 ## Scope
+
+The pre-release identity rename uses new settings and credential namespaces: existing development settings are not imported, and one fresh Twitch login is required.
 
 Version 1 settings persist only a custom Streamlink path in Tauri's platform-specific application configuration directory; its exact path is shown in the Backend panel. Unsupported or malformed settings fail without overwriting the file.
 

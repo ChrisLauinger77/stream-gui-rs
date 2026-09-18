@@ -90,7 +90,7 @@ export function App() {
   };
 
   return <main>
-    <header><h1>Twitch GUI RS</h1><p>Phase 1 · authentication developer screen</p></header>
+    <header><h1>Stream GUI RS</h1><p>Phase 1 · authentication developer screen</p></header>
     {!isTauri() && <p className="notice">Browser preview only. Backend controls require the desktop app: <code>npm run tauri dev</code>.</p>}
     {error && <p role="alert" className="error">{error}</p>}
     <Panel title="Backend">

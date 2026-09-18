@@ -7,7 +7,7 @@ use std::{
 };
 use zeroize::Zeroizing;
 
-const SERVICE: &str = "io.github.twitch-gui-rs.oauth";
+const SERVICE: &str = "io.github.stream-gui-rs.oauth";
 
 pub struct PlatformCredentialStore {
     entry: keyring::Entry,

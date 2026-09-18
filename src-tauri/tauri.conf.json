@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Twitch GUI RS",
+  "productName": "Stream GUI RS",
   "version": "0.1.0",
-  "identifier": "io.github.twitch-gui-rs",
+  "identifier": "io.github.stream-gui-rs",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:1420",
@@ -10,7 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [{ "label": "main", "title": "Twitch GUI RS — Phase 1", "width": 960, "height": 900, "minWidth": 620, "minHeight": 600 }],
+    "windows": [{ "label": "main", "title": "Stream GUI RS — Phase 1", "width": 960, "height": 900, "minWidth": 620, "minHeight": 600 }],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://static-cdn.jtvnw.net; connect-src ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'",
       "devCsp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://static-cdn.jtvnw.net; connect-src ipc: http://ipc.localhost http://127.0.0.1:1420 ws://127.0.0.1:1420; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'",

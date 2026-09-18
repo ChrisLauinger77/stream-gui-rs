@@ -1,17 +1,17 @@
 [package]
-name = "twitch-gui-rs"
+name = "stream-gui-rs"
 version = "0.1.0"
-description = "An independent Twitch desktop GUI"
+description = "A modern Rust/Tauri desktop frontend for watching Twitch streams via Streamlink"
 edition = "2024"
 rust-version = "1.85"
-default-run = "twitch-gui-rs"
+default-run = "stream-gui-rs"
 
 [lib]
-name = "twitch_gui_rs"
+name = "stream_gui_rs"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "twitch-gui-rs"
+name = "stream-gui-rs"
 path = "src/main.rs"
 required-features = ["desktop"]
 

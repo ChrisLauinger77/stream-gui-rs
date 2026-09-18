@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-use twitch_gui_rs::{
+use stream_gui_rs::{
     domain::{ErrorCode, LaunchRequest, services::Services},
     streamlink::{self, LogSource, SessionPhase, SessionSnapshot, Supervisor},
 };
@@ -404,7 +404,7 @@ async fn saved_symlink_survives_retargeting_and_removal_of_old_version() {
 #[cfg(windows)]
 #[tokio::test]
 async fn windows_child_cannot_execute_before_job_assignment_and_descendant_is_owned() {
-    use twitch_gui_rs::platform::{ProcessTree, configure_process};
+    use stream_gui_rs::platform::{ProcessTree, configure_process};
     let directory = tempfile::tempdir().unwrap();
     let marker = directory.path().join("descendant.pid");
     let mut command = tokio::process::Command::new(helper());

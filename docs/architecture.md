@@ -1,4 +1,4 @@
-# Architecture through Phase 1
+# Stream GUI RS architecture through Phase 1
 
 ```text
 React (developer screen, public DTOs only)
@@ -16,6 +16,8 @@ Rust backend
             ↓ Streamlink's default player discovery
         external player
 ```
+
+The application identity is `io.github.stream-gui-rs`; Tauri derives application directories from it. Secure credentials use the separate service `io.github.stream-gui-rs.oauth`, keyed by the public Twitch client ID. The pre-release rename intentionally starts with new settings and a fresh login. Twitch/Helix modules and IPC contracts retain their existing names and ownership.
 
 ## Ownership
 

@@ -1,5 +1,7 @@
 # Phase 0 verification
 
+This historical record predates the Stream GUI RS identity rename and Phase 1 secure storage. Its results and limitations describe Phase 0 at that time.
+
 This file records implementation checks and the boundaries requiring manual verification. No release has been published.
 
 ## Automated checks

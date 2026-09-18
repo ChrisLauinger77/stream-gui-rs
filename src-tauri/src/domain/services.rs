@@ -77,7 +77,7 @@ impl Services {
 
     pub fn diagnostics(&self) -> BackendDiagnostics {
         BackendDiagnostics {
-            name: "Twitch GUI RS".into(),
+            name: "Stream GUI RS".into(),
             version: env!("CARGO_PKG_VERSION").into(),
             platform: format!("{} / {}", std::env::consts::OS, std::env::consts::ARCH),
             settings_path: self.settings.path().to_string_lossy().into_owned(),

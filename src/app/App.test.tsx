@@ -41,7 +41,7 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.resetAllMocks();
   vi.mocked(api.diagnostics).mockResolvedValue({
-    name: "Twitch GUI RS", version: "0.1.0", platform: "test", settingsPath: "settings.json",
+    name: "Stream GUI RS", version: "0.1.0", platform: "test", settingsPath: "settings.json",
     settings: { version: 1, streamlinkPath: null }, authConfigured: true,
   });
   vi.mocked(api.authStatus).mockResolvedValue(signedOut);

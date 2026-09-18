@@ -37,7 +37,7 @@ pub fn run() {
             commands::auth_cancel, commands::auth_account,
         ])
         .build(tauri::generate_context!())
-        .expect("Could not initialize Twitch GUI RS; check application settings and system prerequisites");
+        .expect("Could not initialize Stream GUI RS; check application settings and system prerequisites");
 
     app.run(|app, event| {
         if let tauri::RunEvent::ExitRequested { api, .. } = event {

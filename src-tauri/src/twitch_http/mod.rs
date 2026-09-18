@@ -33,7 +33,7 @@ impl TwitchHttp {
                 .timeout(timeout)
                 .connect_timeout(Duration::from_secs(5))
                 .redirect(reqwest::redirect::Policy::none())
-                .user_agent(concat!("twitch-gui-rs/", env!("CARGO_PKG_VERSION")))
+                .user_agent(concat!("stream-gui-rs/", env!("CARGO_PKG_VERSION")))
                 .build()
                 .map_err(|_| error(ErrorCode::Internal))?,
             oauth_base: oauth.into(),
