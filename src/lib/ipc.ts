@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  AppError, AuthStatus, BackendDiagnostics, LaunchRequest, ProbeRequest,
+  Account, AppError, AuthStatus, BackendDiagnostics, LaunchRequest, ProbeRequest,
   ProbeResult, SessionSnapshot, StopRequest,
 } from "./generated";
 
@@ -17,6 +17,8 @@ type Commands = {
   auth_validate: [undefined, AuthStatus];
   auth_refresh: [undefined, AuthStatus];
   auth_logout: [undefined, AuthStatus];
+  auth_cancel: [undefined, AuthStatus];
+  auth_account: [undefined, Account];
 };
 
 async function call<K extends keyof Commands>(
@@ -38,6 +40,8 @@ export const api = {
   validate: () => call("auth_validate"),
   refresh: () => call("auth_refresh"),
   logout: () => call("auth_logout"),
+  cancel: () => call("auth_cancel"),
+  account: () => call("auth_account"),
 };
 
 export function errorMessage(error: unknown): string {

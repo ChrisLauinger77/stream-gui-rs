@@ -67,6 +67,7 @@ pub async fn auth_refresh(services: State<'_, Arc<Services>>) -> Result<AuthStat
 
 #[tauri::command]
 pub async fn auth_logout(services: State<'_, Arc<Services>>) -> Result<AuthStatus> {
+    services.helix.clear_cache();
     services.auth.logout().await
 }
 
@@ -83,4 +84,19 @@ pub async fn auth_open_verification(services: State<'_, Arc<Services>>) -> Resul
                 "Could not open the system browser. Use the displayed verification URL.",
             )
         })
+}
+
+#[tauri::command]
+pub async fn auth_cancel(services: State<'_, Arc<Services>>) -> Result<AuthStatus> {
+    services.auth.cancel().await
+}
+
+#[tauri::command]
+pub async fn auth_account(
+    services: State<'_, Arc<Services>>,
+) -> Result<crate::helix::models::Account> {
+    services
+        .helix
+        .account(&tokio_util::sync::CancellationToken::new())
+        .await
 }

@@ -13,6 +13,8 @@ fn main() {
             "auth_validate",
             "auth_refresh",
             "auth_logout",
+            "auth_cancel",
+            "auth_account",
         ]),
     ))
     .expect("Tauri build configuration is invalid");

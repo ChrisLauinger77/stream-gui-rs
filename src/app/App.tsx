@@ -3,14 +3,15 @@ import { isTauri } from "@tauri-apps/api/core";
 import { Panel } from "../components/Panel";
 import { Authentication } from "../features/Authentication";
 import { Playback } from "../features/Playback";
-import type { AuthStatus, BackendDiagnostics, ProbeResult, SessionSnapshot } from "../lib/generated";
+import type { Account, AuthStatus, BackendDiagnostics, ProbeResult, SessionSnapshot } from "../lib/generated";
 import { api, errorMessage } from "../lib/ipc";
 
-type ActionKey = "auth" | "probe" | "launch" | `stop:${string}`;
+type ActionKey = "auth" | "cancel" | "probe" | "launch" | `stop:${string}`;
 
 export function App() {
   const [backend, setBackend] = useState<BackendDiagnostics | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
+  const [account, setAccount] = useState<Account | null>(null);
   const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
   const [customPath, setCustomPath] = useState("");
   const [probe, setProbe] = useState<ProbeResult | null>(null);
@@ -51,6 +52,28 @@ export function App() {
     return () => { cancelled = true; timers.forEach(clearTimeout); };
   }, []);
 
+  const accountId = auth?.phase === "authenticated" ? auth.user?.id : undefined;
+  useEffect(() => {
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    setAccount(null);
+    if (accountId) {
+      const load = async () => {
+        try {
+          const account = await api.account();
+          if (!cancelled && account.id === accountId) setAccount(account);
+        } catch (error) {
+          if (!cancelled) {
+            setError(errorMessage(error));
+            retry = setTimeout(() => { void load(); }, 60_000);
+          }
+        }
+      };
+      void load();
+    }
+    return () => { cancelled = true; clearTimeout(retry); };
+  }, [accountId]);
+
   const run = (key: ActionKey, action: () => Promise<unknown>, refresh?: () => Promise<void>) => {
     if (actionPending.current.has(key)) return;
     actionPending.current.add(key);
@@ -67,14 +90,16 @@ export function App() {
   };
 
   return <main>
-    <header><h1>Twitch GUI RS</h1><p>Phase 0 · developer prototype</p></header>
+    <header><h1>Twitch GUI RS</h1><p>Phase 1 · authentication developer screen</p></header>
     {!isTauri() && <p className="notice">Browser preview only. Backend controls require the desktop app: <code>npm run tauri dev</code>.</p>}
     {error && <p role="alert" className="error">{error}</p>}
     <Panel title="Backend">
       <p>{backend ? `Ready · ${backend.version} · ${backend.platform}` : "Not connected"}</p>
       {backend && <p className="muted path">Settings v{backend.settings.version}: {backend.settingsPath}</p>}
     </Panel>
-    <Authentication status={auth} busy={pending.has("auth")} run={(action) => run("auth", action, refreshAuth)} />
+    <Authentication status={auth} account={account} busy={pending.has("auth")}
+      cancelling={pending.has("cancel")} cancel={() => run("cancel", api.cancel, refreshAuth)}
+      run={(action) => run("auth", action, refreshAuth)} />
     <Panel title="Streamlink">
       <form onSubmit={(event) => {
         event.preventDefault();

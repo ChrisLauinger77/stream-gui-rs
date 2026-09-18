@@ -34,6 +34,7 @@ pub fn run() {
             commands::streamlink_launch, commands::streamlink_stop, commands::streamlink_sessions,
             commands::auth_status, commands::auth_login, commands::auth_open_verification,
             commands::auth_validate, commands::auth_refresh, commands::auth_logout,
+            commands::auth_cancel, commands::auth_account,
         ])
         .build(tauri::generate_context!())
         .expect("Could not initialize Twitch GUI RS; check application settings and system prerequisites");

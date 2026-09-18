@@ -12,6 +12,7 @@ vi.mock("../lib/ipc", () => ({
   api: {
     diagnostics: vi.fn(), authStatus: vi.fn(), sessions: vi.fn(),
     login: vi.fn(), stop: vi.fn(), probe: vi.fn(), launch: vi.fn(),
+    account: vi.fn(), cancel: vi.fn(), logout: vi.fn(), validate: vi.fn(), refresh: vi.fn(),
   },
 }));
 
@@ -98,4 +99,63 @@ test("a slow probe does not block stopping an existing session", async () => {
   await act(async () => { button("Stop").click(); });
   expect(api.stop).toHaveBeenCalledWith("two");
   await act(async () => { probe.resolve({ executable: "/test/streamlink", version: "8.6.1" }); });
+});
+
+const authenticated: AuthStatus = {
+  ...signedOut, phase: "authenticated",
+  user: { id: "123", login: "example", scopes: ["user:read:follows"], expiresIn: 3600 },
+};
+const account = { id: "123", login: "example", displayName: "Example Account", profileImageUrl: null };
+
+test("restored authentication loads a safe account and displays granted scopes", async () => {
+  vi.mocked(api.authStatus).mockResolvedValue(authenticated);
+  vi.mocked(api.account).mockResolvedValue(account);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(api.account).toHaveBeenCalledOnce();
+  expect(container.textContent).toContain("Example Account");
+  expect(container.textContent).toContain("Granted scopes: user:read:follows");
+  expect(button("Log in").disabled).toBe(true);
+  expect(button("Log out").disabled).toBe(false);
+});
+
+test("cancel remains available while starting device authorization is pending", async () => {
+  const login = deferred<AuthStatus>();
+  vi.mocked(api.login).mockReturnValue(login.promise);
+  await act(async () => { button("Log in").click(); });
+  vi.mocked(api.authStatus).mockResolvedValue({ ...signedOut, phase: "authorizing" });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(button("Log in").disabled).toBe(true);
+  expect(button("Cancel authorization").disabled).toBe(false);
+  const cancelled: AuthStatus = { ...signedOut, phase: "cancelled" };
+  vi.mocked(api.cancel).mockResolvedValue(cancelled);
+  vi.mocked(api.authStatus).mockResolvedValue(cancelled);
+  await act(async () => { button("Cancel authorization").click(); });
+  expect(api.cancel).toHaveBeenCalledOnce();
+  expect(container.textContent).toContain("cancelled");
+  await act(async () => { login.resolve(cancelled); });
+});
+
+test("an account request finishing after logout cannot restore account information", async () => {
+  const pendingAccount = deferred<typeof account>();
+  vi.mocked(api.account).mockReturnValue(pendingAccount.promise);
+  vi.mocked(api.authStatus).mockResolvedValue(authenticated);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  vi.mocked(api.logout).mockResolvedValue(signedOut);
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  await act(async () => { button("Log out").click(); });
+  await act(async () => { pendingAccount.resolve(account); });
+  expect(container.textContent).not.toContain("Example Account");
+  expect(container.textContent).toContain("signed out");
+});
+
+test("account retrieval recovers after a temporary failure with bounded retries", async () => {
+  vi.mocked(api.authStatus).mockResolvedValue(authenticated);
+  vi.mocked(api.account).mockRejectedValueOnce(new Error("offline")).mockResolvedValue(account);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(api.account).toHaveBeenCalledOnce();
+  await act(async () => { await vi.advanceTimersByTimeAsync(59_000); });
+  expect(api.account).toHaveBeenCalledOnce();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(api.account).toHaveBeenCalledTimes(2);
+  expect(container.textContent).toContain("Example Account");
 });

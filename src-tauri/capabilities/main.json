@@ -1,12 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Only Phase 0 commands, only in the local main window.",
+  "description": "Only Phase 1 and playback commands, only in the local main window.",
   "windows": ["main"],
   "permissions": [
     "allow-backend-diagnostics", "allow-streamlink-probe",
     "allow-streamlink-launch", "allow-streamlink-stop", "allow-streamlink-sessions",
     "allow-auth-status", "allow-auth-login", "allow-auth-open-verification",
-    "allow-auth-validate", "allow-auth-refresh", "allow-auth-logout"
+    "allow-auth-validate", "allow-auth-refresh", "allow-auth-logout", "allow-auth-cancel", "allow-auth-account"
   ]
 }

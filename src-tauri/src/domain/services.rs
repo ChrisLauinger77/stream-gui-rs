@@ -1,10 +1,12 @@
 use super::{AppError, ErrorCode, LaunchRequest, Result};
 use crate::{
     config::SettingsStore,
-    credentials::MemoryCredentialStore,
+    credentials::{CredentialStore, UnavailableCredentialStore},
     diagnostics::BackendDiagnostics,
+    helix::HelixClient,
     streamlink::{self, ProbeResult, SessionSnapshot, Supervisor},
     twitch::{AuthService, HttpTwitchApi},
+    twitch_http::TwitchHttp,
 };
 use std::{
     path::Path,
@@ -20,6 +22,7 @@ pub struct Services {
     pub settings: SettingsStore,
     pub sessions: Supervisor,
     pub auth: Arc<AuthService>,
+    pub helix: HelixClient,
     streamlink_operation: Mutex<()>,
     closing: AtomicBool,
     auth_configured: bool,
@@ -28,14 +31,44 @@ pub struct Services {
 impl Services {
     pub fn new(settings_directory: &Path, client_id: Option<String>) -> Result<Self> {
         let auth_configured = client_id.as_ref().is_some_and(|id| !id.trim().is_empty());
+        let http = TwitchHttp::new()?;
+        let store: Box<dyn CredentialStore> = match client_id
+            .as_deref()
+            .filter(|id| !id.trim().is_empty())
+        {
+            Some(id) => {
+                #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+                {
+                    match crate::credentials::PlatformCredentialStore::open(settings_directory, id)
+                    {
+                        Ok(store) => Box::new(store),
+                        Err(error) => Box::new(UnavailableCredentialStore(error)),
+                    }
+                }
+                #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+                {
+                    let _ = id;
+                    Box::new(UnavailableCredentialStore(AppError::new(
+                        ErrorCode::CredentialStore,
+                        "Secure storage is not supported on this platform.",
+                    )))
+                }
+            }
+            None => Box::new(UnavailableCredentialStore(AppError::new(
+                ErrorCode::NotConfigured,
+                "Configure a public Twitch client ID first.",
+            ))),
+        };
+        let auth = Arc::new(AuthService::new(
+            HttpTwitchApi::with_http(&http),
+            client_id,
+            store,
+        ));
         Ok(Self {
             settings: SettingsStore::open(settings_directory)?,
             sessions: Supervisor::default(),
-            auth: Arc::new(AuthService::new(
-                HttpTwitchApi::new()?,
-                client_id,
-                Box::<MemoryCredentialStore>::default(),
-            )),
+            helix: HelixClient::new(http, auth.clone()),
+            auth,
             streamlink_operation: Mutex::new(()),
             closing: AtomicBool::new(false),
             auth_configured,
@@ -93,8 +126,11 @@ impl Services {
         // Probe owns its child until it exits or its five-second timeout kills
         // and reaps it. Wait for that ownership to end before Tauri exits, while
         // stopping playback immediately. Queued operations recheck closing.
-        let (_, sessions) =
-            tokio::join!(self.streamlink_operation.lock(), self.sessions.shutdown());
+        let (_, sessions, ()) = tokio::join!(
+            self.streamlink_operation.lock(),
+            self.sessions.shutdown(),
+            self.auth.shutdown(),
+        );
         sessions
     }
 }
