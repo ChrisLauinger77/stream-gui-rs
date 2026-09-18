@@ -15,6 +15,7 @@ pub struct Reply {
     pub body: String,
     pub headers: Vec<(String, String)>,
     pub delay: Duration,
+    gate: Option<Arc<tokio::sync::Notify>>,
 }
 impl Reply {
     pub fn json(status: u16, body: impl Into<String>) -> Self {
@@ -23,7 +24,12 @@ impl Reply {
             body: body.into(),
             headers: Vec::new(),
             delay: Duration::ZERO,
+            gate: None,
         }
+    }
+    pub fn gated(mut self, gate: Arc<tokio::sync::Notify>) -> Self {
+        self.gate = Some(gate);
+        self
     }
     pub fn delayed(mut self, delay: Duration) -> Self {
         self.delay = delay;
@@ -123,6 +129,9 @@ async fn serve(
         .unwrap()
         .pop_front()
         .unwrap_or_else(|| Reply::json(418, "unexpected request"));
+    if let Some(gate) = reply.gate {
+        gate.notified().await;
+    }
     tokio::time::sleep(reply.delay).await;
     let mut response = format!(
         "HTTP/1.1 {} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n",

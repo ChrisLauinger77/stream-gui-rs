@@ -402,3 +402,98 @@ async fn incomplete_batch_does_not_report_unseen_ids_as_missing() {
     assert_eq!(result.incomplete_ids, ["123"]);
     assert!(result.missing_ids.is_empty());
 }
+
+#[tokio::test]
+async fn delayed_401_retry_cannot_cross_logout_and_new_login() {
+    delayed_401_retry_after_logout(true).await;
+}
+
+#[tokio::test]
+async fn delayed_401_retry_terminates_after_logout_without_relogin() {
+    delayed_401_retry_after_logout(false).await;
+}
+
+async fn delayed_401_retry_after_logout(relogin: bool) {
+    fn validation(id: &str) -> String {
+        serde_json::json!({"client_id":"client", "user_id":id,"login":"synthetic-user","scopes":["user:read:follows"],"expires_in":14400}).to_string()
+    }
+    let token = r#"{"access_token":"synthetic-access","refresh_token":"synthetic-refresh","token_type":"bearer"}"#;
+    let gate = Arc::new(tokio::sync::Notify::new());
+    let server = Server::new(vec![
+        Reply::json(200, validation("account-a")),
+        Reply::json(401, "synthetic unauthorized"),
+        Reply::json(200, token).gated(gate.clone()),
+        Reply::json(200, validation("account-a")),
+        Reply::json(200, "{}"),
+        Reply::json(200, r#"{"device_code":"synthetic-device","user_code":"CODE","verification_uri":"https://www.twitch.tv/activate","expires_in":1800,"interval":5}"#),
+        Reply::json(200, token),
+        Reply::json(200, validation("account-b")),
+        Reply::json(200, STREAM),
+    ]).await;
+    let http = TwitchHttp::for_test(&server.base, Duration::from_secs(10));
+    let mut store = MemoryCredentialStore::default();
+    store
+        .save(Credentials {
+            access_token: Zeroizing::new("synthetic-initial-access".into()),
+            refresh_token: Zeroizing::new("synthetic-initial-refresh".into()),
+        })
+        .unwrap();
+    let auth = Arc::new(AuthService::new(
+        HttpTwitchApi::with_http(&http),
+        Some("client".into()),
+        Box::new(store),
+    ));
+    auth.tick().await.unwrap();
+    let original = auth.lease().await.unwrap();
+    let client = HelixClient::new(http, auth.clone());
+    let cancel = CancellationToken::new();
+    let page = PageRequest::default();
+    let pending = client.followed_streams(&page, &cancel);
+    tokio::pin!(pending);
+    tokio::select! {
+        result = &mut pending => panic!("request completed before gated refresh: {result:?}"),
+        _ = server.wait_for_requests(3) => {},
+    }
+    // Stop polling the caller. Its owned rotation still finishes and persists
+    // before logout and the possible replacement login acquire the auth lock.
+    gate.notify_one();
+    let rotated = auth.lease().await.unwrap();
+    assert_eq!(&*rotated.token, "synthetic-access");
+    assert_eq!(rotated.session_id, original.session_id);
+    assert_ne!(rotated.generation, original.generation);
+    auth.logout().await.unwrap();
+    if relogin {
+        auth.login().await.unwrap();
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        auth.tick().await.unwrap();
+        assert_eq!(auth.status().await.user.unwrap().id, "account-b");
+    }
+    assert!(original.cancel.is_cancelled());
+    assert_eq!(pending.await.unwrap_err().code, ErrorCode::Unauthenticated);
+    // Even callers queued behind the replacement login cannot validate/refresh
+    // or reacquire a lease for that new session on behalf of the old one.
+    assert_eq!(
+        auth.lease_for_session(original.session_id)
+            .await
+            .err()
+            .unwrap()
+            .code,
+        ErrorCode::Unauthenticated
+    );
+    assert_eq!(
+        auth.refresh_rejected(original.session_id, original.generation)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::Unauthenticated
+    );
+    let requests = server.requests();
+    assert_eq!(requests.len(), if relogin { 8 } else { 5 });
+    let helix: Vec<_> = requests
+        .iter()
+        .filter(|request| request.starts_with("GET /helix/"))
+        .collect();
+    assert_eq!(helix.len(), 1);
+    assert!(helix[0].contains("user_id=account-a"));
+    assert!(client.cache.lock().unwrap().is_empty());
+}

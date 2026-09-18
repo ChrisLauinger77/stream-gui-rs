@@ -245,15 +245,21 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             .await
     }
     pub(crate) async fn lease(&self) -> Result<AccessLease> {
-        self.owned(|service| async move { service.lease_owned().await })
+        self.owned(|service| async move { service.lease_owned(None).await })
             .await
     }
-    pub(crate) async fn refresh_rejected(&self, generation: u64) -> Result<()> {
-        self.owned(move |service| async move { service.refresh_rejected_owned(generation).await })
+    pub(crate) async fn lease_for_session(&self, session_id: u64) -> Result<AccessLease> {
+        self.owned(move |service| async move { service.lease_owned(Some(session_id)).await })
             .await
     }
-    pub(crate) async fn reject(&self, generation: u64) -> Result<()> {
-        self.owned(move |service| async move { service.reject_owned(generation).await })
+    pub(crate) async fn refresh_rejected(&self, session_id: u64, generation: u64) -> Result<()> {
+        self.owned(move |service| async move {
+            service.refresh_rejected_owned(session_id, generation).await
+        })
+        .await
+    }
+    pub(crate) async fn reject(&self, session_id: u64, generation: u64) -> Result<()> {
+        self.owned(move |service| async move { service.reject_owned(session_id, generation).await })
             .await
     }
     async fn lock(&self) -> Result<StateGuard<'_>> {
@@ -713,9 +719,16 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         }
         Err(error)
     }
-    async fn lease_owned(&self) -> Result<AccessLease> {
+    async fn lease_owned(&self, session_id: Option<u64>) -> Result<AccessLease> {
         let client_id = self.client_id()?.to_owned();
         let mut state = self.lock().await?;
+        // Check before any validation/rotation: an old caller must not do work
+        // on behalf of the replacement account while waiting for this lock.
+        if session_id
+            .is_some_and(|id| id != state.session_id || state.session_cancel.is_cancelled())
+        {
+            return Err(error(ErrorCode::Unauthenticated));
+        }
         self.restore_locked(&mut state).await?;
         if state.credentials.is_none() {
             return Err(error(ErrorCode::Unauthenticated));
@@ -746,9 +759,12 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             cancel: state.session_cancel.clone(),
         })
     }
-    async fn refresh_rejected_owned(&self, generation: u64) -> Result<()> {
+    async fn refresh_rejected_owned(&self, session_id: u64, generation: u64) -> Result<()> {
         let mut state = self.lock().await?;
-        if state.credentials.is_none() {
+        if state.session_id != session_id
+            || state.session_cancel.is_cancelled()
+            || state.credentials.is_none()
+        {
             return Err(error(ErrorCode::Unauthenticated));
         }
         if state.generation != generation {
@@ -756,9 +772,9 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         }
         self.refresh_locked(&mut state).await
     }
-    async fn reject_owned(&self, generation: u64) -> Result<()> {
+    async fn reject_owned(&self, session_id: u64, generation: u64) -> Result<()> {
         let mut state = self.lock().await?;
-        if state.generation == generation {
+        if state.session_id == session_id && state.generation == generation {
             return self
                 .invalidate(&mut state, error(ErrorCode::Unauthenticated))
                 .await;

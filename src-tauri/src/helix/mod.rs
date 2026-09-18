@@ -4,7 +4,7 @@ pub mod pagination;
 
 use crate::{
     domain::{ErrorCode, Result},
-    twitch::{AuthService, HttpTwitchApi, api::TwitchApi},
+    twitch::{AccessLease, AuthService, HttpTwitchApi, api::TwitchApi},
     twitch_http::{TwitchHttp, error},
 };
 use cache::{CacheClass, CachePolicy, Cached, Freshness, TwitchCache};
@@ -28,6 +28,13 @@ pub struct StreamFilter {
 pub enum TeamSelector<'a> {
     Id(&'a str),
     Name(&'a str),
+}
+
+// One binding for the complete operation, including all retries/batch chunks.
+struct RequestSession {
+    id: u64,
+    user_id: String,
+    cancel: CancellationToken,
 }
 
 pub struct HelixClient<A: TwitchApi = HttpTwitchApi> {
@@ -56,7 +63,32 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
         self.http.rate.snapshot()
     }
 
+    async fn acquire_lease(
+        &self,
+        cancel: &CancellationToken,
+        session: Option<&RequestSession>,
+    ) -> Result<AccessLease> {
+        tokio::select! {
+            biased;
+            _ = cancel.cancelled() => Err(error(ErrorCode::Cancelled)),
+            _ = async { match session { Some(session) => session.cancel.cancelled().await, None => std::future::pending().await } } => Err(error(ErrorCode::Unauthenticated)),
+            lease = async { match session { Some(session) => self.auth.lease_for_session(session.id).await, None => self.auth.lease().await } } => lease,
+        }
+    }
     async fn get<T: DeserializeOwned + Serialize>(
+        &self,
+        endpoint: &str,
+        query: Vec<(String, String)>,
+        followed: bool,
+        class: CacheClass,
+        policy: CachePolicy,
+        cancel: &CancellationToken,
+    ) -> Result<Cached<Page<T>>> {
+        self.get_bound(endpoint, query, followed, class, policy, cancel, &mut None)
+            .await
+    }
+    #[allow(clippy::too_many_arguments)]
+    async fn get_bound<T: DeserializeOwned + Serialize>(
         &self,
         endpoint: &str,
         mut query: Vec<(String, String)>,
@@ -64,13 +96,15 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
         class: CacheClass,
         policy: CachePolicy,
         cancel: &CancellationToken,
+        session: &mut Option<RequestSession>,
     ) -> Result<Cached<Page<T>>> {
         for attempt in 0..2 {
-            let lease = tokio::select! {
-                biased;
-                _ = cancel.cancelled() => return Err(error(ErrorCode::Cancelled)),
-                lease = self.auth.lease() => lease?,
-            };
+            let lease = self.acquire_lease(cancel, session.as_ref()).await?;
+            session.get_or_insert_with(|| RequestSession {
+                id: lease.session_id,
+                user_id: lease.user_id.clone(),
+                cancel: lease.cancel.clone(),
+            });
             if lease.cancel.is_cancelled() {
                 return Err(error(ErrorCode::Unauthenticated));
             }
@@ -120,11 +154,12 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
                     tokio::select! {
                         biased;
                         _ = cancel.cancelled() => return Err(crate::twitch_http::error(ErrorCode::Cancelled)),
-                        result = self.auth.refresh_rejected(lease.generation) => result?,
+                        _ = lease.cancel.cancelled() => return Err(crate::twitch_http::error(ErrorCode::Unauthenticated)),
+                        result = self.auth.refresh_rejected(lease.session_id, lease.generation) => result?,
                     }
                 }
                 Err(error) if error.code == ErrorCode::Unauthenticated => {
-                    let _ = self.auth.reject(lease.generation).await;
+                    let _ = self.auth.reject(lease.session_id, lease.generation).await;
                     return Err(error);
                 }
                 Err(error) => return Err(error),
@@ -170,8 +205,17 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
             .await
     }
     pub async fn account(&self, cancel: &CancellationToken) -> Result<Account> {
-        let page = self
-            .users(&[], &[], CachePolicy::Fresh, cancel)
+        let mut session = None;
+        let page: Page<User> = self
+            .get_bound(
+                "users",
+                vec![],
+                false,
+                CacheClass::Metadata,
+                CachePolicy::Fresh,
+                cancel,
+                &mut session,
+            )
             .await?
             .value;
         let mut users = page.data.into_iter();
@@ -181,8 +225,11 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
         if users.next().is_some() {
             return Err(error(ErrorCode::InvalidResponse));
         }
-        let lease = self.auth.lease().await?;
-        if user.id != lease.user_id {
+        let session = session.expect("successful request has a session");
+        if session.cancel.is_cancelled() {
+            return Err(error(ErrorCode::Unauthenticated));
+        }
+        if user.id != session.user_id {
             return Err(error(ErrorCode::InvalidResponse));
         }
         Ok(user.into())
@@ -457,6 +504,7 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
             failures: Vec::new(),
         };
         let mut stopped: Option<crate::domain::AppError> = None;
+        let mut session = None;
         for ids in batches {
             if let Some(error) = &stopped {
                 result.failures.push(BatchFailure {
@@ -470,7 +518,7 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
                 query.push(("first".into(), "100".into()));
             }
             match self
-                .get::<T>(endpoint, query, false, class, policy, cancel)
+                .get_bound::<T>(endpoint, query, false, class, policy, cancel, &mut session)
                 .await
             {
                 Ok(page) => {
