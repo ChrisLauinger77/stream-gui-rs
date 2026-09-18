@@ -1068,9 +1068,26 @@ async fn offline_restoration_recovers_expired_access_with_one_coordinated_refres
     let service = AuthService::new(api, Some("client".into()), Box::new(store.clone()));
     assert_eq!(service.tick().await.unwrap_err().code, ErrorCode::Network);
     tokio::time::advance(Duration::from_secs(60)).await;
-    let (tick, validate) = tokio::join!(service.tick(), service.validate());
-    tick.unwrap();
-    validate.unwrap();
+    let gate = Arc::new(RequestGate::default());
+    *service.api.refresh_gate.lock().unwrap() = Some(gate.clone());
+    let tick = {
+        let service = service.clone();
+        tokio::spawn(async move { service.tick().await })
+    };
+    gate.entered.notified().await;
+    // Poll the owned operation itself so it captures the current revision and
+    // waits for the state lock before recovery can finish. Joining public
+    // callers does not guarantee their service-owned tasks overlap.
+    let validate = service.validate_owned();
+    tokio::pin!(validate);
+    assert!(
+        std::future::poll_fn(|cx| std::task::Poll::Ready(validate.as_mut().poll(cx)))
+            .await
+            .is_pending()
+    );
+    gate.release.notify_one();
+    tick.await.unwrap().unwrap();
+    validate.await.unwrap();
     assert_eq!(service.status().await.phase, AuthPhase::Authenticated);
     assert_eq!(*service.api.validate_count.lock().unwrap(), 3);
     assert_eq!(
