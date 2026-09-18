@@ -436,3 +436,507 @@ async fn windows_child_cannot_execute_before_job_assignment_and_descendant_is_ow
     assert_process_exited(parent_pid);
     assert_process_exited(descendant);
 }
+
+use stream_gui_rs::streamlink::playback::{
+    LaunchSpec, PlaybackStream, PlayerSettings, QualityPolicy, RestartRequest,
+};
+fn production_spec(channel: &str) -> LaunchSpec {
+    LaunchSpec {
+        executable: helper().to_path_buf(),
+        player: None,
+        player_settings: PlayerSettings::default(),
+        quality: QualityPolicy::Source,
+        stream: PlaybackStream {
+            stream_id: Some(format!("stream-{channel}")),
+            broadcaster_id: format!("broadcaster-{channel}"),
+            login: channel.into(),
+            display_name: format!("Channel {channel}"),
+            title: Some("A test stream".into()),
+            category: Some("Test category".into()),
+        },
+    }
+}
+async fn starting(supervisor: &Supervisor, id: &str) {
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if supervisor
+                .sessions()
+                .await
+                .iter()
+                .any(|s| s.id == id && s.phase == SessionPhase::Starting)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn production_launch_keeps_metadata_and_uses_exact_native_argv() {
+    let supervisor = Supervisor::default();
+    let mut spec = production_spec("arguments");
+    spec.quality = QualityPolicy::High;
+    spec.player_settings.arguments = vec![
+        "one literal argument".into(),
+        String::new(),
+        "{playerinput}".into(),
+    ];
+    let session = supervisor.launch_spec(spec).await.unwrap();
+    let ended = terminal(&supervisor, &session.id).await;
+    assert_eq!(ended.generation, 1);
+    assert!(ended.started_at > 0);
+    assert!(ended.ended_at.is_some());
+    assert_eq!(
+        ended.stream.as_ref().unwrap().stream_id.as_deref(),
+        Some("stream-arguments")
+    );
+    assert_eq!(
+        ended.stream.as_ref().unwrap().broadcaster_id,
+        "broadcaster-arguments"
+    );
+    let args: Vec<String> = serde_json::from_str(
+        &ended
+            .logs
+            .iter()
+            .find(|l| l.source == LogSource::Stdout)
+            .unwrap()
+            .text,
+    )
+    .unwrap();
+    assert_eq!(
+        args,
+        [
+            "--no-config",
+            "--no-plugin-sideloading",
+            "--loglevel",
+            "info",
+            "--player-verbose",
+            "--player-args",
+            "'one literal argument' '' '{{playerinput}}' {playerinput}",
+            "--stream-sorting-excludes",
+            ">720p30",
+            "--",
+            "https://www.twitch.tv/arguments",
+            "high,best,best-unfiltered"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn delayed_output_split_utf8_and_error_logs_do_not_infer_playback_state() {
+    let supervisor = Supervisor::default();
+    let session = supervisor
+        .launch_spec(production_spec("delayed"))
+        .await
+        .unwrap();
+    assert_eq!(session.phase, SessionPhase::Running);
+    assert!(session.logs.is_empty());
+    let ended = terminal(&supervisor, &session.id).await;
+    assert_eq!(ended.phase, SessionPhase::Exited);
+    assert_eq!(ended.failure, None);
+    for value in [
+        "Starting player: advisory only",
+        "warning: synthetic warning",
+        "error: synthetic diagnostic, still running",
+        "split UTF-8: 日本語",
+    ] {
+        assert!(ended.logs.iter().any(|line| line.text == value), "{value}");
+    }
+}
+
+#[tokio::test]
+async fn early_failure_and_later_streamlink_exit_are_distinct_while_another_session_runs() {
+    let supervisor = Supervisor::default();
+    let other = supervisor
+        .launch_spec(production_spec("holdb"))
+        .await
+        .unwrap();
+    let early = supervisor
+        .launch_spec(production_spec("fail"))
+        .await
+        .unwrap();
+    assert_eq!(
+        terminal(&supervisor, &early.id).await.failure,
+        Some(ErrorCode::StartupFailed)
+    );
+    let later = supervisor
+        .launch_spec(production_spec("latefail"))
+        .await
+        .unwrap();
+    assert_eq!(
+        terminal(&supervisor, &later.id).await.failure,
+        Some(ErrorCode::StreamlinkExited)
+    );
+    assert_eq!(
+        supervisor
+            .sessions()
+            .await
+            .iter()
+            .find(|s| s.id == other.id)
+            .unwrap()
+            .phase,
+        SessionPhase::Running
+    );
+    supervisor.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn restart_reaps_previous_generation_preserves_identity_and_leaves_other_session_alone() {
+    let supervisor = Supervisor::default();
+    let first = supervisor
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let second = supervisor
+        .launch_spec(production_spec("holdb"))
+        .await
+        .unwrap();
+    let restarted = supervisor
+        .restart(&first.id, first.generation, |stream| async move {
+            let mut spec = production_spec("hold");
+            spec.stream = stream;
+            spec.quality = QualityPolicy::Audio;
+            Ok(spec)
+        })
+        .await
+        .unwrap();
+    assert_eq!(restarted.id, first.id);
+    assert_eq!(restarted.generation, 2);
+    assert_ne!(restarted.pid, first.pid);
+    assert_process_exited(first.pid);
+    assert_eq!(restarted.quality_policy, Some(QualityPolicy::Audio));
+    assert_eq!(
+        restarted.stream.unwrap().stream_id,
+        first.stream.unwrap().stream_id
+    );
+    assert_eq!(
+        supervisor
+            .sessions()
+            .await
+            .iter()
+            .find(|s| s.id == second.id)
+            .unwrap()
+            .pid,
+        second.pid
+    );
+    supervisor.stop(&first.id).await.unwrap();
+    assert_process_exited(restarted.pid);
+    assert_eq!(
+        supervisor
+            .sessions()
+            .await
+            .iter()
+            .find(|s| s.id == second.id)
+            .unwrap()
+            .phase,
+        SessionPhase::Running
+    );
+    supervisor.shutdown().await.unwrap();
+    assert_process_exited(second.pid);
+}
+
+#[tokio::test]
+async fn rapid_restart_requests_cannot_overlap_or_reuse_an_old_generation() {
+    let supervisor = std::sync::Arc::new(Supervisor::default());
+    let first = supervisor
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let (release, wait) = tokio::sync::oneshot::channel::<()>();
+    let work = {
+        let supervisor = supervisor.clone();
+        let id = first.id.clone();
+        tokio::spawn(async move {
+            supervisor
+                .restart(&id, 1, |_| async {
+                    wait.await.unwrap();
+                    Ok(production_spec("hold"))
+                })
+                .await
+        })
+    };
+    starting(&supervisor, &first.id).await;
+    assert_eq!(
+        supervisor
+            .restart(&first.id, 1, |_| async { Ok(production_spec("hold")) })
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::RestartFailed
+    );
+    release.send(()).unwrap();
+    let restarted = work.await.unwrap().unwrap();
+    assert_eq!(
+        supervisor
+            .restart(&first.id, 1, |_| async { Ok(production_spec("hold")) })
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::RestartFailed
+    );
+    assert_eq!(supervisor.sessions().await.len(), 1);
+    assert_eq!(restarted.generation, 2);
+    supervisor.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn stop_cancels_pending_restart_before_it_can_spawn() {
+    let supervisor = std::sync::Arc::new(Supervisor::default());
+    let first = supervisor
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let (release, wait) = tokio::sync::oneshot::channel::<()>();
+    let work = {
+        let supervisor = supervisor.clone();
+        let id = first.id.clone();
+        tokio::spawn(async move {
+            supervisor
+                .restart(&id, 1, |_| async {
+                    wait.await.unwrap();
+                    Ok(production_spec("hold"))
+                })
+                .await
+        })
+    };
+    starting(&supervisor, &first.id).await;
+    let stop = supervisor.stop(&first.id);
+    tokio::pin!(stop);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), &mut stop)
+            .await
+            .is_err()
+    );
+    release.send(()).unwrap();
+    assert_eq!(work.await.unwrap().unwrap_err().code, ErrorCode::Cancelled);
+    let ended = stop.await.unwrap();
+    assert_eq!(ended.phase, SessionPhase::Exited);
+    assert_eq!(ended.failure, Some(ErrorCode::Cancelled));
+    assert_process_exited(first.pid);
+    supervisor.stop(&first.id).await.unwrap();
+}
+
+#[tokio::test]
+async fn restart_failure_retains_the_session_and_diagnostics_without_a_child() {
+    let supervisor = Supervisor::default();
+    let first = supervisor
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let error = supervisor
+        .restart(&first.id, 1, |_| async {
+            let mut spec = production_spec("hold");
+            spec.executable = directory.path().join("missing");
+            Ok(spec)
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::SpawnFailed);
+    assert_process_exited(first.pid);
+    let failed = supervisor.sessions().await.pop().unwrap();
+    assert_eq!(failed.failure, Some(ErrorCode::RestartFailed));
+    assert!(!failed.restarting);
+    assert!(failed.logs.iter().any(|l| l.text.contains("SpawnFailed")));
+    supervisor.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn service_restart_uses_current_settings_and_survives_a_dropped_caller() {
+    let root = tempfile::tempdir().unwrap();
+    let mut services = Services::new(root.path(), None).unwrap();
+    services.auth = std::sync::Arc::new(stream_gui_rs::twitch::AuthService::new(
+        stream_gui_rs::twitch::HttpTwitchApi::new().unwrap(),
+        Some("synthetic-client".into()),
+        Box::<stream_gui_rs::credentials::MemoryCredentialStore>::default(),
+    ));
+    let services = std::sync::Arc::new(services);
+    services
+        .settings
+        .set_streamlink_path(Some(helper().to_string_lossy().into_owned()))
+        .unwrap();
+    let first = services
+        .sessions
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let mut settings = services.settings.snapshot();
+    settings.default_quality = QualityPolicy::Low;
+    services.settings.update(settings).unwrap();
+    let caller = {
+        let services = services.clone();
+        let id = first.id.clone();
+        tokio::spawn(async move {
+            services
+                .restart_playback(RestartRequest {
+                    session_id: id,
+                    generation: 1,
+                    quality: None,
+                })
+                .await
+        })
+    };
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    caller.abort();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let state = services.sessions.sessions().await.pop().unwrap();
+            if state.generation == 2 && state.phase == SessionPhase::Running && !state.restarting {
+                assert_eq!(state.quality_policy, Some(QualityPolicy::Low));
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    services.auth.logout().await.unwrap();
+    assert_eq!(
+        services.sessions.sessions().await[0].phase,
+        SessionPhase::Running
+    );
+    services.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn shutdown_cancels_restart_and_cleans_multiple_owned_sessions() {
+    let supervisor = std::sync::Arc::new(Supervisor::default());
+    let first = supervisor
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let second = supervisor
+        .launch_spec(production_spec("holdb"))
+        .await
+        .unwrap();
+    let (release, wait) = tokio::sync::oneshot::channel::<()>();
+    let work = {
+        let supervisor = supervisor.clone();
+        let id = first.id.clone();
+        tokio::spawn(async move {
+            supervisor
+                .restart(&id, 1, |_| async {
+                    wait.await.unwrap();
+                    Ok(production_spec("hold"))
+                })
+                .await
+        })
+    };
+    starting(&supervisor, &first.id).await;
+    let shutdown = supervisor.shutdown();
+    tokio::pin!(shutdown);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), &mut shutdown)
+            .await
+            .is_err()
+    );
+    release.send(()).unwrap();
+    shutdown.await.unwrap();
+    assert_eq!(work.await.unwrap().unwrap_err().code, ErrorCode::Cancelled);
+    assert_process_exited(first.pid);
+    assert_process_exited(second.pid);
+    assert!(
+        supervisor
+            .sessions()
+            .await
+            .iter()
+            .all(|s| s.phase == SessionPhase::Exited && !s.restarting)
+    );
+}
+
+#[tokio::test]
+async fn restarting_terminal_history_cannot_exceed_the_active_session_limit() {
+    let supervisor = Supervisor::default();
+    let finished = supervisor
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    supervisor.stop(&finished.id).await.unwrap();
+    for _ in 0..8 {
+        supervisor
+            .launch_spec(production_spec("holdb"))
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        supervisor
+            .restart(&finished.id, 1, |_| async { Ok(production_spec("hold")) })
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::Capacity
+    );
+    assert_eq!(
+        supervisor
+            .launch_spec(production_spec("hold"))
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::Capacity
+    );
+    assert_eq!(
+        supervisor
+            .sessions()
+            .await
+            .iter()
+            .filter(|s| s.phase == SessionPhase::Running)
+            .count(),
+        8
+    );
+    supervisor.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn dropping_a_restart_future_clears_the_reservation_without_leaking_a_child() {
+    let supervisor = std::sync::Arc::new(Supervisor::default());
+    let first = supervisor
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let work = {
+        let supervisor = supervisor.clone();
+        let id = first.id.clone();
+        tokio::spawn(async move {
+            supervisor
+                .restart(&id, 1, |_| async {
+                    std::future::pending::<()>().await;
+                    Ok(production_spec("hold"))
+                })
+                .await
+        })
+    };
+    starting(&supervisor, &first.id).await;
+    work.abort();
+    let _ = work.await;
+    let snapshot = supervisor.sessions().await.pop().unwrap();
+    assert!(!snapshot.restarting);
+    assert_eq!(snapshot.phase, SessionPhase::Exited);
+    assert_eq!(snapshot.failure, Some(ErrorCode::Cancelled));
+    assert_process_exited(first.pid);
+    let next = supervisor
+        .restart(&first.id, 2, |_| async { Ok(production_spec("hold")) })
+        .await
+        .unwrap();
+    assert_eq!(next.generation, 3);
+    supervisor.shutdown().await.unwrap();
+    assert_process_exited(next.pid);
+}
+
+#[tokio::test]
+async fn cancelled_authentication_cannot_spawn_a_prepared_launch() {
+    let supervisor = Supervisor::default();
+    let cancel = tokio_util::sync::CancellationToken::new();
+    cancel.cancel();
+    assert_eq!(
+        supervisor
+            .launch_authenticated(production_spec("hold"), &cancel)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::Unauthenticated
+    );
+    assert!(supervisor.sessions().await.is_empty());
+}

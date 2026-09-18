@@ -34,6 +34,10 @@ fn main() {
         if name.contains("badexit") {
             std::process::exit(9);
         }
+        if name.contains("unsupported") {
+            println!("streamlink 7.6.0");
+            return;
+        }
         println!("streamlink 8.6.1");
         return;
     }
@@ -41,9 +45,27 @@ fn main() {
         std::thread::sleep(Duration::from_secs(30));
         return;
     }
-    assert_eq!(&args[..4], ["--no-config", "--loglevel", "info", "--"]);
-    let url = &args[4];
-    if url.ends_with("/flood") {
+    assert_eq!(args[0], "--no-config");
+    let boundary = args.iter().position(|arg| arg == "--").unwrap();
+    let url = &args[boundary + 1];
+    if url.ends_with("/arguments") {
+        println!("{}", serde_json::to_string(&args).unwrap());
+    } else if url.ends_with("/delayed") {
+        std::thread::sleep(Duration::from_millis(300));
+        println!("Starting player: advisory only");
+        eprintln!("warning: synthetic warning");
+        eprintln!("error: synthetic diagnostic, still running");
+        let bytes = "split UTF-8: 日本語".as_bytes();
+        io::stdout().write_all(&bytes[..14]).unwrap();
+        io::stdout().flush().unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        io::stdout().write_all(&bytes[14..]).unwrap();
+        io::stdout().flush().unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+    } else if url.ends_with("/latefail") {
+        std::thread::sleep(Duration::from_millis(3200));
+        std::process::exit(7);
+    } else if url.ends_with("/flood") {
         let stderr = std::thread::spawn(|| {
             for n in 0..4000 {
                 eprintln!("stderr {n}");
@@ -56,7 +78,7 @@ fn main() {
         println!("{}", "x".repeat(100_000));
         println!("Authorization: Bearer DO_NOT_LEAK");
         println!("last line");
-    } else if url.ends_with("/hold") || url.ends_with("/tree") {
+    } else if url.ends_with("/hold") || url.ends_with("/holdb") || url.ends_with("/tree") {
         if url.ends_with("/tree") {
             let child = std::process::Command::new(executable)
                 .arg("--descendant")
