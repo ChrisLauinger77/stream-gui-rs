@@ -51,3 +51,26 @@ jobs:
           # Synthetic fallback is only for these non-publishing checks, never releases.
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD || 'ciCompileOnlyPublicClient123' }}
         run: npm run tauri build -- --debug --no-bundle --ci
+      - name: Package Windows smoke-test installer
+        if: runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TWITCH_CLIENT_ID_BUILD)) {
+            throw 'Windows smoke-test packaging requires the TWITCH_CLIENT_ID_BUILD repository secret.'
+          }
+          if ($env:RUNNER_ARCH -ne 'X64') {
+            throw 'The Windows smoke-test artifact requires an x86_64 runner.'
+          }
+          # Reuse the build above, which embeds this same registered public ID.
+          # Explicit --bundles selects Tauri's NSIS installer even with bundle.active=false.
+          npm run tauri bundle -- --debug --bundles nsis --ci
+      - name: Upload Windows smoke-test installer
+        if: runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stream-gui-rs-windows-x86_64
+          path: src-tauri/target/debug/bundle/nsis/*_x64-setup.exe
+          if-no-files-found: error
+          retention-days: 14

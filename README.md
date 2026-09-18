@@ -34,7 +34,7 @@ Build a local desktop binary without release packaging:
 TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --no-bundle
 ```
 
-The result is in `src-tauri/target/release/` and authenticates without any runtime environment configuration. Release builds and all `tauri build` invocations (including `--debug` and `--no-bundle`) require a valid `TWITCH_CLIENT_ID_BUILD`; setting only `TWITCH_CLIENT_ID` cannot satisfy that build check. The public ID is embedded only in Rust. Installer/signing, release publishing and updating workflows remain out of scope.
+The result is in `src-tauri/target/release/` and authenticates without any runtime environment configuration. Release builds and all `tauri build` invocations (including `--debug` and `--no-bundle`) require a valid `TWITCH_CLIENT_ID_BUILD`; setting only `TWITCH_CLIENT_ID` cannot satisfy that build check. The public ID is embedded only in Rust. Windows CI packages debug NSIS installers for manual smoke tests; release signing, publishing and updating workflows remain out of scope.
 
 ## Browsing workflow
 
