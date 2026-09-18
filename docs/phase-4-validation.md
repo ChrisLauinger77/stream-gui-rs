@@ -114,3 +114,23 @@ Local validation passed all 148 backend/build-script/process tests, Rust formatt
 The overall run failed on Ubuntu: `offline_restoration_recovers_expired_access_with_one_coordinated_refresh` counted four validations instead of three. Its `join!` started public callers but did not guarantee that their service-owned tasks overlapped. If recovery finished before the explicit validation began, another validation was legitimate. The corrected test holds recovery at the existing refresh gate and explicitly polls the competing owned validation until it waits on the state lock, then releases recovery. The exact three-validation and single-refresh assertions remain intact; application code and CI checks are unchanged.
 
 The original failure did not recur in 100 isolated local attempts. The corrected test passed 100 consecutive runs, and a temporary negative control disabling validation coalescing failed with four calls instead of three. The production implementation was restored byte-for-byte after that check. Final local validation passed all 148 backend/build-script/process tests, Rust formatting, strict all-target Clippy and `git diff --check`. Hosted Ubuntu confirmation requires a new run.
+
+## Windows packaged console finding — 2026-09-18
+
+The user tested the Windows installer from [Actions run 35367936557](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35367936557) in a Windows 11 VM and reported successful installation, Twitch authentication, credential persistence across application restart, real browsing, Streamlink/VLC video playback, multiple streams and process cleanup. A black console appeared immediately on application launch, before playback.
+
+The console belongs to **Stream GUI RS itself**. Inspection of `stream-gui-rs.exe` extracted from that run's `stream-gui-rs-windows-x86_64` NSIS artifact found PE subsystem **3 (Windows CUI)**. CI intentionally packages a debug build; the previous entry-point attribute selected the GUI subsystem only when debug assertions were disabled. Consequently, the installed debug application allocated a console on normal Windows launch.
+
+The entry point now selects the Windows GUI subsystem for Tauri's `custom-protocol` builds as well as non-debug builds. This includes the debug CI installer while preserving the console for ordinary debug development. Existing error reporting, failure exit codes, the default panic hook and captured playback diagnostics remain intact. The Windows subsystem attribute has no effect on Linux or macOS.
+
+Streamlink playback and version probes already share `CREATE_NO_WINDOW | CREATE_SUSPENDED`, followed by kill-on-close Job Object assignment and resume. Those flags, pipe capture, process ownership, Stop/Restart and shutdown are unchanged. Player discovery does not spawn a player; Streamlink launches the selected player. Browser opening uses the existing Windows default-browser adapter and is not invoked automatically at app startup. No player, browser or helper spawn flags were changed.
+
+Regression coverage now includes:
+
+- A Windows-only test that compiles the actual entry point with a synthetic startup implementation, checks PE subsystem values for all four debug/release and development/packaged combinations, and verifies startup errors and panics retain nonzero exits and captured stderr.
+- Native fake-Streamlink assertions that both probe and playback invocations have no attached Windows console, exercised by the existing process integration suite.
+- A Windows CI check of the actual Tauri application's PE header before installer packaging; a console-subsystem executable fails the job.
+
+Local Linux validation passed the complete application checks: 148 backend/build-script/process tests, 84 frontend tests, two isolated browser regression tests, TypeScript and production frontend build, Rust formatting, all-target desktop checking, strict Clippy, native Tauri debug build without bundling, workflow lint and `git diff --check`. No IPC/DTO contract changed. Windows-only tests and the PE workflow step require the next Windows CI run; macOS was not rerun locally.
+
+**Final Windows acceptance is pending a fresh CI installer containing this fix.** Install/update it in the Windows 11 VM and check normal app launch, Streamlink probing and real playback without consoles; then verify Stop, Restart, two concurrent streams and application close with active playback clean up owned processes. The earlier successful credential-persistence result is recorded above, but no post-fix native Windows result is claimed here. No Phase 5 work was started.

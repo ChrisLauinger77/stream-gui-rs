@@ -103,7 +103,11 @@ OAuth and Helix share a fixed-endpoint HTTPS pool with redirects disabled, a 5-s
 
 ## Opt-in live acceptance checklist
 
-Normal tests use synthetic credentials, mock storage and loopback HTTP only. On 2026-09-18, live macOS testing successfully verified Device Flow login, authenticated account retrieval, and restoration across a complete application restart. The registered public application is `stream-gui-rs`; the project is now **Stream GUI RS** / `stream-gui-rs`. The acceptance run preceded the application identity rename. The current names match by choice, not an OAuth requirement; the new credential namespace requires a fresh login. The following checklist is retained for other platforms and the remaining manual cases; see [the validation record](phase-1-validation.md):
+Normal tests use synthetic credentials, mock storage and loopback HTTP only. On 2026-09-18, live macOS testing successfully verified Device Flow login, authenticated account retrieval, and restoration across a complete application restart. The registered public application is `stream-gui-rs`; the project is now **Stream GUI RS** / `stream-gui-rs`. The acceptance run preceded the application identity rename. The current names match by choice, not an OAuth requirement; the new credential namespace requires a fresh login. See [the validation record](phase-1-validation.md).
+
+On 2026-09-18, the user also verified Twitch sign-in and credential persistence across application restart in the packaged Windows 11 build. Native Linux sign-in and restart restoration were verified separately. See [Phase 4 validation](phase-4-validation.md) for these platform observations and the Windows console finding; real logout/deletion, refresh rotation and denied-store cases remain separate manual checks.
+
+The checklist remains available for further platform testing and the remaining manual cases:
 
 1. Register/configure the new public client, authorize `user:read:follows`, and confirm account/avatar/scopes. **Login and account retrieval verified on macOS.**
 2. Restart the desktop app with the same client ID and confirm automatic restoration plus validation. **Complete restart persistence verified on macOS.**

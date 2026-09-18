@@ -51,6 +51,20 @@ jobs:
           # Synthetic fallback is only for these non-publishing checks, never releases.
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD || 'ciCompileOnlyPublicClient123' }}
         run: npm run tauri build -- --debug --no-bundle --ci
+      - name: Verify packaged Windows GUI subsystem
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $binary = [System.IO.File]::ReadAllBytes('src-tauri/target/debug/stream-gui-rs.exe')
+          $pe = [System.BitConverter]::ToInt32($binary, 0x3c)
+          if ([System.BitConverter]::ToUInt16($binary, 0) -ne 0x5a4d -or
+              [System.BitConverter]::ToUInt32($binary, $pe) -ne 0x00004550) {
+            throw 'The packaged application is not a Windows PE executable.'
+          }
+          # Subsystem is 68 bytes into the PE optional header (after signature + COFF).
+          if ([System.BitConverter]::ToUInt16($binary, $pe + 24 + 68) -ne 2) {
+            throw 'The packaged application must use the Windows GUI subsystem.'
+          }
       - name: Package Windows smoke-test installer
         if: runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh

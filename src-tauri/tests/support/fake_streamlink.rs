@@ -8,6 +8,18 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let executable = std::env::current_exe().unwrap();
     let name = executable.file_stem().unwrap().to_string_lossy();
+    #[cfg(windows)]
+    if args == ["--version"] || args.first().is_some_and(|arg| arg == "--no-config") {
+        // Both real probe and playback paths must create their console child
+        // without a console attachment, while retaining captured stdout/stderr.
+        let mut pid = 0;
+        // SAFETY: a valid one-element output buffer is supplied to this query.
+        assert_eq!(
+            unsafe { windows_sys::Win32::System::Console::GetConsoleProcessList(&mut pid, 1) },
+            0,
+            "Streamlink child unexpectedly has a console"
+        );
+    }
     if args.first().is_some_and(|arg| arg == "--browser-probe") {
         std::fs::write(
             &args[1],
