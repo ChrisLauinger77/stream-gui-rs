@@ -348,6 +348,59 @@ async fn service_shutdown_waits_for_launch_probe_without_creating_session() {
     shutdown_during_probe(true).await;
 }
 
+#[tokio::test]
+async fn custom_path_with_spaces_roundtrips_and_launches() {
+    let directory = tempfile::Builder::new()
+        .prefix("streamlink paths ")
+        .tempdir()
+        .unwrap();
+    let executable = renamed_helper(directory.path(), "custom streamlink");
+    let selected = executable.to_str().unwrap().to_owned();
+    let services = Services::new(directory.path(), None).unwrap();
+    services.probe(Some(selected.clone())).await.unwrap();
+    drop(services);
+    let services = Services::new(directory.path(), None).unwrap();
+    assert_eq!(services.settings.snapshot().streamlink_path, Some(selected));
+    let session = services.launch(request("example")).await.unwrap();
+    assert_eq!(
+        terminal(&services.sessions, &session.id).await.exit_code,
+        Some(0)
+    );
+    services.shutdown().await.unwrap();
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn saved_symlink_survives_retargeting_and_removal_of_old_version() {
+    use std::os::unix::fs::symlink;
+    let directory = tempfile::tempdir().unwrap();
+    let old = renamed_helper(directory.path(), "streamlink-v1");
+    let new = renamed_helper(directory.path(), "streamlink-v2");
+    let selected = directory.path().join("streamlink");
+    symlink(&old, &selected).unwrap();
+    let services = Services::new(directory.path(), None).unwrap();
+    let probe = services
+        .probe(Some(selected.to_str().unwrap().into()))
+        .await
+        .unwrap();
+    assert_eq!(Path::new(&probe.executable), old.canonicalize().unwrap());
+    drop(services);
+    std::fs::remove_file(&selected).unwrap();
+    symlink(&new, &selected).unwrap();
+    std::fs::remove_file(old).unwrap();
+    let services = Services::new(directory.path(), None).unwrap();
+    assert_eq!(
+        services.settings.snapshot().streamlink_path.as_deref(),
+        selected.to_str()
+    );
+    let session = services.launch(request("example")).await.unwrap();
+    assert_eq!(
+        terminal(&services.sessions, &session.id).await.exit_code,
+        Some(0)
+    );
+    services.shutdown().await.unwrap();
+}
+
 #[cfg(windows)]
 #[tokio::test]
 async fn windows_child_cannot_execute_before_job_assignment_and_descendant_is_owned() {

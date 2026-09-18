@@ -59,8 +59,7 @@ impl Services {
         self.ensure_open()?;
         let custom_path = custom_path.filter(|p| !p.trim().is_empty());
         let result = streamlink::probe(custom_path.as_deref(), Duration::from_secs(5)).await?;
-        self.settings
-            .set_streamlink_path(custom_path.map(|_| result.executable.clone()))?;
+        self.settings.set_streamlink_path(custom_path)?;
         Ok(result)
     }
 

@@ -51,3 +51,5 @@ Auth status can wait behind an in-flight OAuth operation. The frontend polls aut
 `CredentialStore` is a replaceable Rust-only interface. Phase 0 uses `MemoryCredentialStore`; the token type has neither a serialization nor a debug implementation, and owned token buffers zeroize on drop. An OS keychain implementation is deferred, as are persistent sessions and crash recovery for rotating tokens.
 
 Settings are strict version 1 JSON containing only `streamlinkPath`. The directory comes from Tauri's `app_config_dir()`. Saves use a temporary file in the same directory and atomic replacement. Invalid/unsupported versions are rejected without automatic migration. A probe failure leaves the previous settings unchanged.
+
+Successful custom-path probes save the validated absolute path selected by the user, preserving stable symlinks across package upgrades. Discovery resolves its current target for each probe and launch; the resolved path is diagnostic output, not the persisted preference.
