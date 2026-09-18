@@ -1139,3 +1139,50 @@ async fn rejected_new_refresh_token_validation_does_not_refresh_again() {
         ["refresh-initial"]
     );
 }
+
+#[tokio::test(start_paused = true)]
+async fn hourly_validation_counts_suspend_and_backward_clock_does_not_postpone_it() {
+    let clock = Clock::for_test();
+    let service = AuthService::with_clock(
+        FakeApi::default(),
+        Some("client".into()),
+        Box::<MemoryCredentialStore>::default(),
+        clock.clone(),
+    );
+    authorize(&service).await;
+    let monotonic = tokio::time::Instant::now();
+    clock.advance_wall(Duration::from_secs(3600));
+    service.tick().await.unwrap();
+    assert_eq!(tokio::time::Instant::now(), monotonic);
+    assert_eq!(*service.api.validate_count.lock().unwrap(), 2);
+    assert!(service.api.refresh_inputs.lock().unwrap().is_empty());
+    clock.rewind_wall(Duration::from_secs(7200));
+    service.tick().await.unwrap();
+    assert_eq!(*service.api.validate_count.lock().unwrap(), 2);
+    tokio::time::advance(Duration::from_secs(3600)).await;
+    service.tick().await.unwrap();
+    assert_eq!(*service.api.validate_count.lock().unwrap(), 3);
+}
+
+#[tokio::test(start_paused = true)]
+async fn access_expiry_during_suspend_refreshes_before_issuing_a_lease() {
+    let clock = Clock::for_test();
+    let service = AuthService::with_clock(
+        FakeApi::default(),
+        Some("client".into()),
+        Box::<MemoryCredentialStore>::default(),
+        clock.clone(),
+    );
+    authorize(&service).await;
+    let monotonic = tokio::time::Instant::now();
+    clock.advance_wall(Duration::from_secs(14400));
+    assert_eq!(service.status().await.user.unwrap().expires_in, 0);
+    let lease = service.lease().await.unwrap();
+    assert_eq!(tokio::time::Instant::now(), monotonic);
+    assert_eq!(&*lease.token, "access-rotated");
+    assert_eq!(
+        &*service.api.refresh_inputs.lock().unwrap(),
+        &["refresh-initial"]
+    );
+    assert_eq!(service.status().await.phase, AuthPhase::Authenticated);
+}

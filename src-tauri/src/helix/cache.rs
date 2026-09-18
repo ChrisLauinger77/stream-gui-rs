@@ -1,5 +1,5 @@
+use crate::time::Clock;
 use std::{collections::HashMap, time::Duration};
-use tokio::time::Instant;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CacheClass {
@@ -36,13 +36,14 @@ pub struct Cached<T> {
 }
 struct Entry {
     bytes: Vec<u8>,
-    inserted: Instant,
+    inserted: Duration,
     class: CacheClass,
 }
 #[derive(Default)]
 pub struct TwitchCache {
     entries: HashMap<String, Entry>,
     bytes: usize,
+    clock: Clock,
 }
 impl TwitchCache {
     pub(crate) fn get(&self, key: &str, policy: CachePolicy) -> Option<Cached<Vec<u8>>> {
@@ -50,7 +51,7 @@ impl TwitchCache {
             return None;
         }
         let entry = self.entries.get(key)?;
-        let age = entry.inserted.elapsed();
+        let age = self.clock.now().saturating_sub(entry.inserted);
         let stale = age >= entry.class.ttl();
         if stale && policy != CachePolicy::AllowStale {
             return None;
@@ -93,7 +94,7 @@ impl TwitchCache {
             key,
             Entry {
                 bytes,
-                inserted: Instant::now(),
+                inserted: self.clock.now(),
                 class,
             },
         );
@@ -111,5 +112,44 @@ impl TwitchCache {
     }
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn suspend_expires_all_cache_classes_and_backward_clock_cannot_revive_them() {
+        let clock = Clock::for_test();
+        let mut cache = TwitchCache {
+            clock: clock.clone(),
+            ..Default::default()
+        };
+        for (key, class) in [
+            ("live", CacheClass::Live),
+            ("metadata", CacheClass::Metadata),
+            ("categories", CacheClass::Categories),
+        ] {
+            cache.insert(key.into(), vec![1], class);
+        }
+        let monotonic = tokio::time::Instant::now();
+        clock.advance_wall(Duration::from_secs(3600));
+        for key in ["live", "metadata", "categories"] {
+            assert!(cache.get(key, CachePolicy::Fresh).is_none());
+            let stale = cache.get(key, CachePolicy::AllowStale).unwrap();
+            assert_eq!(stale.freshness, Freshness::Stale);
+            assert_eq!(stale.age, Duration::from_secs(3600));
+        }
+        assert_eq!(tokio::time::Instant::now(), monotonic);
+        clock.rewind_wall(Duration::from_secs(7200));
+        assert!(cache.get("live", CachePolicy::Fresh).is_none());
+        assert_eq!(
+            cache.get("live", CachePolicy::AllowStale).unwrap().age,
+            Duration::from_secs(3600)
+        );
+        cache.insert("new".into(), vec![2], CacheClass::Live);
+        tokio::time::advance(CacheClass::Live.ttl()).await;
+        assert!(cache.get("new", CachePolicy::Fresh).is_none());
     }
 }

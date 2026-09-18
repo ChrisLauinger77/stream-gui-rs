@@ -1,10 +1,13 @@
-use crate::domain::{AppError, ErrorCode, Result};
+use crate::{
+    domain::{AppError, ErrorCode, Result},
+    time::Clock,
+};
 use reqwest::header::HeaderMap;
 use std::{
     sync::{Arc, Mutex},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, UNIX_EPOCH},
 };
-use tokio::{sync::Notify, time::Instant};
+use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Debug, Default)]
@@ -17,12 +20,13 @@ pub struct RateSnapshot {
 #[derive(Default)]
 struct Budget {
     snapshot: RateSnapshot,
-    reset: Option<Instant>,
+    reset: Option<Duration>,
 }
 #[derive(Default)]
 pub struct RateLimiter {
     budget: Mutex<Budget>,
     changed: Notify,
+    clock: Clock,
 }
 pub struct Reservation {
     rate: Arc<RateLimiter>,
@@ -58,7 +62,7 @@ impl RateLimiter {
                 if cancel.is_cancelled() {
                     return Err(cancelled());
                 }
-                if budget.reset.is_some_and(|reset| reset <= Instant::now()) {
+                if budget.reset.is_some_and(|reset| reset <= self.clock.now()) {
                     // Probe the new window conservatively rather than inventing
                     // a fresh full budget before Twitch confirms its headers.
                     budget.snapshot.remaining = None;
@@ -77,11 +81,13 @@ impl RateLimiter {
                 }
                 budget.reset
             };
+            // A short monotonic wait bounds resume reconciliation latency even
+            // on platforms whose monotonic clock pauses during suspend.
             tokio::select! {
                 biased;
                 _ = cancel.cancelled() => return Err(cancelled()),
                 _ = &mut changed => {},
-                _ = async { match wait { Some(deadline) => tokio::time::sleep_until(deadline).await, None => std::future::pending().await } } => {},
+                _ = async { match wait { Some(deadline) => tokio::time::sleep(deadline.saturating_sub(self.clock.now()).min(Duration::from_secs(1))).await, None => std::future::pending().await } } => {},
             }
         }
     }
@@ -93,7 +99,9 @@ impl RateLimiter {
                 .and_then(|v| v.parse::<u64>().ok())
         };
         let mut budget = self.budget.lock().expect("rate mutex poisoned");
-        let now = SystemTime::now()
+        let now = self
+            .clock
+            .unix_now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
@@ -126,7 +134,7 @@ impl RateLimiter {
                     budget.snapshot.limit = Some(limit as u32);
                     budget.snapshot.reset_at = Some(reset);
                     budget.reset = Some(
-                        Instant::now() + Duration::from_secs(reset.saturating_sub(now).max(1)),
+                        self.clock.now() + Duration::from_secs(reset.saturating_sub(now).max(1)),
                     );
                 }
             }
@@ -138,7 +146,7 @@ impl RateLimiter {
                 .or_else(|| parse("retry-after"))
                 .unwrap_or(1)
                 .clamp(1, 86400);
-            let until = Instant::now() + Duration::from_secs(delay);
+            let until = self.clock.now() + Duration::from_secs(delay);
             budget.reset = Some(budget.reset.map_or(until, |old| old.max(until)));
         }
         drop(budget);
@@ -147,4 +155,95 @@ impl RateLimiter {
 }
 fn cancelled() -> AppError {
     AppError::new(ErrorCode::Cancelled, "The Twitch request was cancelled.")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn limited(clock: &Clock) -> (Arc<RateLimiter>, HeaderMap) {
+        let rate = Arc::new(RateLimiter {
+            clock: clock.clone(),
+            ..Default::default()
+        });
+        let reset = clock
+            .unix_now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            + 60;
+        let mut headers = HeaderMap::new();
+        headers.insert("ratelimit-limit", "10".parse().unwrap());
+        headers.insert("ratelimit-remaining", "0".parse().unwrap());
+        headers.insert("ratelimit-reset", reset.to_string().parse().unwrap());
+        rate.observe(&headers, true);
+        (rate, headers)
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn suspend_past_unix_reset_allows_one_probe_without_additional_uptime() {
+        let clock = Clock::for_test();
+        let (rate, _) = limited(&clock);
+        let monotonic = tokio::time::Instant::now();
+        clock.advance_wall(Duration::from_secs(120));
+        let cancel = CancellationToken::new();
+        let _probe = rate.reserve(&cancel).await.unwrap();
+        assert_eq!(tokio::time::Instant::now(), monotonic);
+        assert_eq!(rate.snapshot().remaining, None);
+        assert_eq!(rate.snapshot().in_flight, 1);
+        // An uncertain new window grants only one probe, not a fresh full budget.
+        let another = rate.reserve(&cancel);
+        tokio::pin!(another);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(1), &mut another)
+                .await
+                .is_err()
+        );
+        cancel.cancel();
+        assert_eq!(another.await.err().unwrap().code, ErrorCode::Cancelled);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn already_waiting_reservation_reconciles_suspend_within_one_second() {
+        let clock = Clock::for_test();
+        let (rate, _) = limited(&clock);
+        let cancel = CancellationToken::new();
+        let pending = rate.reserve(&cancel);
+        tokio::pin!(pending);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(1), &mut pending)
+                .await
+                .is_err()
+        );
+        let resumed = tokio::time::Instant::now();
+        clock.advance_wall(Duration::from_secs(120));
+        let _probe = tokio::time::timeout(Duration::from_secs(1), pending)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(resumed.elapsed() <= Duration::from_secs(1));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn backward_wall_clock_and_repeated_headers_do_not_extend_reset_wait() {
+        let clock = Clock::for_test();
+        let (rate, headers) = limited(&clock);
+        tokio::time::advance(Duration::from_secs(30)).await;
+        clock.rewind_wall(Duration::from_secs(7200));
+        rate.observe(&headers, true);
+        let cancel = CancellationToken::new();
+        let pending = rate.reserve(&cancel);
+        tokio::pin!(pending);
+        let start = tokio::time::Instant::now();
+        assert!(
+            tokio::time::timeout(Duration::from_secs(29), &mut pending)
+                .await
+                .is_err()
+        );
+        let _probe = tokio::time::timeout(Duration::from_secs(1), pending)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(start.elapsed(), Duration::from_secs(30));
+    }
 }

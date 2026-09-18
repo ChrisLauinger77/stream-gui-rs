@@ -5,6 +5,7 @@ mod tests;
 use crate::{
     credentials::{CredentialStore, CredentialVault, Credentials},
     domain::{AppError, ErrorCode, Result},
+    time::Clock,
     twitch_http::error,
 };
 pub use api::HttpTwitchApi;
@@ -18,10 +19,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::{
-    sync::{Mutex, MutexGuard, watch},
-    time::Instant,
-};
+use tokio::sync::{Mutex, MutexGuard, watch};
 use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
 use zeroize::Zeroizing;
@@ -66,8 +64,8 @@ pub struct AuthStatus {
 }
 struct Pending {
     device_code: Zeroizing<String>,
-    expires: Instant,
-    next_poll: Instant,
+    expires: Duration,
+    next_poll: Duration,
     interval: Duration,
 }
 struct State {
@@ -77,9 +75,9 @@ struct State {
     credentials: Option<Credentials>,
     expected_user: Option<String>,
     restored: bool,
-    expires: Option<Instant>,
-    next_validation: Instant,
-    next_refresh: Instant,
+    expires: Option<Duration>,
+    next_validation: Duration,
+    next_refresh: Duration,
     generation: u64,
     session_id: u64,
     session_cancel: CancellationToken,
@@ -89,8 +87,8 @@ struct State {
 #[derive(Clone)]
 struct Snapshot {
     status: AuthStatus,
-    expires: Option<Instant>,
-    grant_expires: Option<Instant>,
+    expires: Option<Duration>,
+    grant_expires: Option<Duration>,
 }
 impl Snapshot {
     fn from_state(state: &State) -> Self {
@@ -138,6 +136,7 @@ pub(crate) struct AccessLease {
 
 pub struct AuthService<A: TwitchApi = HttpTwitchApi> {
     api: Arc<A>,
+    clock: Clock,
     client_id: Option<String>,
     state: Arc<Mutex<State>>,
     snapshot: watch::Sender<Snapshot>,
@@ -151,6 +150,7 @@ impl<A: TwitchApi> Clone for AuthService<A> {
     fn clone(&self) -> Self {
         Self {
             api: self.api.clone(),
+            clock: self.clock.clone(),
             client_id: self.client_id.clone(),
             state: self.state.clone(),
             snapshot: self.snapshot.clone(),
@@ -163,6 +163,14 @@ impl<A: TwitchApi> Clone for AuthService<A> {
 }
 impl<A: TwitchApi + 'static> AuthService<A> {
     pub fn new(api: A, client_id: Option<String>, store: Box<dyn CredentialStore>) -> Self {
+        Self::with_clock(api, client_id, store, Clock::default())
+    }
+    fn with_clock(
+        api: A,
+        client_id: Option<String>,
+        store: Box<dyn CredentialStore>,
+        clock: Clock,
+    ) -> Self {
         let client_id = client_id.filter(|id| !id.trim().is_empty());
         let state = State {
             status: AuthStatus {
@@ -182,8 +190,8 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             expected_user: None,
             restored: false,
             expires: None,
-            next_validation: Instant::now(),
-            next_refresh: Instant::now(),
+            next_validation: clock.now(),
+            next_refresh: clock.now(),
             generation: 0,
             session_id: 0,
             session_cancel: CancellationToken::new(),
@@ -193,6 +201,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         let (snapshot, _) = watch::channel(Snapshot::from_state(&state));
         Self {
             api: Arc::new(api),
+            clock,
             client_id,
             state: Arc::new(Mutex::new(state)),
             snapshot,
@@ -287,10 +296,10 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         let snapshot = self.snapshot.borrow().clone();
         let mut status = snapshot.status;
         if let (Some(auth), Some(expires)) = (&mut status.authorization, snapshot.grant_expires) {
-            auth.expires_in = expires.saturating_duration_since(Instant::now()).as_secs() as u32;
+            auth.expires_in = expires.saturating_sub(self.clock.now()).as_secs() as u32;
         }
         if let (Some(user), Some(expires)) = (&mut status.user, snapshot.expires) {
-            user.expires_in = expires.saturating_duration_since(Instant::now()).as_secs() as u32;
+            user.expires_in = expires.saturating_sub(self.clock.now()).as_secs() as u32;
         }
         status
     }
@@ -308,7 +317,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         if state.restored {
             return Ok(());
         }
-        state.next_validation = Instant::now() + Duration::from_secs(60);
+        state.next_validation = self.clock.now() + Duration::from_secs(60);
         match state.store.load().await {
             Ok(credentials) => state.credentials = credentials,
             Err(error) => {
@@ -374,7 +383,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             state.status.error = Some(error.clone());
             return Err(error);
         }
-        let now = Instant::now();
+        let now = self.clock.now();
         let interval = Duration::from_secs(grant.interval.max(5).into());
         state.pending = Some(Pending {
             device_code: Zeroizing::new(grant.device_code),
@@ -415,7 +424,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         let snapshot = self.snapshot.borrow().clone();
         if snapshot
             .grant_expires
-            .is_some_and(|expiry| expiry > Instant::now())
+            .is_some_and(|expiry| expiry > self.clock.now())
         {
             if let Some(auth) = snapshot.status.authorization {
                 return Ok(auth.verification_uri);
@@ -493,7 +502,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             return Ok(());
         };
         let mut state = self.lock().await?;
-        let now = Instant::now();
+        let now = self.clock.now();
         if !state.restored {
             if now < state.next_validation {
                 return Ok(());
@@ -524,14 +533,14 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             match response {
                 Ok(PollResult::Pending) => {
                     let pending = state.pending.as_mut().expect("pending grant");
-                    pending.next_poll = Instant::now() + pending.interval;
+                    pending.next_poll = self.clock.now() + pending.interval;
                     state.status.error = None;
                 }
                 Ok(PollResult::SlowDown) => {
                     let pending = state.pending.as_mut().expect("pending grant");
                     pending.interval =
                         (pending.interval + Duration::from_secs(5)).min(Duration::from_secs(300));
-                    pending.next_poll = Instant::now() + pending.interval;
+                    pending.next_poll = self.clock.now() + pending.interval;
                 }
                 Ok(PollResult::Authorized(credentials)) => {
                     state.pending = None;
@@ -549,7 +558,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
                 {
                     let pending = state.pending.as_mut().expect("pending grant");
                     pending.interval = (pending.interval * 2).min(Duration::from_secs(300));
-                    pending.next_poll = Instant::now() + pending.interval;
+                    pending.next_poll = self.clock.now() + pending.interval;
                     state.status.error = Some(error);
                 }
                 Err(error) => return self.invalidate(&mut state, error).await,
@@ -599,7 +608,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             .ok_or_else(|| error(ErrorCode::Unauthenticated))?
             .access_token
             .clone();
-        state.next_validation = Instant::now() + Duration::from_secs(60);
+        state.next_validation = self.clock.now() + Duration::from_secs(60);
         match self.api.validate(&token).await {
             Ok(validation) => self.apply_validation(state, validation).await,
             Err(error) if error.code == ErrorCode::AuthInvalid => Err(error),
@@ -646,8 +655,8 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             scopes: validation.scopes,
             expires_in: validation.expires_in,
         });
-        state.expires = Some(Instant::now() + Duration::from_secs(validation.expires_in.into()));
-        state.next_validation = Instant::now() + Duration::from_secs(3600);
+        state.expires = Some(self.clock.now() + Duration::from_secs(validation.expires_in.into()));
+        state.next_validation = self.clock.now() + Duration::from_secs(3600);
         Ok(())
     }
     async fn accept_credentials(&self, state: &mut State, credentials: Credentials) -> Result<()> {
@@ -675,7 +684,7 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             .ok_or_else(|| error(ErrorCode::Unauthenticated))?
             .refresh_token
             .clone();
-        state.next_refresh = Instant::now() + Duration::from_secs(60);
+        state.next_refresh = self.clock.now() + Duration::from_secs(60);
         // Clear the old one-use token BEFORE dispatch. A crash or ambiguous
         // response must never restore and reuse a possibly consumed token.
         if let Err(error) = state.store.clear().await {
@@ -733,9 +742,12 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         if state.credentials.is_none() {
             return Err(error(ErrorCode::Unauthenticated));
         }
-        if state.expires.is_some_and(|expiry| expiry <= Instant::now()) {
+        if state
+            .expires
+            .is_some_and(|expiry| expiry <= self.clock.now())
+        {
             self.refresh_locked(&mut state).await?;
-        } else if Instant::now() >= state.next_validation {
+        } else if self.clock.now() >= state.next_validation {
             self.validate_locked(&mut state).await?;
         }
         let user = state

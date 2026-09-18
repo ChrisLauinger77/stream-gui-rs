@@ -5,6 +5,7 @@ pub mod domain;
 pub mod helix;
 pub mod platform;
 pub mod streamlink;
+mod time;
 pub mod twitch;
 pub mod twitch_http;
 
