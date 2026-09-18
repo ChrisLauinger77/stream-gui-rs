@@ -17,6 +17,15 @@ pub struct PlatformCredentialStore {
 }
 
 impl PlatformCredentialStore {
+    #[cfg(test)]
+    pub(crate) fn with_test_credential(credential: Box<keyring::credential::Credential>) -> Self {
+        Self {
+            entry: keyring::Entry::new_with_credential(credential),
+            client_id: "client".into(),
+            _lease: tempfile::tempfile().unwrap(),
+        }
+    }
+
     pub fn open(directory: &Path, client_id: &str) -> Result<Self> {
         std::fs::create_dir_all(directory).map_err(|_| storage_error())?;
         let lease = OpenOptions::new()
@@ -92,7 +101,17 @@ impl CredentialStore for PlatformCredentialStore {
     }
     fn clear(&mut self) -> Result<()> {
         match self.entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Err(_) => return Err(storage_error()),
+        }
+        // The macOS dependency can discard the native deletion error. Only an
+        // explicit NoEntry establishes absence; unreadable is not deleted.
+        match self.entry.get_secret() {
+            Err(keyring::Error::NoEntry) => Ok(()),
+            Ok(bytes) => {
+                drop(Zeroizing::new(bytes));
+                Err(storage_error())
+            }
             Err(_) => Err(storage_error()),
         }
     }
