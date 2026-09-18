@@ -58,7 +58,7 @@ async fn actual_device_and_refresh_forms_never_include_client_secret() {
     api.begin("client").await.unwrap();
     let request = form(&request.await.unwrap());
     assert_eq!(request["client_id"], "client");
-    assert_eq!(request["scopes"], "");
+    assert_eq!(request["scopes"], "user:read:follows");
     assert!(!request.contains_key("client_secret"));
 
     let (api, request) = server(
@@ -116,4 +116,26 @@ async fn untrusted_provider_error_bodies_do_not_escape() {
             .contains("private-secret")
     );
     request.await.unwrap();
+}
+
+#[tokio::test]
+async fn oauth_transient_failures_are_typed_and_token_exchanges_are_not_retried() {
+    use crate::{
+        test_http::{Reply, Server},
+        twitch_http::TwitchHttp,
+    };
+    for (status, expected) in [
+        (429, ErrorCode::RateLimited),
+        (503, ErrorCode::TwitchServer),
+    ] {
+        let server = Server::new(vec![Reply::json(status, "private-response")]).await;
+        let api = HttpTwitchApi::with_http(&TwitchHttp::for_test(
+            &server.base,
+            std::time::Duration::from_secs(1),
+        ));
+        let error = api.refresh("client", "test-refresh").await.err().unwrap();
+        assert_eq!(error.code, expected);
+        assert_eq!(server.requests().len(), 1);
+        assert!(!error.to_string().contains("private-response"));
+    }
 }

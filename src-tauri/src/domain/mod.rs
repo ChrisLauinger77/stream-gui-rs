@@ -22,6 +22,12 @@ pub enum ErrorCode {
     AuthInvalid,
     AuthProvider,
     Network,
+    Unauthenticated,
+    Unauthorized,
+    RateLimited,
+    InvalidResponse,
+    TwitchServer,
+    Cancelled,
     CredentialStore,
     Internal,
 }

@@ -4,11 +4,11 @@ use crate::{
 };
 use reqwest::{Client, Response, StatusCode};
 use serde::{Deserialize, de::DeserializeOwned};
-use std::{future::Future, time::Duration};
+use std::future::Future;
 use zeroize::Zeroizing;
 
-// No privileged scopes are needed to prove identity via /validate.
-const SCOPES: &str = "";
+// Only the read permission required by the followed-channel/stream endpoints.
+const SCOPES: &str = "user:read:follows";
 const DEVICE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
 
 #[derive(Deserialize)]
@@ -22,8 +22,8 @@ pub struct DeviceGrant {
 
 #[derive(Deserialize)]
 pub struct TokenResponse {
-    access_token: String,
-    refresh_token: String,
+    access_token: Zeroizing<String>,
+    refresh_token: Zeroizing<String>,
     token_type: String,
 }
 
@@ -36,8 +36,8 @@ impl TokenResponse {
             return Err(provider_error());
         }
         Ok(Credentials {
-            access_token: Zeroizing::new(self.access_token),
-            refresh_token: Zeroizing::new(self.refresh_token),
+            access_token: self.access_token,
+            refresh_token: self.refresh_token,
         })
     }
 }
@@ -80,17 +80,13 @@ pub struct HttpTwitchApi {
 
 impl HttpTwitchApi {
     pub fn new() -> Result<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(15))
-            .connect_timeout(Duration::from_secs(5))
-            .redirect(reqwest::redirect::Policy::none())
-            .user_agent(concat!("twitch-gui-rs/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .map_err(|_| provider_error())?;
-        Ok(Self {
-            client,
-            base: "https://id.twitch.tv/oauth2".into(),
-        })
+        Ok(Self::with_http(&crate::twitch_http::TwitchHttp::new()?))
+    }
+    pub fn with_http(http: &crate::twitch_http::TwitchHttp) -> Self {
+        Self {
+            client: http.client.clone(),
+            base: http.oauth_base.clone(),
+        }
     }
 }
 
@@ -102,9 +98,9 @@ impl TwitchApi for HttpTwitchApi {
             .form(&[("client_id", client_id), ("scopes", SCOPES)])
             .send()
             .await
-            .map_err(|_| network_error())?;
+            .map_err(|error| crate::twitch_http::network_error(&error))?;
         if !response.status().is_success() {
-            return Err(provider_error());
+            return Err(status_error(response.status()));
         }
         decode(response).await
     }
@@ -121,7 +117,7 @@ impl TwitchApi for HttpTwitchApi {
             ])
             .send()
             .await
-            .map_err(|_| network_error())?;
+            .map_err(|error| crate::twitch_http::network_error(&error))?;
         let status = response.status();
         if status.is_success() {
             return Ok(PollResult::Authorized(
@@ -134,7 +130,7 @@ impl TwitchApi for HttpTwitchApi {
             return Ok(PollResult::SlowDown);
         }
         if status.is_server_error() {
-            return Err(network_error());
+            return Err(status_error(status));
         }
         let error: OAuthError = decode(response).await?;
         match error.error.as_deref().or(error.message.as_deref()) {
@@ -162,7 +158,7 @@ impl TwitchApi for HttpTwitchApi {
             .header(reqwest::header::AUTHORIZATION, authorization)
             .send()
             .await
-            .map_err(|_| network_error())?;
+            .map_err(|error| crate::twitch_http::network_error(&error))?;
         if response.status() == StatusCode::UNAUTHORIZED {
             return Err(AppError::new(
                 ErrorCode::AuthInvalid,
@@ -170,7 +166,7 @@ impl TwitchApi for HttpTwitchApi {
             ));
         }
         if !response.status().is_success() {
-            return Err(network_error());
+            return Err(status_error(response.status()));
         }
         decode(response).await
     }
@@ -186,7 +182,7 @@ impl TwitchApi for HttpTwitchApi {
             ])
             .send()
             .await
-            .map_err(|_| network_error())?;
+            .map_err(|error| crate::twitch_http::network_error(&error))?;
         if matches!(
             response.status(),
             StatusCode::BAD_REQUEST | StatusCode::UNAUTHORIZED
@@ -197,7 +193,7 @@ impl TwitchApi for HttpTwitchApi {
             ));
         }
         if !response.status().is_success() {
-            return Err(network_error());
+            return Err(status_error(response.status()));
         }
         decode::<TokenResponse>(response).await?.into_credentials()
     }
@@ -209,11 +205,11 @@ impl TwitchApi for HttpTwitchApi {
             .form(&[("client_id", client_id), ("token", token)])
             .send()
             .await
-            .map_err(|_| network_error())?;
+            .map_err(|error| crate::twitch_http::network_error(&error))?;
         if response.status().is_success() || response.status() == StatusCode::BAD_REQUEST {
             Ok(())
         } else {
-            Err(provider_error())
+            Err(status_error(response.status()))
         }
     }
 }
@@ -224,24 +220,17 @@ struct OAuthError {
     message: Option<String>,
 }
 
-async fn decode<T: DeserializeOwned>(mut response: Response) -> Result<T> {
-    // Never log or return provider bodies: success bodies contain credentials,
-    // and failure bodies are untrusted. Bound buffering before JSON decoding.
-    let mut body = Zeroizing::new(Vec::new());
-    while let Some(chunk) = response.chunk().await.map_err(|_| network_error())? {
-        if body.len() + chunk.len() > 64 * 1024 {
-            return Err(provider_error());
-        }
-        body.extend_from_slice(&chunk);
-    }
-    serde_json::from_slice(&body).map_err(|_| provider_error())
+async fn decode<T: DeserializeOwned>(response: Response) -> Result<T> {
+    crate::twitch_http::decode(response, 64 * 1024).await
 }
 
-fn network_error() -> AppError {
-    AppError::new(
-        ErrorCode::Network,
-        "Twitch could not be reached or returned a temporary failure. Retry shortly.",
-    )
+fn status_error(status: StatusCode) -> AppError {
+    match status.as_u16() {
+        403 => crate::twitch_http::error(ErrorCode::Unauthorized),
+        429 => crate::twitch_http::error(ErrorCode::RateLimited),
+        500..=599 => crate::twitch_http::error(ErrorCode::TwitchServer),
+        _ => provider_error(),
+    }
 }
 fn provider_error() -> AppError {
     AppError::new(
