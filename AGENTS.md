@@ -245,10 +245,12 @@ TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --deb
 git diff --check
 ```
 
-`npm run build` includes TypeScript checking. The last build uses a synthetic public ID for compilation
-only, not a usable OAuth/distribution app. For PowerShell, set the environment variable separately as
-documented in `docs/authentication.md`. `--no-default-features` omits desktop/WebView linkage, not all
-native dependencies. There is no configured ESLint/Prettier or Markdown-lint command; do not invent one.
+`npm run build` includes TypeScript checking. The local build command above uses a synthetic public ID for
+compilation only. CI uses the repository secret `TWITCH_CLIENT_ID_BUILD` when available, otherwise the
+synthetic ID for non-publishing checks. Never use that fallback in a release workflow. For PowerShell, set
+the environment variable separately as documented in `docs/authentication.md`. `--no-default-features` omits
+desktop/WebView linkage, not all native dependencies. There is no configured ESLint/Prettier or
+Markdown-lint command; do not invent one.
 
 Manual verification is separate: auth changes need relevant real Device Flow, storage/restart/logout checks;
 playback changes need real Streamlink/mpv/VLC, actual video/audio, Stop/Restart, concurrent sessions and

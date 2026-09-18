@@ -44,6 +44,7 @@ jobs:
         run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support -- -D warnings
       - name: Tauri desktop build (no packaging or publishing)
         env:
-          # Synthetic public ID: compile-only artifact, never used for OAuth or a release.
-          TWITCH_CLIENT_ID_BUILD: ciCompileOnlyPublicClient123
+          # Use the registered public ID when available; forks/Dependabot can still compile.
+          # Synthetic fallback is only for these non-publishing checks, never releases.
+          TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD || 'ciCompileOnlyPublicClient123' }}
         run: npm run tauri build -- --debug --no-bundle --ci
