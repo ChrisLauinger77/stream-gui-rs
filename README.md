@@ -1,5 +1,12 @@
 # Stream GUI RS
 
+[![Github Latest Releases](https://img.shields.io/github/downloads/ChrisLauinger77/stream-gui-rs/latest/total)](<>)
+[![Version](https://img.shields.io/github/v/release/ChrisLauinger77/stream-gui-rs)](<>)
+[![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/stream-gui-rs/total.svg)](<>)
+[![license](https://img.shields.io/github/license/ChrisLauinger77/stream-gui-rs)](<>)
+
+<img src="https://raw.githubusercontent.com/ChrisLauinger77/stream-gui-rs/main/src/assets/app-icon.svg" alt="App icon" width="128">
+
 A modern Rust/Tauri desktop frontend for watching Twitch streams via Streamlink.
 
 Twitch is currently the supported streaming-service integration. Rust owns native/backend functionality; React and TypeScript provide the frontend. Streamlink remains an external runtime dependency.
