@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-streamlink-stop"
+description = "Enables the streamlink_stop command without any pre-configured scope."
+commands.allow = ["streamlink_stop"]
+
+[[permission]]
+identifier = "deny-streamlink-stop"
+description = "Denies the streamlink_stop command without any pre-configured scope."
+commands.deny = ["streamlink_stop"]

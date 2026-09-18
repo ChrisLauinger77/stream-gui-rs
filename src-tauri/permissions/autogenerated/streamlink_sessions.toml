@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-streamlink-sessions"
+description = "Enables the streamlink_sessions command without any pre-configured scope."
+commands.allow = ["streamlink_sessions"]
+
+[[permission]]
+identifier = "deny-streamlink-sessions"
+description = "Denies the streamlink_sessions command without any pre-configured scope."
+commands.deny = ["streamlink_sessions"]

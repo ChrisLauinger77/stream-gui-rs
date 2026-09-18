@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-auth-open-verification"
+description = "Enables the auth_open_verification command without any pre-configured scope."
+commands.allow = ["auth_open_verification"]
+
+[[permission]]
+identifier = "deny-auth-open-verification"
+description = "Denies the auth_open_verification command without any pre-configured scope."
+commands.deny = ["auth_open_verification"]
