@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { AuthStatus, SessionSnapshot } from "../lib/generated";
 import { api } from "../lib/ipc";
-import { App } from "./App";
+import { DeveloperTools as App } from "./DeveloperTools";
 
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: vi.fn() }));
 vi.mock("../lib/ipc", () => ({

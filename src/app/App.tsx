@@ -1,124 +1,63 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
-import { Panel } from "../components/Panel";
-import { Authentication } from "../features/Authentication";
-import { Playback } from "../features/Playback";
-import type { Account, AuthStatus, BackendDiagnostics, ProbeResult, SessionSnapshot } from "../lib/generated";
-import { api, errorMessage } from "../lib/ipc";
+import { DeveloperTools } from "./DeveloperTools";
+import { useAuthentication } from "./useAuthentication";
+import { BrowserWorkspace } from "../browse/Workspace";
+import { friendlyError } from "../browse/errors";
+import type { Account, AuthStatus } from "../lib/generated";
 
-type ActionKey = "auth" | "cancel" | "probe" | "launch" | `stop:${string}`;
-
+type Theme = "system" | "dark" | "light";
+function initialTheme(): Theme {
+  try { const value = localStorage.getItem("stream-gui-theme"); if (value === "light" || value === "dark") return value; } catch { /* optional visual preference */ }
+  return "system";
+}
 export function App() {
-  const [backend, setBackend] = useState<BackendDiagnostics | null>(null);
-  const [auth, setAuth] = useState<AuthStatus | null>(null);
-  const [account, setAccount] = useState<Account | null>(null);
-  const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
-  const [customPath, setCustomPath] = useState("");
-  const [probe, setProbe] = useState<ProbeResult | null>(null);
-  const [pending, setPending] = useState<ReadonlySet<ActionKey>>(new Set());
-  const [error, setError] = useState<string | null>(null);
-  const actionPending = useRef(new Set<ActionKey>());
-  const refreshAuth = useCallback(async () => {
-    setAuth(await api.authStatus());
-  }, []);
-  const refreshSessions = useCallback(async () => {
-    setSessions(await api.sessions());
-  }, []);
-
+  const [developer, setDeveloper] = useState(false);
+  const [theme, setTheme] = useState<Theme>(initialTheme);
   useEffect(() => {
-    if (!isTauri()) return;
-    let cancelled = false;
-    const timers = new Set<ReturnType<typeof setTimeout>>();
-    void api.diagnostics().then((diagnostics) => {
-      if (!cancelled) { setBackend(diagnostics); setCustomPath(diagnostics.settings.streamlinkPath ?? ""); }
-    }).catch((error: unknown) => { if (!cancelled) setError(errorMessage(error)); });
-    const startPolling = <T,>(read: () => Promise<T>, apply: (value: T) => void) => {
-      const poll = async () => {
-        try {
-          const value = await read();
-          if (!cancelled) apply(value);
-        } catch (error) { if (!cancelled) setError(errorMessage(error)); }
-        if (!cancelled) {
-          const timer = setTimeout(() => { timers.delete(timer); void poll(); }, 1000);
-          timers.add(timer);
-        }
-      };
-      void poll();
-    };
-    // Each source has at most one poll in flight. Slow OAuth cannot hold back
-    // session snapshots, and neither source accumulates a polling queue.
-    startPolling(api.authStatus, setAuth);
-    startPolling(api.sessions, setSessions);
-    return () => { cancelled = true; timers.forEach(clearTimeout); };
-  }, []);
-
-  const accountId = auth?.phase === "authenticated" ? auth.user?.id : undefined;
-  useEffect(() => {
-    let cancelled = false;
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    setAccount(null);
-    if (accountId) {
-      const load = async () => {
-        try {
-          const account = await api.account();
-          if (!cancelled && account.id === accountId) setAccount(account);
-        } catch (error) {
-          if (!cancelled) {
-            setError(errorMessage(error));
-            retry = setTimeout(() => { void load(); }, 60_000);
-          }
-        }
-      };
-      void load();
-    }
-    return () => { cancelled = true; clearTimeout(retry); };
-  }, [accountId]);
-
-  const run = (key: ActionKey, action: () => Promise<unknown>, refresh?: () => Promise<void>) => {
-    if (actionPending.current.has(key)) return;
-    actionPending.current.add(key);
-    setPending(new Set(actionPending.current)); setError(null);
-    void (async () => {
-      try { await action(); }
-      catch (error) { setError(errorMessage(error)); }
-      finally {
-        try { await refresh?.(); } catch (error) { setError(errorMessage(error)); }
-        actionPending.current.delete(key);
-        setPending(new Set(actionPending.current));
-      }
-    })();
-  };
-
-  return <main>
-    <header><h1>Stream GUI RS</h1><p>Phase 1 · authentication developer screen</p></header>
-    {!isTauri() && <p className="notice">Browser preview only. Backend controls require the desktop app: <code>npm run tauri dev</code>.</p>}
-    {error && <p role="alert" className="error">{error}</p>}
-    <Panel title="Backend">
-      <p>{backend ? `Ready · ${backend.version} · ${backend.platform}` : "Not connected"}</p>
-      {backend && <p className="muted path">Settings v{backend.settings.version}: {backend.settingsPath}</p>}
-    </Panel>
-    <Authentication status={auth} account={account} busy={pending.has("auth")}
-      cancelling={pending.has("cancel")} cancel={() => run("cancel", api.cancel, refreshAuth)}
-      run={(action) => run("auth", action, refreshAuth)} />
-    <Panel title="Streamlink">
-      <form onSubmit={(event) => {
-        event.preventDefault();
-        run("probe", async () => {
-          setProbe(null);
-          const result = await api.probe({ customPath: customPath || null });
-          setProbe(result); setBackend(await api.diagnostics());
-        });
-      }}>
-        <label>Custom executable path<input value={customPath} placeholder="Leave empty to discover on PATH" onChange={(event) => { setCustomPath(event.target.value); setProbe(null); }} /></label>
-        <button type="submit" disabled={pending.has("probe") || pending.has("launch") || !backend}>Probe and save</button>
-      </form>
-      <p>Detected executable: <span className="path">{probe?.executable ?? "Not probed"}</span></p>
-      <p>Version: {probe?.version ?? "—"}</p>
-      <p className="muted">A successful probe saves this choice. Launch checks the saved executable again.</p>
-    </Panel>
-    <Playback sessions={sessions} launchBusy={pending.has("launch") || pending.has("probe")}
-      ready={!!backend && !!probe} isStopping={(id) => pending.has(`stop:${id}`)}
-      launch={(request) => run("launch", () => api.launch(request), refreshSessions)}
-      stop={(id) => run(`stop:${id}`, () => api.stop(id), refreshSessions)} />
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem("stream-gui-theme", theme); } catch { /* no persistence required */ }
+  }, [theme]);
+  if (developer) return <><div className="developer-banner"><button onClick={() => setDeveloper(false)}>← Back to browsing</button><span>Developer tools · isolated playback prototype</span></div><DeveloperTools /></>;
+  return <Application theme={theme} setTheme={setTheme} developer={() => setDeveloper(true)} />;
+}
+function Application({ theme, setTheme, developer }: { theme: Theme; setTheme: (value: Theme) => void; developer: () => void }) {
+  const auth = useAuthentication();
+  const [settings, setSettings] = useState(false);
+  const controls = <div className="account-controls">
+    <span className="connection-dot" aria-hidden="true" />
+    <span>{auth.account?.displayName ?? auth.status?.user?.login ?? "Not connected"}</span>
+    {auth.sessionId && <button className="quiet" disabled={auth.busy === "logout"} onClick={() => { void auth.run("logout"); }}>Sign out</button>}
+    <button className="quiet" aria-expanded={settings} onClick={() => setSettings(!settings)}>Settings</button>
+  </div>;
+  return <div className="application">
+    <header className="app-bar"><div className="brand"><span aria-hidden="true">▶</span> Stream GUI RS</div>{controls}</header>
+    {settings && <section className="settings-panel" aria-label="Settings">
+      <label>Appearance<select value={theme} onChange={e => setTheme(e.target.value as Theme)}><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
+      <p>Streamlink is installed separately. Its existing path and playback controls are available in developer tools.</p>
+      <button onClick={developer}>Developer tools</button>
+      {auth.status?.phase === "not_configured" && <p>Set the public <code>TWITCH_CLIENT_ID</code> in the backend environment and restart. No client secret is needed.</p>}
+    </section>}
+    {auth.error && <p className="error" role="alert">{auth.error}</p>}
+    {auth.sessionId ? <BrowserWorkspace key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} /> :
+      <SignIn status={auth.status} account={auth.account} busy={auth.busy} run={auth.run} />}
+    <footer className="app-footer"><span>Twitch browsing · Streamlink desktop</span><span>{auth.sessionId ? "Connected to Twitch" : "Connect your Twitch account"}</span></footer>
+  </div>;
+}
+function SignIn({ status, busy, run }: { status: AuthStatus | null; account: Account | null; busy: string | null; run: ReturnType<typeof useAuthentication>["run"] }) {
+  const pending = status?.phase === "authorizing" || busy === "login";
+  return <main className="sign-in">
+    <div className="eyebrow">YOUR STREAMS, IN ONE PLACE</div>
+    <h1>Find what’s live.</h1>
+    <p>Browse the channels you follow, discover categories,<br />and find your next stream.</p>
+    {!isTauri() ? <p className="notice">This is a browser preview. Open the desktop application to connect to Twitch.</p> : !status || status.phase === "restoring" ? <p role="status">Restoring your Twitch session…</p> : <>
+      {pending ? <div className="sign-in-flow">
+        {status.authorization ? <><p>Enter this code on Twitch:</p><strong className="user-code">{status.authorization.userCode}</strong><p className="muted">Code expires in {Math.ceil(status.authorization.expiresIn / 60)} minutes.</p><button disabled={busy === "openVerification"} onClick={() => { void run("openVerification"); }}>Open Twitch sign-in</button><p className="path">{status.authorization.verificationUri}</p><p role="status">Waiting for authorization…</p></> : <p role="status">Starting secure sign-in…</p>}
+        <button className="quiet" disabled={busy === "cancel"} onClick={() => { void run("cancel"); }}>Cancel sign-in</button>
+      </div> : <button className="primary" disabled={!!busy || status.phase === "not_configured"} onClick={() => { void run("login"); }}>Connect to Twitch</button>}
+      {status.error && <p role="alert" className="error">{friendlyError(status.error)}</p>}
+      {status.phase === "not_configured" && <p className="notice">Twitch sign-in needs to be configured for this build. Open Settings for instructions.</p>}
+    </>}
+    <p className="muted">Sign-in opens in your browser. Credentials stay in secure system storage.</p>
   </main>;
 }
