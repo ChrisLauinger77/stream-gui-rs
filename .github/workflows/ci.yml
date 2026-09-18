@@ -32,6 +32,8 @@ jobs:
         run: npm ci
       - name: Frontend type check and production build
         run: npm run build
+      - name: Frontend concurrency contracts
+        run: npm test
       - name: Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
       - name: Domain, HTTP contract and native process tests

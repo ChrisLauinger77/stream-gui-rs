@@ -46,6 +46,8 @@ Desktop exit closes the service-level probe/launch gate, signals all owned sessi
 
 One Rust service serializes device polling, validation, refresh, and logout. Bounded HTTP calls cannot complete behind logout and restore a cleared session. Device polling honors the server interval, increases it on slow-down, backs off temporary failures, expires locally, and is canceled by logout. Refresh rotation is serialized; new credentials replace old ones before validation so a transient validation failure does not reuse a consumed refresh token. An ambiguous refresh result requires login again. Startup and hourly validation are performed by a Rust task, independently of UI polling.
 
+Auth status can wait behind an in-flight OAuth operation. The frontend polls auth and sessions independently, with at most one poll per source in flight. Pending auth, probe/launch, and each session's Stop have separate UI guards, so network delays do not disable playback cleanup. These guards only prevent duplicate UI submissions; Rust remains authoritative.
+
 `CredentialStore` is a replaceable Rust-only interface. Phase 0 uses `MemoryCredentialStore`; the token type has neither a serialization nor a debug implementation, and owned token buffers zeroize on drop. An OS keychain implementation is deferred, as are persistent sessions and crash recovery for rotating tokens.
 
 Settings are strict version 1 JSON containing only `streamlinkPath`. The directory comes from Tauri's `app_config_dir()`. Saves use a temporary file in the same directory and atomic replacement. Invalid/unsupported versions are rejected without automatic migration. A probe failure leaves the previous settings unchanged.

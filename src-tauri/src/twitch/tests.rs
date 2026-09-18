@@ -11,7 +11,22 @@ struct FakeApi {
     refresh_inputs: StdMutex<Vec<String>>,
     validate_count: StdMutex<u32>,
     poll_count: StdMutex<u32>,
+    poll_gate: StdMutex<Option<Arc<RequestGate>>>,
+    refresh_gate: StdMutex<Option<Arc<RequestGate>>>,
     fail_revoke: bool,
+}
+
+#[derive(Default)]
+struct RequestGate {
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+}
+
+impl RequestGate {
+    async fn wait(&self) {
+        self.entered.notify_one();
+        self.release.notified().await;
+    }
 }
 
 fn credentials(suffix: &str) -> Credentials {
@@ -44,6 +59,10 @@ impl TwitchApi for FakeApi {
     }
     async fn poll(&self, _: &str, _: &str) -> Result<PollResult> {
         *self.poll_count.lock().unwrap() += 1;
+        let gate = self.poll_gate.lock().unwrap().clone();
+        if let Some(gate) = gate {
+            gate.wait().await;
+        }
         self.polls
             .lock()
             .unwrap()
@@ -60,6 +79,10 @@ impl TwitchApi for FakeApi {
     }
     async fn refresh(&self, _: &str, token: &str) -> Result<Credentials> {
         self.refresh_inputs.lock().unwrap().push(token.to_owned());
+        let gate = self.refresh_gate.lock().unwrap().clone();
+        if let Some(gate) = gate {
+            gate.wait().await;
+        }
         self.refreshes
             .lock()
             .unwrap()
@@ -235,7 +258,7 @@ async fn validation_rejection_or_mismatched_client_clears_session() {
 
 #[tokio::test(start_paused = true)]
 async fn concurrent_refresh_uses_each_rotating_token_once() {
-    let service = service();
+    let service = Arc::new(service());
     authorize(&service).await;
     service
         .api
@@ -243,8 +266,32 @@ async fn concurrent_refresh_uses_each_rotating_token_once() {
         .lock()
         .unwrap()
         .extend([Ok(credentials("second")), Ok(credentials("third"))]);
-    let (first, second) = tokio::join!(service.refresh(), service.refresh());
-    first.unwrap();
+    let gate = Arc::new(RequestGate::default());
+    *service.api.refresh_gate.lock().unwrap() = Some(gate.clone());
+    let first = {
+        let service = service.clone();
+        tokio::spawn(async move { service.refresh().await })
+    };
+    gate.entered.notified().await;
+    let second = service.refresh();
+    tokio::pin!(second);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), &mut second)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        *service.api.refresh_inputs.lock().unwrap(),
+        ["refresh-initial"]
+    );
+    gate.release.notify_one();
+    first.await.unwrap().unwrap();
+    // The second request must consume the first request's rotated token.
+    let release_second = async {
+        gate.entered.notified().await;
+        gate.release.notify_one();
+    };
+    let (second, ()) = tokio::join!(second, release_second);
     second.unwrap();
     assert_eq!(
         *service.api.refresh_inputs.lock().unwrap(),
@@ -255,6 +302,52 @@ async fn concurrent_refresh_uses_each_rotating_token_once() {
         state.store.load().unwrap().unwrap().refresh_token.as_str(),
         "refresh-third"
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn logout_waits_for_in_flight_poll_or_refresh_then_clears_credentials() {
+    for refresh in [false, true] {
+        let service = Arc::new(service());
+        let gate = Arc::new(RequestGate::default());
+        if refresh {
+            authorize(&service).await;
+            *service.api.refresh_gate.lock().unwrap() = Some(gate.clone());
+        } else {
+            service.login().await.unwrap();
+            service
+                .api
+                .polls
+                .lock()
+                .unwrap()
+                .push_back(Ok(PollResult::Authorized(credentials("late"))));
+            *service.api.poll_gate.lock().unwrap() = Some(gate.clone());
+            tokio::time::advance(Duration::from_secs(5)).await;
+        }
+        let request = {
+            let service = service.clone();
+            tokio::spawn(async move {
+                if refresh {
+                    service.refresh().await.map(|_| ())
+                } else {
+                    service.tick().await
+                }
+            })
+        };
+        gate.entered.notified().await;
+        let logout = service.logout();
+        tokio::pin!(logout);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut logout)
+                .await
+                .is_err()
+        );
+        gate.release.notify_one();
+        request.await.unwrap().unwrap();
+        logout.await.unwrap();
+        service.tick().await.unwrap();
+        assert_eq!(service.status().await.phase, AuthPhase::SignedOut);
+        assert!(service.state.lock().await.store.load().unwrap().is_none());
+    }
 }
 
 #[tokio::test(start_paused = true)]

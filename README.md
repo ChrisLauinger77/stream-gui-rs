@@ -43,6 +43,7 @@ Tokens are held in Rust memory only. They are not sent to React, written to sett
 
 ```sh
 npm run build
+npm test
 cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features test-support
 cargo check --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support
