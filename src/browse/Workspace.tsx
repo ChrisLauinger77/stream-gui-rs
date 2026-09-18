@@ -7,7 +7,8 @@ import { SearchView, ChannelView } from "./details";
 
 type Section = "following" | "live" | "categories" | "search";
 type Route = { kind: Section } | { kind: "category" | "channel"; id: string; name: string };
-type Visit = { route: Route; section: Section; scroll: number; focus?: string };
+type Visit = { route: Route; section: Section; scroll: number; focus?: string;
+  search: string; searchType: "channels" | "categories"; following: "live" | "channels" };
 const routeKey = (route: Route) => route.kind + ("id" in route ? `:${route.id}` : "");
 export type QueryContext = { sessionId: string; memory: ViewMemory; onAuthLost: () => void };
 export type Links = { channel: (id: string, name: string) => void; category: (id: string, name: string) => void };
@@ -25,7 +26,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
   const navigate = (next: Route) => {
     if (routeKey(next) === routeKey(route)) return;
     const active = document.activeElement as HTMLElement | null;
-    setHistory(items => [...items, { route, section, scroll: content.current?.scrollTop ?? 0, focus: active?.dataset.focus }].slice(-12));
+    setHistory(items => [...items, { route, section, search, searchType, following, scroll: content.current?.scrollTop ?? 0, focus: active?.dataset.focus }].slice(-12));
     if (next.kind !== "category" && next.kind !== "channel") setSection(next.kind);
     restore.current = null; setRoute(next);
   };
@@ -33,6 +34,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
     const previous = history.at(-1);
     if (!previous) return;
     restore.current = previous; setHistory(history.slice(0, -1)); setSection(previous.section); setRoute(previous.route);
+    setSearch(previous.search); setSearchType(previous.searchType); setFollowing(previous.following);
   };
   useLayoutEffect(() => {
     const target = restore.current;

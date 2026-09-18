@@ -151,3 +151,52 @@ test("authentication loss removes retained browsing results", async () => {
   vi.mocked(api.followedStreams).mockResolvedValueOnce(page([stream])).mockRejectedValueOnce({ code: "unauthenticated" });
   await render(); await click("Refresh"); expect(container.querySelector(".workspace")).toBeNull(); expect(text()).not.toContain("Example Channel");
 });
+
+test("Back restores the historical search query, cursor, scroll and focus", async () => {
+  const foo = { ...channel, broadcasterId: "foo", displayName: "Foo" };
+  const second = { ...channel, broadcasterId: "foo-two", displayName: "Foo two" };
+  vi.mocked(api.searchChannels).mockImplementation(async request => request.query === "foo"
+    ? request.page.cursor ? page([second], "foo-third") : page([foo], "foo-next")
+    : page([{ ...channel, broadcasterId: "bar", displayName: "Bar" }], "bar-next"));
+  await render(); await click("Search"); await type("foo");
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); }); await click("Load more");
+  container.querySelector("main")!.scrollTop = 240; button("Open channel Foo two").focus(); await click("Open channel Foo two");
+  await click("Search"); await type("bar"); await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+  expect(text()).toContain("Bar"); await click("Go back"); await click("Go back");
+  expect(container.querySelector<HTMLInputElement>('input[type="search"]')!.value).toBe("foo");
+  expect(container.querySelectorAll(".channel-row")).toHaveLength(2); expect(text()).not.toContain("Bar");
+  expect(container.querySelector("main")!.scrollTop).toBe(240); expect(document.activeElement).toBe(button("Open channel Foo two"));
+  expect(api.searchChannels).toHaveBeenCalledTimes(3);
+  await click("Load more"); expect(api.searchChannels).toHaveBeenLastCalledWith({ query: "foo", page: { sessionId: "1", cursor: "foo-third", refresh: false } });
+});
+
+test("Back restores the historical search result type and its pagination", async () => {
+  vi.mocked(api.searchCategories).mockResolvedValue(page([category], "category-next"));
+  vi.mocked(api.searchChannels).mockResolvedValue(page([channel], "channel-next"));
+  await render(); await click("Search"); await type("foo"); await click("Categories", ".tabs");
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+  button("Open category Example Game").focus(); await click("Open category Example Game");
+  await click("Search"); await click("Channels", ".tabs"); await type("bar"); await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+  await click("Go back"); await click("Go back");
+  expect(button("Categories", ".tabs").getAttribute("aria-pressed")).toBe("true");
+  expect(container.querySelector<HTMLInputElement>('input[type="search"]')!.value).toBe("foo");
+  expect(document.activeElement).toBe(button("Open category Example Game")); expect(container.querySelector(".channel-row")).toBeNull();
+  await click("Load more"); expect(api.searchCategories).toHaveBeenLastCalledWith({ query: "foo", page: { sessionId: "1", cursor: "category-next", refresh: false } });
+});
+
+test("Back restores the Following tab belonging to that visit", async () => {
+  await render(); await click("All channels"); button("Open channel Example Channel").focus(); await click("Open channel Example Channel");
+  await click("Following"); await click("Live streams"); await click("Go back"); await click("Go back");
+  expect(button("All channels").getAttribute("aria-pressed")).toBe("true");
+  expect(document.activeElement).toBe(button("Open channel Example Channel")); expect(api.followedChannels).toHaveBeenCalledOnce();
+});
+
+test("a new session clears historical search and Following state", async () => {
+  await render(); await click("All channels"); await click("Search"); await type("old account"); await click("Categories", ".tabs");
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); }); await click("Open category Example Game");
+  vi.mocked(api.authStatus).mockResolvedValue({ ...signedIn, sessionId: "2" });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(button("Go back").disabled).toBe(true); expect(button("Live streams").getAttribute("aria-pressed")).toBe("true");
+  await click("Search"); expect(container.querySelector<HTMLInputElement>('input[type="search"]')!.value).toBe("");
+  expect(button("Channels", ".tabs").getAttribute("aria-pressed")).toBe("true"); expect(container.querySelector(".category-card")).toBeNull();
+});
