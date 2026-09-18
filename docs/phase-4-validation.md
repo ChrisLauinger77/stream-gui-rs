@@ -128,7 +128,7 @@ Streamlink playback and version probes already share `CREATE_NO_WINDOW | CREATE_
 Regression coverage now includes:
 
 - A Windows-only test that compiles the actual entry point with a synthetic startup implementation, checks PE subsystem values for all four debug/release and development/packaged combinations, and verifies startup errors and panics retain nonzero exits and captured stderr.
-- Native fake-Streamlink assertions that both probe and playback invocations have no attached Windows console, exercised by the existing process integration suite.
+- Native fake-Streamlink assertions that both probe and playback invocations have no Windows console window, exercised by the existing process integration suite (the original attachment assertion was corrected in the follow-up below).
 - A Windows CI check of the actual Tauri application's PE header before installer packaging; a console-subsystem executable fails the job.
 
 Local Linux validation passed the complete application checks: 148 backend/build-script/process tests, 84 frontend tests, two isolated browser regression tests, TypeScript and production frontend build, Rust formatting, all-target desktop checking, strict Clippy, native Tauri debug build without bundling, workflow lint and `git diff --check`. No IPC/DTO contract changed. Windows-only tests and the PE workflow step require the next Windows CI run; macOS was not rerun locally.
@@ -140,3 +140,11 @@ Local Linux validation passed the complete application checks: 148 backend/build
 The user's Windows Programs and Features screenshot showed `github` as the publisher. `bundle.publisher` was absent, so Tauri used the second component of `io.github.stream-gui-rs`. The bundle now explicitly names `ChrisLauinger77` as publisher, as requested by the user. The application identifier and runtime behavior are unchanged.
 
 The Tauri CLI accepted the configuration and the native Linux debug/no-bundle build passed, including TypeScript and the production frontend build; `git diff --check` also passed. This metadata-only change adds no runtime tests. Verify the publisher label by installing a newly generated Windows CI installer; the existing installation does not change until updated. This finding does not establish completion of the pending console acceptance checks above.
+
+## Windows console regression correction — 2026-09-18
+
+[Actions run 35370728372](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35370728372), at `d174b4fbe84827ab374da0f267f4e44c835d1c61`, passed Linux and macOS. Windows passed the frontend checks, formatting, 119 Rust unit tests and the build-script test, then failed 16 of 28 process tests. The fake Streamlink helper exited with panic code 101 on probe/playback paths. Subsequent checks and packaging were skipped, so this run produced no Windows installer. This run predates the publisher metadata correction.
+
+The new fixture assertion incorrectly equated `CREATE_NO_WINDOW` with no console attachment: it required `GetConsoleProcessList` to return zero. Windows can attach such a process to a windowless console. The fixture now requires `GetConsoleWindow()` to return null instead, checking the intended window behavior while preserving probe/playback coverage and the existing pipe/cleanup assertions. The distinction is demonstrated by the [upstream Windows reproduction](https://github.com/microsoft/terminal/issues/1175). Production spawn flags, Job Object ownership and the packaged GUI subsystem fix are unchanged.
+
+Local Linux validation passed all 148 backend/build-script/process tests, 84 frontend tests, TypeScript/production frontend build, formatting, all-target desktop checking, strict Clippy, two isolated browser tests, the native Tauri debug/no-bundle build and `git diff --check`. The corrected Windows assertion is platform-gated and still requires a fresh Windows CI run, followed by the packaged installer acceptance checks above; local Linux success does not establish either result.

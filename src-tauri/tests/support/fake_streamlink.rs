@@ -10,14 +10,12 @@ fn main() {
     let name = executable.file_stem().unwrap().to_string_lossy();
     #[cfg(windows)]
     if args == ["--version"] || args.first().is_some_and(|arg| arg == "--no-config") {
-        // Both real probe and playback paths must create their console child
-        // without a console attachment, while retaining captured stdout/stderr.
-        let mut pid = 0;
-        // SAFETY: a valid one-element output buffer is supplied to this query.
-        assert_eq!(
-            unsafe { windows_sys::Win32::System::Console::GetConsoleProcessList(&mut pid, 1) },
-            0,
-            "Streamlink child unexpectedly has a console"
+        // CREATE_NO_WINDOW can still attach the child to a windowless console.
+        // Check the window, not the console's process list, in both real paths.
+        // SAFETY: this query takes no arguments; its borrowed HWND is not used.
+        assert!(
+            unsafe { windows_sys::Win32::System::Console::GetConsoleWindow() }.is_null(),
+            "Streamlink child unexpectedly has a console window"
         );
     }
     if args.first().is_some_and(|arg| arg == "--browser-probe") {
