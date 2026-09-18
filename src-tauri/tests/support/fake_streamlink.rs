@@ -8,6 +8,16 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let executable = std::env::current_exe().unwrap();
     let name = executable.file_stem().unwrap().to_string_lossy();
+    if args.first().is_some_and(|arg| arg == "--immediate-tree") {
+        let child = std::process::Command::new(&executable)
+            .arg("--descendant")
+            .spawn()
+            .unwrap();
+        std::fs::write(&args[1], child.id().to_string()).unwrap();
+        std::mem::forget(child);
+        std::thread::sleep(Duration::from_secs(30));
+        return;
+    }
     if args == ["--version"] {
         if name.contains("timeout") {
             std::fs::write(

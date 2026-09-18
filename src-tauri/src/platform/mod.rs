@@ -1,13 +1,18 @@
 //! Platform-specific process ownership, independent of Tauri.
 use std::io;
 use tokio::process::{Child, Command};
+#[cfg(windows)]
+mod windows;
 
 pub fn configure_process(command: &mut Command) {
     command.kill_on_drop(true);
     #[cfg(unix)]
     command.process_group(0);
     #[cfg(windows)]
-    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    command.creation_flags(
+        windows_sys::Win32::System::Threading::CREATE_NO_WINDOW
+            | windows_sys::Win32::System::Threading::CREATE_SUSPENDED,
+    );
 }
 
 /// Owned process group on Unix; kill-on-close job on Windows. Descendants that
@@ -20,6 +25,8 @@ pub struct ProcessTree {
 }
 
 impl ProcessTree {
+    /// Call only for a child spawned with `configure_process`. On Windows this
+    /// assigns the still-suspended child to its job before resuming its thread.
     pub fn attach(child: &Child) -> io::Result<Self> {
         #[cfg(unix)]
         {
@@ -33,6 +40,9 @@ impl ProcessTree {
         #[cfg(windows)]
         {
             use windows_sys::Win32::{Foundation::CloseHandle, System::JobObjects::*};
+            let process = child
+                .raw_handle()
+                .ok_or_else(|| io::Error::other("missing child handle"))?;
             // SAFETY: all structures are initialized, handles checked, and the
             // successful job handle is owned until Drop.
             unsafe {
@@ -53,15 +63,14 @@ impl ProcessTree {
                     CloseHandle(job);
                     return Err(error);
                 }
-                let process = child
-                    .raw_handle()
-                    .ok_or_else(|| io::Error::other("missing child handle"))?;
                 if AssignProcessToJobObject(job, process as _) == 0 {
                     let error = io::Error::last_os_error();
                     CloseHandle(job);
                     return Err(error);
                 }
-                Ok(Self { job: job as isize })
+                let tree = Self { job: job as isize };
+                windows::resume_child(child)?;
+                Ok(tree)
             }
         }
     }

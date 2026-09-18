@@ -347,3 +347,39 @@ async fn service_shutdown_waits_for_standalone_probe_and_rejects_queued_work() {
 async fn service_shutdown_waits_for_launch_probe_without_creating_session() {
     shutdown_during_probe(true).await;
 }
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_child_cannot_execute_before_job_assignment_and_descendant_is_owned() {
+    use twitch_gui_rs::platform::{ProcessTree, configure_process};
+    let directory = tempfile::tempdir().unwrap();
+    let marker = directory.path().join("descendant.pid");
+    let mut command = tokio::process::Command::new(helper());
+    command.arg("--immediate-tree").arg(&marker);
+    configure_process(&mut command);
+    let mut child = command.spawn().unwrap();
+    let parent_pid = child.id().unwrap();
+    // Deliberately widen the old race: no application code may execute here.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(
+        !marker.exists(),
+        "child ran before assignment to its cleanup job"
+    );
+    let tree = ProcessTree::attach(&child).unwrap();
+    let descendant = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Ok(contents) = std::fs::read_to_string(&marker) {
+                if let Ok(pid) = contents.parse::<u32>() {
+                    break pid;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    drop(tree);
+    child.wait().await.unwrap();
+    assert_process_exited(parent_pid);
+    assert_process_exited(descendant);
+}
