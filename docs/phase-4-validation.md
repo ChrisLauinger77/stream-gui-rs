@@ -35,7 +35,7 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features -
 cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_browser_open --features test-support
 cargo check --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support
 cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support -- -D warnings
-TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --debug --no-bundle --ci
+TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --debug --no-bundle --features custom-protocol --ci
 git diff --check
 ```
 
@@ -148,3 +148,11 @@ The Tauri CLI accepted the configuration and the native Linux debug/no-bundle bu
 The new fixture assertion incorrectly equated `CREATE_NO_WINDOW` with no console attachment: it required `GetConsoleProcessList` to return zero. Windows can attach such a process to a windowless console. The fixture now requires `GetConsoleWindow()` to return null instead, checking the intended window behavior while preserving probe/playback coverage and the existing pipe/cleanup assertions. The distinction is demonstrated by the [upstream Windows reproduction](https://github.com/microsoft/terminal/issues/1175). Production spawn flags, Job Object ownership and the packaged GUI subsystem fix are unchanged.
 
 Local Linux validation passed all 148 backend/build-script/process tests, 84 frontend tests, TypeScript/production frontend build, formatting, all-target desktop checking, strict Clippy, two isolated browser tests, the native Tauri debug/no-bundle build and `git diff --check`. The corrected Windows assertion is platform-gated and still requires a fresh Windows CI run, followed by the packaged installer acceptance checks above; local Linux success does not establish either result.
+
+## Windows packaged feature correction — 2026-09-18
+
+[Actions run 35371745489](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35371745489), at `678e1d66e798f733cc8264ec322219063a56c645`, passed Linux and macOS. Windows passed all frontend, Rust, process, desktop and Clippy checks, including all 28 process tests and the corrected console-window assertion. The native debug Tauri build succeeded, but the PE guard found subsystem 3 (Windows CUI); packaging and upload were skipped, so the run produced no installer.
+
+The Tauri CLI does not implicitly enable this crate's optional `custom-protocol` feature for `tauri build --debug`. The entry-point condition therefore remained false even though the resulting executable was intended for the debug NSIS package. CI now passes `--features custom-protocol` to both `tauri build` and `tauri bundle`. Release builds already select the GUI subsystem through `not(debug_assertions)`, while ordinary debug development still retains its console. The embedded-client-ID guard uses the same explicit feature signal.
+
+The exact feature-enabled native debug/no-bundle command passed locally on Linux, together with TypeScript and the production frontend build. Workflow lint, Rust formatting and `git diff --check` also passed. The CI PE guard remains the authoritative regression for the actual Windows executable; a fresh Windows CI run and manual VM acceptance of its installer are still required.

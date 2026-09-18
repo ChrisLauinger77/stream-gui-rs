@@ -62,10 +62,10 @@ npm run tauri build -- --no-bundle
 To build a local macOS app bundle for testing:
 
 ```sh
-TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --debug --bundles app --config '{"bundle":{"active":true}}'
+TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --debug --bundles app --features custom-protocol --config '{"bundle":{"active":true}}'
 ```
 
-`build.rs` rejects missing embedded configuration for **every non-debug Cargo profile** and for **`custom-protocol` builds**, the feature Tauri enables for distribution. This includes `cargo build --release`, release builds with debug assertions enabled, and `tauri build --debug` / `--no-bundle`. A runtime `TWITCH_CLIENT_ID` cannot bypass this check. The build script tracks changes to `TWITCH_CLIENT_ID_BUILD`, validates the value and emits a Rust compiler environment constant. Changing/removing the input invalidates the configuration; a previous embedded value cannot silently persist into a later build.
+`build.rs` rejects missing embedded configuration for **every non-debug Cargo profile** and for **`custom-protocol` builds**. Release builds satisfy the first condition; packaged debug commands must explicitly pass `--features custom-protocol`. A runtime `TWITCH_CLIENT_ID` cannot bypass this check. The build script tracks changes to `TWITCH_CLIENT_ID_BUILD`, validates the value and emits a Rust compiler environment constant. Changing/removing the input invalidates the configuration; a previous embedded value cannot silently persist into a later build.
 
 The embedded value travels with the executable across installation, restarts and OS reboots. Build machines should configure the public ID as a normal build variable; it does not require secret storage. The desktop CI build reads the repository secret `TWITCH_CLIENT_ID_BUILD` into the build environment. When that secret is unavailable (for example, fork or Dependabot pull requests), it uses `ciCompileOnlyPublicClient123` for compilation checks; that fallback cannot authenticate. Windows pushes to `main` additionally package the validated debug binary as an NSIS smoke-test installer, requiring the real repository secret before bundling; a missing secret fails packaging. Other runs retain compilation checks without uploading an installer. These are CI test artifacts, not official releases. Release signing, publishing and updater workflows remain separate and must never use the synthetic fallback.
 

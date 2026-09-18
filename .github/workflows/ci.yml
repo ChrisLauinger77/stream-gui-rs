@@ -50,7 +50,7 @@ jobs:
           # Use the registered public ID when available; forks/Dependabot can still compile.
           # Synthetic fallback is only for these non-publishing checks, never releases.
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD || 'ciCompileOnlyPublicClient123' }}
-        run: npm run tauri build -- --debug --no-bundle --ci
+        run: npm run tauri build -- --debug --no-bundle --features custom-protocol --ci
       - name: Verify packaged Windows GUI subsystem
         if: runner.os == 'Windows'
         shell: pwsh
@@ -79,7 +79,7 @@ jobs:
           }
           # Reuse the build above, which embeds this same registered public ID.
           # Explicit --bundles selects Tauri's NSIS installer even with bundle.active=false.
-          npm run tauri bundle -- --debug --bundles nsis --ci
+          npm run tauri bundle -- --debug --bundles nsis --features custom-protocol --ci
       - name: Upload Windows smoke-test installer
         if: runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

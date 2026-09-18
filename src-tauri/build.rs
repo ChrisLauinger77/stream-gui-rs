@@ -12,7 +12,7 @@ fn configure_twitch_client_id() {
         validate(value).unwrap_or_else(|reason| panic!("{BUILD_ENV} {reason}. Supply the project's public Twitch client ID, never a client secret."))
     });
     // Cargo's release profile stays "release" even with debug assertions.
-    // Tauri build enables custom-protocol, including --debug/--no-bundle.
+    // Packaged debug commands explicitly enable custom-protocol.
     let profile = std::env::var("PROFILE").expect("Cargo build profile is missing");
     let distribution =
         profile != "debug" || std::env::var_os("CARGO_FEATURE_CUSTOM_PROTOCOL").is_some();

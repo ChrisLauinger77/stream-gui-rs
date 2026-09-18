@@ -34,7 +34,7 @@ Build a local desktop binary without release packaging:
 TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --no-bundle
 ```
 
-The result is in `src-tauri/target/release/` and authenticates without any runtime environment configuration. Release builds and all `tauri build` invocations (including `--debug` and `--no-bundle`) require a valid `TWITCH_CLIENT_ID_BUILD`; setting only `TWITCH_CLIENT_ID` cannot satisfy that build check. The public ID is embedded only in Rust. Windows CI packages debug NSIS installers for manual smoke tests; release signing, publishing and updating workflows remain out of scope.
+The result is in `src-tauri/target/release/` and authenticates without any runtime environment configuration. Release builds require a valid `TWITCH_CLIENT_ID_BUILD`; packaged debug builds must additionally enable `custom-protocol`, which applies the same embedded-ID guard and distribution behavior. Setting only `TWITCH_CLIENT_ID` cannot satisfy that build check. The public ID is embedded only in Rust. Windows CI packages debug NSIS installers for manual smoke tests; release signing, publishing and updating workflows remain out of scope.
 
 ## Browsing workflow
 
@@ -74,7 +74,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features test-support
 cargo check --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support
 cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support -- -D warnings
-TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --debug --no-bundle --ci
+TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --debug --no-bundle --features custom-protocol --ci
 ```
 
 The final build command uses a synthetic public ID for compilation only; replace it with the project's registered public ID when building an app for use or distribution. Configuration tests cover embedded-only startup, developer precedence, missing/invalid values, and execute the actual build script to verify release and packaged-debug guards without contacting Twitch.

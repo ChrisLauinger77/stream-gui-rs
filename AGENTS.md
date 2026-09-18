@@ -243,7 +243,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features test-support
 cargo check --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support
 cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support -- -D warnings
-TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --debug --no-bundle --ci
+TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --debug --no-bundle --features custom-protocol --ci
 git diff --check
 ```
 
