@@ -19,6 +19,12 @@ required-features = ["desktop"]
 default = ["desktop"]
 desktop = ["dep:tauri", "dep:tauri-build", "dep:webbrowser"]
 custom-protocol = ["tauri?/custom-protocol"]
+test-support = []
+
+[[bin]]
+name = "fake-streamlink"
+path = "tests/support/fake_streamlink.rs"
+required-features = ["test-support"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [], optional = true }

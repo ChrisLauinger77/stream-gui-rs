@@ -49,3 +49,22 @@ impl std::fmt::Display for AppError {
 impl std::error::Error for AppError {}
 
 pub type Result<T> = std::result::Result<T, AppError>;
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProbeRequest {
+    pub custom_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LaunchRequest {
+    pub url: String,
+    pub quality: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StopRequest {
+    pub session_id: String,
+}
