@@ -17,5 +17,5 @@
       "capabilities": ["main"]
     }
   },
-  "bundle": { "active": false, "publisher": "Christian Lauinger", "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"] }
+  "bundle": { "active": false, "publisher": "ChrisLauinger77", "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"] }
 }

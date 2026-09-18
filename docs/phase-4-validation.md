@@ -137,6 +137,6 @@ Local Linux validation passed the complete application checks: 148 backend/build
 
 ## Windows publisher metadata — 2026-09-18
 
-The user's Windows Programs and Features screenshot showed `github` as the publisher. `bundle.publisher` was absent, so Tauri used the second component of `io.github.stream-gui-rs`. The bundle now explicitly names `Christian Lauinger` as publisher. The application identifier and runtime behavior are unchanged.
+The user's Windows Programs and Features screenshot showed `github` as the publisher. `bundle.publisher` was absent, so Tauri used the second component of `io.github.stream-gui-rs`. The bundle now explicitly names `ChrisLauinger77` as publisher, as requested by the user. The application identifier and runtime behavior are unchanged.
 
 The Tauri CLI accepted the configuration and the native Linux debug/no-bundle build passed, including TypeScript and the production frontend build; `git diff --check` also passed. This metadata-only change adds no runtime tests. Verify the publisher label by installing a newly generated Windows CI installer; the existing installation does not change until updated. This finding does not establish completion of the pending console acceptance checks above.
