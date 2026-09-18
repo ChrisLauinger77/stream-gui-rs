@@ -1054,6 +1054,13 @@ async fn unsupported_streamlink_probe_does_not_replace_saved_path() {
         ErrorCode::UnsupportedStreamlink
     );
     assert_eq!(std::fs::read(services.settings.path()).unwrap(), before);
+    let mut settings = services.settings.snapshot();
+    settings.streamlink_path = Some(unsupported.to_string_lossy().into_owned());
+    assert_eq!(
+        services.save_settings(settings).await.unwrap_err().code,
+        ErrorCode::UnsupportedStreamlink
+    );
+    assert_eq!(std::fs::read(services.settings.path()).unwrap(), before);
     services.shutdown().await.unwrap();
 }
 

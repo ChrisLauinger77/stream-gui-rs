@@ -186,9 +186,11 @@ impl Services {
         let _operation = self.streamlink_operation.lock().await;
         self.ensure_open()?;
         if let Some(path) = &settings.streamlink_path {
-            streamlink::validate_executable(Path::new(path))?;
+            let probe = streamlink::probe(Some(path), Duration::from_secs(5)).await?;
+            check_version(&probe.version)?;
         }
         resolve_player(&settings.player, &SearchLocations::system())?;
+        self.ensure_open()?;
         let store = self.settings.clone();
         tokio::task::spawn_blocking(move || store.update(settings))
             .await
