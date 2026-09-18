@@ -31,6 +31,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::backend_diagnostics, commands::streamlink_probe,
+            commands::playback_settings, commands::save_playback_settings, commands::discover_players, commands::streamlink_restart,
             commands::streamlink_launch, commands::streamlink_stop, commands::streamlink_sessions,
             commands::auth_status, commands::auth_login, commands::auth_open_verification,
             commands::auth_validate, commands::auth_refresh, commands::auth_logout,
@@ -40,33 +41,51 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("Could not initialize Stream GUI RS; check application settings and system prerequisites");
 
-    app.run(|app, event| {
-        if let tauri::RunEvent::ExitRequested { api, .. } = event {
-            let lifecycle = app.state::<Arc<Lifecycle>>().inner().clone();
-            if lifecycle.finished.load(Ordering::SeqCst) {
+    app.run(|app, event| match event {
+        tauri::RunEvent::ExitRequested { api, .. } => {
+            if app
+                .state::<Arc<Lifecycle>>()
+                .finished
+                .load(Ordering::SeqCst)
+            {
                 return;
             }
             api.prevent_exit();
-            if lifecycle.stopping.swap(true, Ordering::SeqCst) {
-                return;
-            }
-            if let Some(stop) = lifecycle
-                .auth_stop
-                .lock()
-                .expect("lifecycle mutex poisoned")
-                .as_ref()
-            {
-                stop.send_replace(true);
-            }
-            let services = app.state::<Arc<Services>>().inner().clone();
-            let app = app.clone();
-            tauri::async_runtime::spawn(async move {
-                if services.shutdown().await.is_err() {
-                    eprintln!("Streamlink cleanup did not complete within its deadline.");
-                }
-                lifecycle.finished.store(true, Ordering::SeqCst);
-                app.exit(0);
-            });
+            begin_shutdown(app);
         }
+        tauri::RunEvent::WindowEvent {
+            event: tauri::WindowEvent::CloseRequested { api, .. },
+            ..
+        } => {
+            api.prevent_close();
+            begin_shutdown(app);
+        }
+        _ => {}
+    });
+}
+
+// Phase 3 has no background/tray mode: closing the window and Quit both reap
+// owned playback before exiting. Navigation or webview reload does not enter here.
+fn begin_shutdown(app: &tauri::AppHandle) {
+    let lifecycle = app.state::<Arc<Lifecycle>>().inner().clone();
+    if lifecycle.stopping.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    if let Some(stop) = lifecycle
+        .auth_stop
+        .lock()
+        .expect("lifecycle mutex poisoned")
+        .as_ref()
+    {
+        stop.send_replace(true);
+    }
+    let services = app.state::<Arc<Services>>().inner().clone();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if services.shutdown().await.is_err() {
+            eprintln!("Streamlink cleanup did not complete within its deadline.");
+        }
+        lifecycle.finished.store(true, Ordering::SeqCst);
+        app.exit(0);
     });
 }

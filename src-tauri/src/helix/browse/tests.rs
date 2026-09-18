@@ -342,3 +342,85 @@ async fn followed_stream_page_omissions_do_not_establish_offline_state() {
     assert_eq!(result.items[0].live_state, LiveState::Live);
     assert_eq!(server.requests().len(), 4);
 }
+
+#[tokio::test]
+async fn playback_resolves_live_identity_in_rust_and_rechecks_instead_of_using_cache() {
+    let renamed = STREAM.replace("\"example\"", "\"new_login\"");
+    let (server, client, page) = client(vec![
+        Reply::json(200, STREAM),
+        Reply::json(200, renamed),
+        Reply::json(200, r#"{"data":[]}"#),
+    ])
+    .await;
+    let cancel = CancellationToken::new();
+    let first = client
+        .playback_stream(page.session_id.clone(), "123".into(), &cancel)
+        .await
+        .unwrap();
+    assert_eq!(first.login, "example");
+    assert_ne!(first.stream_id, first.broadcaster_id);
+    let next = client
+        .playback_stream(page.session_id.clone(), "123".into(), &cancel)
+        .await
+        .unwrap();
+    assert_eq!(next.login, "new_login");
+    assert_eq!(
+        client
+            .playback_stream(page.session_id, "123".into(), &cancel)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::StreamOffline
+    );
+    assert_eq!(server.requests().len(), 3);
+    assert!(server.requests()[0].starts_with("GET /helix/streams?user_id=123&first=1"));
+}
+
+#[tokio::test]
+async fn playback_rejects_wrong_identity_malformed_login_and_stale_authentication() {
+    let bad_login = STREAM.replace("\"example\"", "\"bad/--player\"");
+    let (server, client, page) =
+        client(vec![Reply::json(200, STREAM), Reply::json(200, bad_login)]).await;
+    let cancel = CancellationToken::new();
+    assert_eq!(
+        client
+            .playback_stream(page.session_id.clone(), "456".into(), &cancel)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::StreamOffline
+    );
+    assert_eq!(
+        client
+            .playback_stream(page.session_id.clone(), "123".into(), &cancel)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::InvalidInput
+    );
+    client.auth.logout().await.unwrap();
+    assert_eq!(
+        client
+            .playback_stream(page.session_id, "123".into(), &cancel)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::Unauthenticated
+    );
+    assert_eq!(server.requests().len(), 2);
+}
+
+#[tokio::test]
+async fn logout_during_playback_identity_lookup_cancels_the_pending_launch() {
+    let gate = Arc::new(tokio::sync::Notify::new());
+    let (server, client, page) = client(vec![Reply::json(200, STREAM).gated(gate.clone())]).await;
+    let cancel = CancellationToken::new();
+    let lookup = client.playback_stream(page.session_id, "123".into(), &cancel);
+    let logout = async {
+        server.wait_for_requests(1).await;
+        client.auth.logout().await.unwrap();
+        gate.notify_one();
+    };
+    let (result, ()) = tokio::join!(lookup, logout);
+    assert_eq!(result.unwrap_err().code, ErrorCode::Unauthenticated);
+}

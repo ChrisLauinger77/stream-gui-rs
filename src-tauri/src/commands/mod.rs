@@ -1,13 +1,44 @@
 use crate::{
-    diagnostics::BackendDiagnostics,
-    domain::{
-        AppError, ErrorCode, LaunchRequest, ProbeRequest, Result, StopRequest, services::Services,
+    config::Settings,
+    streamlink::{
+        discovery::PlayerDiscovery,
+        playback::{PlaybackRequest, RestartRequest},
     },
+};
+use crate::{
+    diagnostics::BackendDiagnostics,
+    domain::{AppError, ErrorCode, ProbeRequest, Result, StopRequest, services::Services},
     streamlink::{ProbeResult, SessionSnapshot},
     twitch::AuthStatus,
 };
 use std::sync::Arc;
 use tauri::State;
+
+#[tauri::command]
+pub fn playback_settings(services: State<'_, Arc<Services>>) -> Settings {
+    services.settings.snapshot()
+}
+
+#[tauri::command]
+pub async fn save_playback_settings(
+    services: State<'_, Arc<Services>>,
+    request: Settings,
+) -> Result<Settings> {
+    services.save_settings(request).await
+}
+
+#[tauri::command]
+pub fn discover_players(services: State<'_, Arc<Services>>) -> PlayerDiscovery {
+    services.players()
+}
+
+#[tauri::command]
+pub async fn streamlink_restart(
+    services: State<'_, Arc<Services>>,
+    request: RestartRequest,
+) -> Result<SessionSnapshot> {
+    services.restart_playback(request).await
+}
 
 #[tauri::command]
 pub fn backend_diagnostics(services: State<'_, Arc<Services>>) -> BackendDiagnostics {
@@ -25,9 +56,9 @@ pub async fn streamlink_probe(
 #[tauri::command]
 pub async fn streamlink_launch(
     services: State<'_, Arc<Services>>,
-    request: LaunchRequest,
+    request: PlaybackRequest,
 ) -> Result<SessionSnapshot> {
-    services.launch(request).await
+    services.play(request).await
 }
 
 #[tauri::command]

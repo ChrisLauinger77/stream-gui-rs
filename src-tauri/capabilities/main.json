@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Browsing, authentication and the isolated playback prototype, only in the local main window.",
+  "description": "Browsing, authentication and domain-specific playback, only in the local main window.",
   "windows": [
     "main"
   ],
@@ -11,6 +11,10 @@
     "allow-streamlink-launch",
     "allow-streamlink-stop",
     "allow-streamlink-sessions",
+    "allow-streamlink-restart",
+    "allow-playback-settings",
+    "allow-save-playback-settings",
+    "allow-discover-players",
     "allow-auth-status",
     "allow-auth-login",
     "allow-auth-open-verification",

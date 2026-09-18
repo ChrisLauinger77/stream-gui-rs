@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-streamlink-restart"
+description = "Enables the streamlink_restart command without any pre-configured scope."
+commands.allow = ["streamlink_restart"]
+
+[[permission]]
+identifier = "deny-streamlink-restart"
+description = "Denies the streamlink_restart command without any pre-configured scope."
+commands.deny = ["streamlink_restart"]

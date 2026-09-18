@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
-  Account, AppError, AuthStatus, BackendDiagnostics, LaunchRequest, ProbeRequest,
+  Account, AppError, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
   ProbeResult, SessionSnapshot, StopRequest,
 } from "./generated";
 
@@ -18,7 +18,11 @@ type Commands = {
 
   backend_diagnostics: [undefined, BackendDiagnostics];
   streamlink_probe: [ProbeRequest, ProbeResult];
-  streamlink_launch: [LaunchRequest, SessionSnapshot];
+  streamlink_launch: [PlaybackRequest, SessionSnapshot];
+  streamlink_restart: [RestartRequest, SessionSnapshot];
+  playback_settings: [undefined, Settings];
+  save_playback_settings: [Settings, Settings];
+  discover_players: [undefined, PlayerDiscovery];
   streamlink_stop: [StopRequest, SessionSnapshot];
   streamlink_sessions: [undefined, SessionSnapshot[]];
   auth_status: [undefined, AuthStatus];
@@ -50,7 +54,11 @@ export const api = {
 
   diagnostics: () => call("backend_diagnostics"),
   probe: (request: ProbeRequest) => call("streamlink_probe", request),
-  launch: (request: LaunchRequest) => call("streamlink_launch", request),
+  launch: (request: PlaybackRequest) => call("streamlink_launch", request),
+  restart: (request: RestartRequest) => call("streamlink_restart", request),
+  playbackSettings: () => call("playback_settings"),
+  savePlaybackSettings: (request: Settings) => call("save_playback_settings", request),
+  discoverPlayers: () => call("discover_players"),
   stop: (sessionId: string) => call("streamlink_stop", { sessionId }),
   sessions: () => call("streamlink_sessions"),
   authStatus: () => call("auth_status"),

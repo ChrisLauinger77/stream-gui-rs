@@ -1,6 +1,14 @@
-use super::{AppError, ErrorCode, LaunchRequest, Result};
+#[cfg(any(test, feature = "test-support"))]
+use super::LaunchRequest;
+use super::{AppError, ErrorCode, Result};
+use crate::streamlink::{
+    discovery::{PlayerDiscovery, SearchLocations, discover_players, resolve_player},
+    playback::{
+        LaunchSpec, PlaybackRequest, PlaybackStream, QualityPolicy, RestartRequest, check_version,
+    },
+};
 use crate::{
-    config::SettingsStore,
+    config::{Settings, SettingsStore},
     credentials::{CredentialStore, UnavailableCredentialStore},
     diagnostics::BackendDiagnostics,
     helix::HelixClient,
@@ -27,6 +35,7 @@ pub struct Services {
     closing: AtomicBool,
     auth_configured: bool,
     browse_slots: Arc<tokio::sync::Semaphore>,
+    playback_slots: Arc<tokio::sync::Semaphore>,
 }
 
 impl Services {
@@ -74,6 +83,7 @@ impl Services {
             closing: AtomicBool::new(false),
             auth_configured,
             browse_slots: Arc::new(tokio::sync::Semaphore::new(8)),
+            playback_slots: Arc::new(tokio::sync::Semaphore::new(8)),
         })
     }
 
@@ -106,6 +116,116 @@ impl Services {
         Ok(result)
     }
 
+    pub fn players(&self) -> PlayerDiscovery {
+        discover_players(&SearchLocations::system())
+    }
+
+    pub async fn save_settings(&self, settings: Settings) -> Result<Settings> {
+        settings.validate()?;
+        self.ensure_open()?;
+        let _operation = self.streamlink_operation.lock().await;
+        self.ensure_open()?;
+        if let Some(path) = &settings.streamlink_path {
+            streamlink::validate_executable(Path::new(path))?;
+        }
+        resolve_player(&settings.player, &SearchLocations::system())?;
+        self.settings.update(settings)
+    }
+
+    async fn prepare_playback(
+        &self,
+        stream: PlaybackStream,
+        quality: Option<QualityPolicy>,
+    ) -> Result<LaunchSpec> {
+        self.ensure_open()?;
+        let settings = self.settings.snapshot();
+        settings.validate()?;
+        let player = resolve_player(&settings.player, &SearchLocations::system())?;
+        let probe =
+            streamlink::probe(settings.streamlink_path.as_deref(), Duration::from_secs(5)).await?;
+        check_version(&probe.version)?;
+        self.ensure_open()?;
+        Ok(LaunchSpec {
+            executable: probe.executable.into(),
+            player,
+            player_settings: settings.player,
+            stream,
+            quality: quality.unwrap_or(settings.default_quality),
+        })
+    }
+
+    fn playback_permit(&self) -> Result<tokio::sync::OwnedSemaphorePermit> {
+        self.ensure_open()?;
+        self.playback_slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| AppError::new(ErrorCode::Capacity, "Playback is busy. Try again shortly."))
+    }
+
+    pub async fn play(self: &Arc<Self>, request: PlaybackRequest) -> Result<SessionSnapshot> {
+        let permit = self.playback_permit()?;
+        let services = self.clone();
+        tokio::spawn(async move {
+            let _permit = permit;
+            let stream = services
+                .helix
+                .playback_stream(
+                    request.auth_session_id.clone(),
+                    request.broadcaster_id,
+                    &tokio_util::sync::CancellationToken::new(),
+                )
+                .await?;
+            let _operation = services.streamlink_operation.lock().await;
+            let spec = services
+                .prepare_playback(stream.into(), request.quality)
+                .await?;
+            let session = request.auth_session_id.parse().map_err(|_| {
+                AppError::new(ErrorCode::InvalidInput, "Invalid authentication session.")
+            })?;
+            // A logout while discovery/probing was pending must not launch a stale request.
+            let lease = services.auth.lease_for_session(session).await?;
+            services.ensure_open()?;
+            services
+                .sessions
+                .launch_authenticated(spec, &lease.cancel)
+                .await
+        })
+        .await
+        .map_err(|_| {
+            AppError::new(
+                ErrorCode::Internal,
+                "Playback operation ended unexpectedly.",
+            )
+        })?
+    }
+
+    pub async fn restart_playback(
+        self: &Arc<Self>,
+        request: RestartRequest,
+    ) -> Result<SessionSnapshot> {
+        let permit = self.playback_permit()?;
+        let services = self.clone();
+        tokio::spawn(async move {
+            let _permit = permit;
+            services
+                .sessions
+                .restart(&request.session_id, request.generation, |stream| async {
+                    let _operation = services.streamlink_operation.lock().await;
+                    services.prepare_playback(stream, request.quality).await
+                })
+                .await
+        })
+        .await
+        .map_err(|_| {
+            AppError::new(
+                ErrorCode::RestartFailed,
+                "Restart operation ended unexpectedly.",
+            )
+        })?
+    }
+
+    /// Phase 0 contract adapter, retained for native process tests only.
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn launch(&self, request: LaunchRequest) -> Result<SessionSnapshot> {
         // Validate arguments before any process is started, then re-probe the
         // configured executable instead of accepting a frontend executable/argv.
