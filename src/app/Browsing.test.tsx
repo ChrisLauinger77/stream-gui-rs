@@ -200,3 +200,62 @@ test("a new session clears historical search and Following state", async () => {
   await click("Search"); expect(container.querySelector<HTMLInputElement>('input[type="search"]')!.value).toBe("");
   expect(button("Channels", ".tabs").getAttribute("aria-pressed")).toBe("true"); expect(container.querySelector(".category-card")).toBeNull();
 });
+
+test("final pagination focuses the first newly appended result", async () => {
+  const pending = deferred<PagedResult<StreamSummary>>();
+  vi.mocked(api.streams).mockResolvedValueOnce(page([stream], "next")).mockReturnValueOnce(pending.promise);
+  await render(); await click("Live"); const more = button("Load more"); more.focus(); await click("Load more");
+  expect(document.activeElement).toBe(more); expect(text()).toContain("Loading more information");
+  await act(async () => pending.resolve(page([stream, { ...stream, streamId: "new-result" }])));
+  expect(more.isConnected).toBe(false); expect(document.activeElement).toBe(container.querySelector('[data-focus="stream:new-result"]'));
+});
+
+test("an empty final page focuses the stable accessible results target", async () => {
+  const pending = deferred<PagedResult<StreamSummary>>();
+  vi.mocked(api.streams).mockResolvedValueOnce(page([stream], "next")).mockReturnValueOnce(pending.promise);
+  await render(); await click("Live"); button("Load more").focus(); await click("Load more");
+  expect(text()).toContain("Loading more information");
+  await act(async () => pending.resolve(page([])));
+  const results = container.querySelector('[role="region"][aria-label="Results"]');
+  expect(results).not.toBeNull(); expect(document.activeElement).toBe(results); expect(results!.querySelectorAll(".stream-card")).toHaveLength(1);
+});
+
+test("reaching 300 items focuses a result from the final permitted page", async () => {
+  let number = 0;
+  const items = (offset: number) => Array.from({ length: 30 }, (_, i) => ({ ...stream, streamId: `item-${offset + i}` }));
+  vi.mocked(api.streams).mockImplementation(async () => page(items(30 * number), `page-${++number}`));
+  await render(); await click("Live"); for (let n = 0; n < 8; n++) await click("Load more");
+  const pending = deferred<PagedResult<StreamSummary>>(); vi.mocked(api.streams).mockReturnValueOnce(pending.promise);
+  button("Load more").focus(); await click("Load more"); expect(container.querySelectorAll(".stream-card")).toHaveLength(270);
+  await act(async () => pending.resolve(page(items(270), "beyond-limit")));
+  expect(container.querySelectorAll(".stream-card")).toHaveLength(300); expect(text()).toContain("Showing up to 300 items");
+  expect(container.querySelector(".load-more")).toBeNull(); expect(document.activeElement).toBe(container.querySelector('[data-focus="stream:item-270"]'));
+});
+
+test("a pending pagination error preserves control focus, results and retry cursor", async () => {
+  let reject!: (error: unknown) => void;
+  const pending = new Promise<PagedResult<StreamSummary>>((_, fail) => { reject = fail; });
+  vi.mocked(api.streams).mockResolvedValueOnce(page([stream], "next")).mockReturnValueOnce(pending);
+  await render(); await click("Live"); const more = button("Load more"); more.focus(); await click("Load more");
+  expect(text()).toContain("Loading more information"); await act(async () => reject({ code: "network" }));
+  expect(document.activeElement).toBe(more); expect(container.querySelectorAll(".stream-card")).toHaveLength(1); expect(text()).toContain("Check your connection");
+  button("Retry").focus(); await click("Retry"); expect(api.streams).toHaveBeenLastCalledWith({ sessionId: "1", cursor: "next", refresh: false });
+});
+
+test.each(["another control", "the document body"])("final pagination does not steal focus after moving to %s", async destination => {
+  const pending = deferred<PagedResult<StreamSummary>>();
+  vi.mocked(api.streams).mockResolvedValueOnce(page([stream], "next")).mockReturnValueOnce(pending.promise);
+  await render(); await click("Live"); const more = button("Load more"); more.focus(); await click("Load more");
+  await act(async () => { button("Settings").focus(); if (destination === "the document body") button("Settings").blur(); });
+  const target = document.activeElement; expect(target).not.toBe(more); expect(text()).toContain("Loading more information");
+  await act(async () => pending.resolve(page([{ ...stream, streamId: "new-result" }])));
+  expect(document.activeElement).toBe(target);
+});
+
+test("final pagination does not move focus when Load more was not focused", async () => {
+  const pending = deferred<PagedResult<StreamSummary>>();
+  vi.mocked(api.streams).mockResolvedValueOnce(page([stream], "next")).mockReturnValueOnce(pending.promise);
+  await render(); await click("Live"); const target = button("Settings"); target.focus(); await click("Load more");
+  expect(text()).toContain("Loading more information"); await act(async () => pending.resolve(page([{ ...stream, streamId: "new-result" }])));
+  expect(document.activeElement).toBe(target);
+});

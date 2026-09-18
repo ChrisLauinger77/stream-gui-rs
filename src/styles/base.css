@@ -88,6 +88,7 @@ label { display:grid; gap:6px; font-size:13px; }
 .empty-state h2 { color:var(--text); margin-bottom:8px; font-size:17px; }
 .loading { padding:24px 0; color:var(--muted); font-size:13px; }
 .load-more { display:block; margin:28px auto 0; min-width:160px; }
+.load-more[aria-disabled="true"] { opacity:.5; cursor:default; }
 .search-form { max-width:580px; margin:12px 0 20px; }
 .search-form input { font-size:15px; padding:11px 12px; }
 .channel-detail { max-width:1000px; }

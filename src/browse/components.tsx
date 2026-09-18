@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { CategorySummary, ChannelSummary, StreamSummary } from "../lib/generated";
 import { errorText } from "./errors";
 import type { usePage } from "./usePage";
@@ -45,13 +45,30 @@ export function ChannelList({ items, open }: { items: ChannelSummary[]; open: Op
   </button>)}</div>;
 }
 export function PageFrame<T>({ query, children, empty, detail = false }: { query: ReturnType<typeof usePage<T>>; children: ReactNode; empty: string; detail?: boolean }) {
+  const results = useRef<HTMLDivElement>(null);
+  const paginationFocus = useRef<Set<string> | null>(null);
+  useLayoutEffect(() => {
+    if (query.pending) return;
+    const previous = paginationFocus.current;
+    paginationFocus.current = null;
+    if (!previous || query.error || query.page?.cursor || document.activeElement !== document.body) return;
+    const appended = [...(results.current?.querySelectorAll<HTMLElement>("[data-focus]") ?? [])].find(item => !previous.has(item.dataset.focus!));
+    (appended ?? results.current)?.focus();
+  }, [query.page, query.pending, query.error]);
   return <div aria-busy={query.pending}>
     <div className="query-toolbar"><span role="status">{(query.retained || (query.error && query.page)) ? "Previous results · refresh to check for updates" : query.page?.freshness === "stale" ? "Stale data" : query.page?.freshness === "cached" ? `Cached · ${query.page.ageSeconds}s old` : query.page ? "Updated from Twitch" : ""}{query.error && query.page ? " · update failed" : ""}</span><button disabled={query.pending} onClick={query.refresh}>Refresh</button></div>
     {query.error && <div className="error" role="alert">{errorText(query.error)}<button onClick={query.retry} disabled={query.pending}>Retry</button></div>}
     {query.page?.warnings.map(code => <p className="notice" role="status" key={code}>Some details are unavailable. {errorText(code)}</p>)}
     {query.pending && <p className="loading" role="status">{query.page ? "Loading more information…" : "Loading…"}</p>}
-    {query.page?.items.length ? children : !query.pending && !query.error && query.page && <div className="empty-state"><h2>{empty}</h2><p>Try refreshing, or explore another view.</p></div>}
-    {!detail && query.page?.cursor && <button className="load-more" disabled={query.pending} onClick={query.more}>{query.pending ? "Loading…" : "Load more"}</button>}
+    <div ref={results} role="region" aria-label="Results" tabIndex={-1}>{query.page?.items.length ? children : !query.pending && !query.error && query.page && <div className="empty-state"><h2>{empty}</h2><p>Try refreshing, or explore another view.</p></div>}</div>
+    {!detail && query.page?.cursor && <button className="load-more" aria-disabled={query.pending} onBlur={() => { paginationFocus.current = null; }} onClick={event => {
+      if (query.pending) return;
+      // Keep the pending control focusable; a native disabled button can blur
+      // before the request finishes. Any deliberate blur cancels restoration.
+      paginationFocus.current = document.activeElement === event.currentTarget
+        ? new Set([...results.current!.querySelectorAll<HTMLElement>("[data-focus]")].map(item => item.dataset.focus!)) : null;
+      query.more();
+    }}>{query.pending ? "Loading…" : "Load more"}</button>}
     {query.limited && <p className="notice">Showing up to 300 items. Refresh to start a new browsing session.</p>}
   </div>;
 }
