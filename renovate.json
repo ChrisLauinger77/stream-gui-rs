@@ -2,5 +2,93 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "local>ChrisLauinger77/ChrisLauinger77//renovate-config/stream-gui-rs"
+  ],
+  "packageRules": [
+    {
+      "description": "Keep unrelated npm updates independently reviewable",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "!@tauri-apps/**"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": null
+    },
+    {
+      "description": "Keep unrelated Rust updates independently reviewable",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchPackageNames": [
+        "!tauri",
+        "!tauri-build"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": null
+    },
+    {
+      "description": "Vite and its React plugin must move together",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchDatasources": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "vite",
+        "@vitejs/plugin-react"
+      ],
+      "groupName": "Vite toolchain"
+    },
+    {
+      "description": "Node and jsdom runtime requirements must move together",
+      "matchManagers": [
+        "npm",
+        "github-actions"
+      ],
+      "matchDatasources": [
+        "npm",
+        "node-version"
+      ],
+      "matchPackageNames": [
+        "node",
+        "jsdom"
+      ],
+      "groupName": "Node.js test runtime"
+    },
+    {
+      "description": "GIO generation changes follow Tauri/Wry gtk-rs compatibility",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchPackageNames": [
+        "gio"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "major"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "keyring majors require an explicit native-provider migration",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchPackageNames": [
+        "keyring"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    }
   ]
 }
