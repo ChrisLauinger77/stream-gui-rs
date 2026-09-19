@@ -83,3 +83,25 @@ Artifact: `Stream-GUI-RS_X.Y.Z_macos_universal.dmg`
 - [ ] macOS: test the installed bundle, first permission prompt, denial/re-enable through System Settings, click focus, menu-bar controls, and Command-Q with playback.
 
 Synthetic native fixtures and cross-target API checks do not substitute for these exact-artifact observations. Record missing checks explicitly.
+
+### Windows Notification Center acceptance
+
+Run against the installed Windows artifact, launched from its Start-menu shortcut. These checks remain pending; Linux policy tests and Windows source/API checks do not verify the shell's activation behavior.
+
+- [ ] Confirm the notification's Stream GUI RS identity/icon and the matching entry in Windows notification settings. Enable monitoring and notifications; let the initial baseline complete quietly.
+- [ ] Observe a new followed stream, let its banner time out naturally, and confirm its entry remains in Notification Center. Hide/minimize the app, then click that retained entry within 15 minutes: the app restores/focuses and selects the correct channel exactly once, with no playback launch.
+- [ ] Click a visible banner in a separate trial; verify the same navigation and no second navigation from another activation callback.
+- [ ] Dismiss an entry explicitly, then check that it disappears and cannot activate. Let another entry expire for 15 minutes, including a suspend/resume trial; it must be removed and cannot navigate after expiration.
+- [ ] Retain an entry, then Pause, logout, or replace the login (test both another account and the same account under a new session). The old entry is retired; a delayed click must not restore an old account's channel workspace.
+- [ ] Exercise enough transitions to reach the 32-entry limit: delivery remains bounded and safely reports failure when full. Dismiss/expire entries and confirm later delivery resumes without replaying suppressed transitions.
+- [ ] Open a second app instance while the first retains a notification. The second reports notifications unavailable and must not clear or take over the first instance's notification; the first entry still activates its original window.
+- [ ] Quit with retained entries and two owned streams: notifications disappear, owned playback and background work exit, and delayed activation cannot relaunch the app. Relaunch and confirm monitoring starts quietly. After a separately controlled forced termination, relaunch and confirm orphaned notification history is removed.
+- [ ] Deny notifications in Windows settings, then re-enable them; verify permission reporting, subsequent delivery, Notification Center activation and tray controls. Record portable-executable behavior separately.
+
+On a Windows development checkout, also run the two native helper tests (isolated kernel-object ownership and bounded COM payload decoding):
+
+```sh
+cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --features test-support desktop::notifications::windows::activation::tests
+```
+
+These helper tests do not replace the installed-artifact checks above. macOS bundle permission, denial/re-enable, notification focus, menu-bar controls and Command-Q acceptance remain separate pending checks on both supported native architectures.
