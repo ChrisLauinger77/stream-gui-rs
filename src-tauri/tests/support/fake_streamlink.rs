@@ -93,9 +93,15 @@ fn main() {
             println!("stdout {n}");
         }
         stderr.join().unwrap();
-        println!("{}", "x".repeat(100_000));
-        println!("Authorization: Bearer DO_NOT_LEAK");
-        println!("last line");
+    } else if url.ends_with("/diagnostics") {
+        for line in [
+            "x".repeat(100_000),
+            "Authorization: Bearer DO_NOT_LEAK".into(),
+            "last line".into(),
+        ] {
+            println!("{line}");
+            eprintln!("{line}");
+        }
     } else if url.ends_with("/hold") || url.ends_with("/holdb") || url.ends_with("/tree") {
         if url.ends_with("/tree") {
             let child = std::process::Command::new(executable)

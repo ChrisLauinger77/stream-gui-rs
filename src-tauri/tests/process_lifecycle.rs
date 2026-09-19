@@ -165,21 +165,53 @@ async fn repeated_concurrent_stop_is_idempotent_and_sessions_are_independent() {
 }
 
 #[tokio::test]
-async fn flood_is_drained_with_bounded_sanitized_logs() {
+async fn flood_is_drained_with_bounded_logs() {
     let supervisor = Supervisor::default();
     let session = supervisor.launch(helper(), request("flood")).await.unwrap();
     let ended = terminal(&supervisor, &session.id).await;
+    assert_eq!(ended.phase, SessionPhase::Exited);
     assert_eq!(ended.exit_code, Some(0));
     assert_eq!(ended.logs.len(), 200);
-    assert!(ended.dropped_log_entries > 7000);
+    // Both 4,000-line pipes must drain completely, but their relative read order
+    // is unspecified. Either pipe can evict the other one's final diagnostics.
+    assert_eq!(ended.dropped_log_entries, 7800);
     assert!(ended.logs.iter().all(|line| line.text.len() <= 2048));
-    assert!(
-        ended
+    assert!(matches!(
+        ended.logs.back().unwrap().text.as_str(),
+        "stdout 3999" | "stderr 3999"
+    ));
+}
+
+#[tokio::test]
+async fn oversized_and_credential_diagnostics_are_suppressed_on_both_pipes() {
+    let supervisor = Supervisor::default();
+    let session = supervisor
+        .launch(helper(), request("diagnostics"))
+        .await
+        .unwrap();
+    let ended = terminal(&supervisor, &session.id).await;
+    assert_eq!(ended.phase, SessionPhase::Exited);
+    assert_eq!(ended.exit_code, Some(0));
+    // Keep this fixture below the retention cap so cross-pipe scheduling cannot
+    // evict evidence of sanitization or make the no-secret assertion vacuous.
+    assert_eq!(ended.dropped_log_entries, 0);
+    assert_eq!(ended.logs.len(), 6);
+    for source in [LogSource::Stdout, LogSource::Stderr] {
+        let lines: Vec<_> = ended
             .logs
             .iter()
-            .any(|line| line.text == "[oversize diagnostic line omitted]")
-    );
-    assert!(ended.logs.iter().any(|line| line.text == "last line"));
+            .filter(|line| line.source == source)
+            .map(|line| line.text.as_str())
+            .collect();
+        assert_eq!(
+            lines,
+            [
+                "[oversize diagnostic line omitted]",
+                "[credential-related diagnostic omitted]",
+                "last line",
+            ]
+        );
+    }
     assert!(
         !serde_json::to_string(&ended)
             .unwrap()
