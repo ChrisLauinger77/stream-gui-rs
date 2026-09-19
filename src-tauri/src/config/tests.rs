@@ -331,10 +331,30 @@ fn bounded_file_and_channel_count_fail_without_overwriting() {
 #[test]
 fn phase_five_migration_is_strict_preserves_channel_preferences_and_defaults_off() {
     let root = tempfile::tempdir().unwrap();
-    let old = serde_json::json!({"version":3,"settings":{"streamlinkPath":null,"player":{"mode":"default","executable":null,"arguments":[]},"defaultQuality":"high","automaticChat":true,"theme":"dark"},"channelOverrides":{"123":{"quality":"audio","automaticChat":false}}});
+    let streamlink = root.path().join("Stream tools/streamlink.exe");
+    let player = root.path().join("Player tools/player.exe");
+    let old = serde_json::json!({"version":3,"settings":{"streamlinkPath":streamlink,"player":{"mode":"custom","executable":player,"arguments":["--volume=20","literal spaces","{literal}",""]},"defaultQuality":"high","automaticChat":true,"theme":"dark"},"channelOverrides":{"123":{"quality":"audio","automaticChat":false},"456":{"quality":null,"automaticChat":true}}});
     let bytes = old.to_string();
     fs::write(root.path().join("settings.json"), &bytes).unwrap();
     let store = SettingsStore::open(root.path()).unwrap();
+    let expected = Settings {
+        streamlink_path: Some(streamlink.to_string_lossy().into_owned()),
+        player: PlayerSettings {
+            mode: crate::streamlink::playback::PlayerMode::Custom,
+            executable: Some(player.to_string_lossy().into_owned()),
+            arguments: vec![
+                "--volume=20".into(),
+                "literal spaces".into(),
+                "{literal}".into(),
+                String::new(),
+            ],
+        },
+        default_quality: QualityPolicy::High,
+        automatic_chat: true,
+        theme: Theme::Dark,
+        background: BackgroundSettings::default(),
+    };
+    assert_eq!(store.snapshot(), expected);
     assert_eq!(store.snapshot().background, BackgroundSettings::default());
     assert_eq!(store.snapshot().theme, Theme::Dark);
     assert_eq!(
@@ -347,6 +367,25 @@ fn phase_five_migration_is_strict_preserves_channel_preferences_and_defaults_off
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
     assert_eq!(persisted["version"], 4);
+    let reopened = SettingsStore::open(root.path()).unwrap();
+    assert_eq!(reopened.snapshot(), expected);
+    for id in ["123", "456"] {
+        assert_eq!(
+            reopened.channel(id).unwrap().overrides,
+            store.channel(id).unwrap().overrides
+        );
+        assert_eq!(reopened.channel(id).unwrap().overrides.notifications, None);
+        assert!(!reopened.notifications(id));
+    }
+    // An incomplete or foreign v3 file must never be silently reset or rewritten.
+    for key in ["player", "defaultQuality", "automaticChat", "theme"] {
+        let mut incomplete = old.clone();
+        incomplete["settings"].as_object_mut().unwrap().remove(key);
+        let original = incomplete.to_string();
+        fs::write(store.path(), &original).unwrap();
+        assert!(SettingsStore::open(root.path()).is_err());
+        assert_eq!(fs::read_to_string(store.path()).unwrap(), original);
+    }
     let mut invalid = old.clone();
     invalid["settings"]["background"] = serde_json::json!({});
     assert!(SettingsDocument::from_json(&invalid.to_string()).is_err());
