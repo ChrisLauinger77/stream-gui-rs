@@ -31,6 +31,7 @@
   "bundle": {
     "active": false,
     "macOS": {
+      "minimumSystemVersion": "11.0",
       "signingIdentity": "-"
     },
     "publisher": "ChrisLauinger77",

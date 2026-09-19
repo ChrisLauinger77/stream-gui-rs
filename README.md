@@ -52,7 +52,7 @@ All platforms need:
 Platform requirements:
 
 - **Windows:** Windows 11 x86_64 and the Microsoft Edge WebView2 Runtime. Windows 11 normally includes WebView2. Streamlink must be a native `streamlink.exe`; batch wrappers are rejected.
-- **macOS:** Apple Silicon or Intel macOS with the system WebKit view and Keychain available. GUI applications can have a smaller `PATH` than Terminal, so select Streamlink/player paths in Settings when discovery does not find them.
+- **macOS:** macOS 11.0 or newer on Apple Silicon or Intel, with the system WebKit view and Keychain available. GUI applications can have a smaller `PATH` than Terminal, so select Streamlink/player paths in Settings when discovery does not find them.
 - **Linux:** an x86_64 desktop, a user D-Bus session, and an unlocked Secret Service provider such as GNOME Keyring or KWallet. The Debian and RPM packages declare their native WebKitGTK and GTK dependencies. The AppImage bundles its application-side GTK/WebKit libraries but intentionally uses the host GLib, Wayland/Mesa, D-Bus, and Secret Service integration.
 
 Secure credential storage is mandatory. There is no plaintext fallback. A locked or unavailable native credential store produces an explicit error.

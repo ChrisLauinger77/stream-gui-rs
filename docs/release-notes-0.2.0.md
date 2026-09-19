@@ -19,7 +19,7 @@ Twitch browsing/search, Streamlink playback, mpv/VLC/custom players, multiple se
 
 Packages: Windows 11 x86_64 installer and portable/Scoop ZIP; Linux x86_64 AppImage, Debian and RPM packages; universal macOS DMG with Apple Silicon and Intel slices. Verify downloads against the accompanying SHA-256 files.
 
-Install Streamlink 8.0+ and an external player separately. Windows needs WebView2; Linux needs GTK/WebKitGTK dependencies, a user D-Bus session and an unlocked Secret Service provider. macOS uses system WebKit and Keychain. Installed builds include the public Twitch client ID; no environment setup or client secret is needed.
+Install Streamlink 8.0+ and an external player separately. Windows needs WebView2; Linux needs GTK/WebKitGTK dependencies, a user D-Bus session and an unlocked Secret Service provider. macOS requires version 11.0 or newer, with system WebKit and Keychain. Installed builds include the public Twitch client ID; no environment setup or client secret is needed.
 
 Upgrades preserve existing playback, chat, theme and channel preferences and retain the same native credential identity. Monitoring, notifications and close-to-background start disabled. Enable them in **Settings → Background** and grant native notification permission where required. The first scan is quiet. Settings saved by 0.2.0 use schema 4, which 0.1.0 cannot read.
 

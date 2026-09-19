@@ -57,6 +57,7 @@ Test all three formats separately on matching supported desktop sessions.
 Artifact: `Stream-GUI-RS_X.Y.Z_macos_universal.dmg`
 
 - [ ] The disk image mounts and contains `Stream GUI RS.app`.
+- [ ] Info.plist declares macOS 11.0 as its minimum, matching the native notification APIs. Record the actual tested macOS version; this metadata check alone does not prove execution on the oldest supported system.
 - [ ] `lipo -archs` reports both `arm64` and `x86_64` for the executable under `Stream GUI RS.app/Contents/MacOS`.
 - [ ] Record the expected Gatekeeper/quarantine behavior for the app without Developer ID signing or notarization.
 - [ ] `codesign --verify --deep --strict --verbose=2 '/Applications/Stream GUI RS.app'` succeeds. The installed bundle has sealed resources and a bound Info.plist, not merely a linker-generated executable signature.

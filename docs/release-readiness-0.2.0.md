@@ -11,9 +11,10 @@ This is release preparation, with no new runtime features, dependency upgrades, 
 | BLOCKER | The existing workflow required a publishing tag to build packages; it could not supply exact packages for pre-release acceptance. | Add manual candidate builds to the same workflow. Tag promotion selects a successful first-attempt candidate from the same commit with an annotated `Candidate-Run` trailer; no rebuild. |
 | SHOULD FIX BEFORE 0.2.0 | Weekly cleanup could remove candidate artifacts after one day despite their declared retention. | Preserve release package artifacts for their existing 30-day retention. Expiry requires rebuilding and retesting. |
 | SHOULD FIX BEFORE 0.2.0 | The v3 migration regression used empty paths/player arguments and did not reopen saved v4 preferences. | Extend the regression with absolute paths containing spaces, literal/empty player arguments, multiple channel overrides, restart persistence and incomplete-v3 rejection. Runtime migration code is unchanged. |
+| BLOCKER | The bundle inherited Tauri's macOS 10.13 minimum despite linking UserNotifications (10.14+) and unconditionally using banner/list presentation (11.0+). | Declare macOS 11.0, update runtime requirements, and verify the packaged minimum/version/identifier. The first candidate at `54aaa3f` was cancelled; all packages must come from the replacement revision. |
 | BLOCKER until verified | Current exact candidate packages need successful builds, content/checksum audits, native Windows/Linux/macOS smoke acceptance and at least one real upgrade with stored login. | Use the run-specific results and [checklist](release-smoke-test.md). Historical development tests do not clear this gate. |
 
-No additional concrete application release blocker was confirmed in this focused source review. This is not proof of native acceptance.
+No further concrete application release blocker was confirmed in this focused source review. Apple's availability metadata for [UNUserNotificationCenter](https://developer.apple.com/documentation/usernotifications/unusernotificationcenter) and [banner presentation](https://developer.apple.com/documentation/usernotifications/unnotificationpresentationoptions/banner) establishes the macOS packaging correction. This is not proof of native acceptance on macOS 11.0.
 
 ## Compatibility and ownership
 
