@@ -20,6 +20,8 @@ First public release.
 
 ARM Linux/Windows packages are deferred. The Windows packages are unsigned and may trigger SmartScreen. The macOS app has no Developer ID signature or notarization and may be blocked by Gatekeeper on first launch. Apple Silicon has been natively validated; the exact universal artifact still requires native Intel validation.
 
+After publication, the Windows portable build is available through the [ChrisLauinger77 Scoop bucket](https://github.com/ChrisLauinger77/scoop-bucket), and the universal macOS build is available through the [ChrisLauinger77 Homebrew tap](https://github.com/ChrisLauinger77/homebrew-cask).
+
 ## Requirements
 
 Install Streamlink 8.0 or newer and a Streamlink-compatible external player. mpv and VLC have built-in discovery. Linux authentication also requires a working Secret Service provider in the desktop session.

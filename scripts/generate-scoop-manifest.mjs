@@ -42,6 +42,16 @@ const manifest = {
   notes: [
     "Install Streamlink 8.0+ and a compatible media player separately.",
   ],
+  checkver: "github",
+  autoupdate: {
+    architecture: {
+      "64bit": {
+        url:
+          "https://github.com/ChrisLauinger77/stream-gui-rs/releases/download/" +
+          "v$version/Stream-GUI-RS_$version_windows_x86_64.zip",
+      },
+    },
+  },
 };
 
 writeFileSync(outputPath, `${JSON.stringify(manifest, null, 2)}\n`);

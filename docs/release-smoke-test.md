@@ -34,7 +34,7 @@ Artifacts: `Stream-GUI-RS_0.1.0_windows_x86_64-setup.exe`, `Stream-GUI-RS_0.1.0_
 - [ ] Streamlink probes and playback start without helper console flashes.
 - [ ] Uninstall succeeds.
 - [ ] The portable ZIP contains `stream-gui-rs.exe`, `LICENSE`, and `README.md` at its root and launches without an installer or console window.
-- [ ] After publication, `scoop install https://github.com/ChrisLauinger77/stream-gui-rs/releases/download/v0.1.0/stream-gui-rs.json` installs the ZIP, creates the Stream GUI RS shortcut, launches, and uninstalls successfully.
+- [ ] After publication, add `https://github.com/ChrisLauinger77/scoop-bucket` as bucket `ChrisLauinger77`; `scoop install ChrisLauinger77/stream-gui-rs` installs the ZIP, creates the Stream GUI RS shortcut, launches, updates, and uninstalls successfully.
 
 ## Linux x86_64
 
@@ -64,3 +64,4 @@ Artifact: `Stream-GUI-RS_0.1.0_macos_universal.dmg`
 - [ ] The same exact disk image runs natively on an Intel Mac.
 - [ ] Keychain persistence, browser sign-in, chat opening, Streamlink discovery, playback, and cleanup pass.
 - [ ] Dragging the app to Applications and removing it both work as expected.
+- [ ] After publication, `brew tap ChrisLauinger77/cask` and `brew install --cask stream-gui-rs` install the same universal DMG from the release, and `brew uninstall --cask stream-gui-rs` succeeds.

@@ -63,11 +63,21 @@ Secure credential storage is mandatory. There is no plaintext fallback. A locked
 6. Open **Settings → Streamlink** to test discovery, then choose and test the player settings.
 7. Browse a live channel and select **Watch**. Use **Watching** to stop or restart sessions.
 
-The Windows release also includes `stream-gui-rs.json` and a portable ZIP. After the GitHub Release is published, Scoop users can install it directly:
+After the GitHub Release and package definitions are published, Scoop users can install the portable Windows build from the author's bucket:
 
 ```powershell
-scoop install https://github.com/ChrisLauinger77/stream-gui-rs/releases/download/v0.1.0/stream-gui-rs.json
+scoop bucket add ChrisLauinger77 https://github.com/ChrisLauinger77/scoop-bucket
+scoop install ChrisLauinger77/stream-gui-rs
 ```
+
+Homebrew users can install the universal macOS build from the author's tap:
+
+```sh
+brew tap ChrisLauinger77/cask
+brew install --cask stream-gui-rs
+```
+
+The Windows release also includes `stream-gui-rs.json` for direct Scoop installation. The bucket and cask definitions are published only after their referenced GitHub Release assets exist.
 
 Official installed builds contain the project's public Twitch application ID. Users do not set environment variables, register an application, or provide a client secret.
 

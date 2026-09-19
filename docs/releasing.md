@@ -14,6 +14,10 @@ Version 0.1.0 uses a candidate-first process. The manual workflow packages an ex
 10. Create annotated tag `v0.1.0` at the approved exact commit and push the tag.
 11. Create a GitHub Release from `v0.1.0`, using `docs/release-notes-0.1.0.md`. Upload the already approved distributables and checksum files extracted from the preserved workflow artifacts. Do not rebuild them.
 12. Download the published assets once, verify their checksums again, and confirm the release page identifies every platform and architecture.
+13. Publish the package-manager definitions only after the assets are available at their final release URLs:
+    - copy the exact generated `stream-gui-rs.json` into `bucket/stream-gui-rs.json` in `ChrisLauinger77/scoop-bucket`, add `stream-gui-rs` to its update workflow and README, then validate installation from that bucket;
+    - add `Casks/stream-gui-rs.rb` to `ChrisLauinger77/homebrew-cask`, using the published universal DMG URL and SHA-256, add it to `config/casks.json`, the workflow's validation list, and the README, then validate installation from that tap.
+14. Dispatch or run each package repository's existing updater once. Confirm future versions are detected from the latest `v<version>` GitHub Release and that each repository's validation succeeds.
 
 ## Artifact contract
 
@@ -23,6 +27,6 @@ The workflow creates these archives for 30 days:
 - `Stream-GUI-RS_0.1.0_linux_x86_64`
 - `Stream-GUI-RS_0.1.0_macos_universal`
 
-Each archive contains only its native distributable files plus one unambiguous checksum file. Windows contains the NSIS installer, a portable ZIP, and a Scoop manifest whose SHA-256 hash points to that ZIP. Linux contains an AppImage, an `amd64.deb`, and an `x86_64.rpm`. macOS contains a universal arm64/x86_64 app in a disk image; the workflow verifies both executable slices with `lipo`. The workflow removes AppImage copies of Wayland and GLib infrastructure libraries that must match the host desktop before generating its checksum. The public Twitch client ID comes only from the repository secret. There is no synthetic release fallback and no client secret.
+Each archive contains only its native distributable files plus one unambiguous checksum file. Windows contains the NSIS installer, a portable ZIP, and a Scoop manifest whose SHA-256 hash points to that ZIP; the manifest also carries the bucket's `checkver` and `autoupdate` metadata. Linux contains an AppImage, an `amd64.deb`, and an `x86_64.rpm`. macOS contains a universal arm64/x86_64 app in a disk image; the workflow verifies both executable slices with `lipo`. The workflow removes AppImage copies of Wayland and GLib infrastructure libraries that must match the host desktop before generating its checksum. The public Twitch client ID comes only from the repository secret. There is no synthetic release fallback and no client secret.
 
 Version 0.1.0 is unsigned on Windows and has no Developer ID signature or notarization on macOS. Apple Silicon bundles may carry an ad-hoc signature. Adding trusted signing later requires its own reviewed credential and workflow design; checksums do not replace platform code signing.
