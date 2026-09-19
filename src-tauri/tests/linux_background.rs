@@ -7,12 +7,28 @@ use std::{
 #[test]
 #[ignore = "requires a graphical Linux session; synthetic isolated services only"]
 fn close_background_restore_reload_and_quit_preserve_then_reap_playback() {
-    for action in ["close", "quit"] {
+    run_scenarios(&["close", "quit"]);
+}
+
+#[test]
+#[ignore = "requires a Wayland graphical session; synthetic isolated services only"]
+fn native_wayland_titlebar_is_compact_and_preserves_window_actions() {
+    run_scenarios(&["titlebar"]);
+}
+
+fn run_scenarios(actions: &[&str]) {
+    for action in actions {
         let directory = tempfile::tempdir().unwrap();
         let marker = directory.path().join("result");
-        let mut child = Command::new("dbus-run-session")
+        let mut command = Command::new("dbus-run-session");
+        if *action == "titlebar" {
+            command
+                .env("GDK_BACKEND", "wayland")
+                .env("GTK_THEME", "Adwaita");
+        }
+        let mut child = command
             .args(["--", env!("CARGO_BIN_EXE_background-smoke")])
-            .args([env!("CARGO_BIN_EXE_fake-streamlink"), action])
+            .args([env!("CARGO_BIN_EXE_fake-streamlink"), *action])
             .arg(&marker)
             .env("XDG_CONFIG_HOME", directory.path().join("config"))
             .env("XDG_DATA_HOME", directory.path().join("data"))

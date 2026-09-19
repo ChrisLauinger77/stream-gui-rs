@@ -3751,6 +3751,7 @@ dependencies = [
  "block2",
  "fs2",
  "gio",
+ "gtk",
  "keyring",
  "libc",
  "objc2",

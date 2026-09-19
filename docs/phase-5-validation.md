@@ -137,3 +137,19 @@ Automated checks on Linux:
 - Tauri debug/custom-protocol no-bundle builds passed with and without the opt-in feature, using the synthetic compile-only public client ID.
 
 No human-visible real-server notification, Twitch request, real playback, Windows/macOS native build or installed-artifact acceptance was performed for this follow-up. The graphical Linux test used the production adapter with a synthetic private server; frontend navigation was tested separately with mocked IPC. Windows Notification Center timeout/history/COM activation and macOS bundle behavior remain manual platform checks, now reachable with the developer action.
+
+## Linux window title-bar follow-up
+
+2026-09-19: compacted the native Wayland title bar and corrected Tao 0.35's above-child event box, which intercepted input to minimize/maximize/close. This follows GTK's documented [EventBox input routing](https://docs.gtk.org/gtk3/method.EventBox.set_above_child.html) and keeps the existing native widgets. There are no tray or web-header changes.
+
+The new ignored `native_wayland_titlebar_is_compact_and_preserves_window_actions` test runs in the existing private-D-Bus fixture, forcing Wayland and Adwaita. It checks the allocated header height (29 logical pixels on this host), removal of the subtitle row, input routing, native maximize/restore, and native Close followed by normal fake-playback reaping. It activates the native minimize button but does not assert OS minimization: this compositor does not report the iconified state used by Tao. Manual pointer clicks, window dragging, other themes/scales and installed `.deb` verification remain acceptance checks. The existing background lifecycle test passed separately on X11.
+
+Both graphical tests passed with the actual packaged frontend and `test-support,custom-protocol,notification-acceptance`. A focused Wayland rerun uses:
+
+```sh
+TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_background --features test-support,custom-protocol,notification-acceptance native_wayland_titlebar -- --ignored
+```
+
+Run `npm run build` first to refresh the embedded frontend. This graphical test requires a Wayland session; the existing background test can be selected separately with `close_background_restore` on X11.
+
+Frontend build and 97 tests, 142 backend unit tests, 28 process tests, build metadata/configuration guards, six desktop unit tests, two isolated browser tests, malformed-settings startup, all-target checking, strict Clippy, formatting and diff checks passed. A normal debug/custom-protocol `.deb` also built with the synthetic compile-only public ID. Windows/macOS execution and manual installed-package pointer/drag checks were not performed.

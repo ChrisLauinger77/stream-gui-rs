@@ -4,7 +4,7 @@ fn main() {
         let args: Vec<_> = std::env::args().collect();
         stream_gui_rs::desktop::run_background_smoke(
             std::path::Path::new(&args[1]),
-            args[2] == "quit",
+            &args[2],
             std::path::Path::new(&args[3]),
         )
         .unwrap();

@@ -8,6 +8,8 @@ use tauri::Manager;
 mod about;
 pub(crate) mod browser;
 mod notifications;
+#[cfg(target_os = "linux")]
+mod titlebar;
 mod tray;
 
 #[derive(Default)]
@@ -36,6 +38,13 @@ fn app_context() -> tauri::Context<tauri::Wry> {
 
 fn build_app() -> tauri::Result<tauri::App> {
     let builder = tauri::Builder::default();
+    #[cfg(target_os = "linux")]
+    let builder = builder.setup(|app| {
+        // Configured windows exist only once Tauri enters setup. A decoration
+        // adjustment must not prevent startup if a future GTK backend differs.
+        let _ = titlebar::configure(app);
+        Ok(())
+    });
     #[cfg(target_os = "macos")]
     let builder = builder.menu(about::menu).on_menu_event(|app, event| {
         if event.id().as_ref() == about::MENU_ID {

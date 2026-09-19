@@ -3,12 +3,15 @@ use super::*;
 use crate::{domain::LaunchRequest, streamlink::SessionPhase};
 use std::{path::Path, time::Duration};
 mod notification_server;
+mod titlebar;
 
 pub fn run(
     helper: &Path,
-    quit: bool,
+    action: &str,
     marker: &Path,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let quit = action == "quit";
+    let titlebar_only = action == "titlebar";
     let directory = tempfile::tempdir()?;
     // No client ID: this fixture cannot open any production credential entry.
     let services = Arc::new(Services::new(directory.path(), None)?);
@@ -33,7 +36,7 @@ pub fn run(
             tauri::async_runtime::spawn(async move {
                 let checked = tokio::time::timeout(
                     Duration::from_secs(20),
-                    scenario(&app, &marker, &notifications),
+                    scenario(&app, &marker, &notifications, titlebar_only),
                 )
                 .await;
                 *result.lock().unwrap() = Some(matches!(checked, Ok(Ok(()))));
@@ -46,7 +49,11 @@ pub fn run(
                         let mut settings = services.settings.snapshot();
                         settings.background.close_to_background = false;
                         services.settings.update(settings).unwrap();
-                        app.get_webview_window("main").unwrap().close().unwrap();
+                        if titlebar_only {
+                            assert!(titlebar::activate(&app, "close").await);
+                        } else {
+                            app.get_webview_window("main").unwrap().close().unwrap();
+                        }
                     }
                 } else {
                     begin_shutdown(&app);
@@ -82,6 +89,7 @@ async fn scenario(
     app: &tauri::AppHandle,
     marker: &Path,
     server: &notification_server::Server,
+    titlebar_only: bool,
 ) -> crate::domain::Result<()> {
     let services = app.state::<Arc<Services>>();
     for channel in ["hold", "holdb"] {
@@ -106,6 +114,15 @@ async fn scenario(
         serde_json::to_string(&ids.iter().map(|(_, pid)| pid).collect::<Vec<_>>()).unwrap(),
     )
     .unwrap();
+    if titlebar_only {
+        titlebar::check_maximize(app).await;
+        assert!(titlebar::activate(app, "minimize").await);
+        // Wayland does not expose an iconified state reliably. Remap before the
+        // close-button check; actual pointer minimize/drag remains manual acceptance.
+        window.hide().unwrap();
+        show_window(app);
+        return Ok(());
+    }
     window.minimize().unwrap();
     wait_until(|| window.is_minimized().unwrap_or(false)).await;
     std::fs::write(marker, "minimized").unwrap();

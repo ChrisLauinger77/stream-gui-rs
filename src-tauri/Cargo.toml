@@ -21,7 +21,7 @@ required-features = ["desktop"]
 
 [features]
 default = ["desktop"]
-desktop = ["dep:tauri", "dep:tauri-build", "dep:webbrowser", "dep:gio", "dep:windows", "dep:windows-core", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:objc2-user-notifications", "dep:block2"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:webbrowser", "dep:gio", "dep:gtk", "dep:windows", "dep:windows-core", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:objc2-user-notifications", "dep:block2"]
 custom-protocol = ["tauri?/custom-protocol"]
 test-support = []
 # Opt-in native notification acceptance controls; build.rs rejects release profiles.
@@ -66,6 +66,8 @@ keyring = { version = "3.6.3", features = ["apple-native"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gio = { version = "0.18", optional = true }
+# Already provided by Tauri; configure its existing native Wayland title bar.
+gtk = { version = "0.18", optional = true }
 keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust"] }
 
 [target.'cfg(unix)'.dependencies]
