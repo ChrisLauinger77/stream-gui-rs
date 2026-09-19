@@ -8,6 +8,7 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
     pub(crate) async fn monitor_followed(
         &self,
         session_id: u64,
+        policy: CachePolicy,
         cancel: &CancellationToken,
     ) -> Result<Vec<Stream>> {
         let lease = self.auth.lease_for_session(session_id).await?;
@@ -36,7 +37,7 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
                     request.query(false)?,
                     true,
                     CacheClass::Live,
-                    CachePolicy::Fresh,
+                    policy,
                     cancel,
                     &mut session,
                 )

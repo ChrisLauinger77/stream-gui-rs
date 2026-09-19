@@ -272,6 +272,13 @@ impl Monitor {
                 } else {
                     MonitorPhase::Baseline
                 };
+                // A new observation boundary must fetch every page after that
+                // boundary. Ordinary scans still share fresh Following pages.
+                let policy = if machine.ready() {
+                    crate::helix::cache::CachePolicy::Fresh
+                } else {
+                    crate::helix::cache::CachePolicy::Refresh
+                };
                 let heartbeat = Mutex::new(self.clock.now());
                 let mut result = tokio::select! {
                     biased;
@@ -280,10 +287,9 @@ impl Monitor {
                     _ = session_cancel.cancelled() => continue,
                     _ = suspend_gap(&self.clock, &heartbeat) => {
                         // A response spanning suspend cannot establish current state.
-                        helix.invalidate(crate::helix::cache::CacheClass::Live);
                         Err(crate::twitch_http::error(ErrorCode::Timeout))
                     },
-                    result = tokio::time::timeout(Duration::from_secs(45), helix.monitor_followed(id, &generation)) => result.unwrap_or_else(|_| Err(crate::twitch_http::error(ErrorCode::Timeout))),
+                    result = tokio::time::timeout(Duration::from_secs(45), helix.monitor_followed(id, policy, &generation)) => result.unwrap_or_else(|_| Err(crate::twitch_http::error(ErrorCode::Timeout))),
                 };
                 if generation.is_cancelled() || session_cancel.is_cancelled() {
                     continue;
@@ -292,7 +298,6 @@ impl Monitor {
                 // A response can wake us before the heartbeat timer after suspend.
                 // Reconcile before accepting it or overwriting the elapsed boundary.
                 if suspend_since(finished, &heartbeat) {
-                    helix.invalidate(crate::helix::cache::CacheClass::Live);
                     result = Err(crate::twitch_http::error(ErrorCode::Timeout));
                 }
                 last_tick = finished;

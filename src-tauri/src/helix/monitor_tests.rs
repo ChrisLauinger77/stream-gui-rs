@@ -27,7 +27,7 @@ async fn monitor_scan_deduplicates_pages_and_reuses_foreground_cache() {
     let (client, _) = client(&server, None).await;
     let id = client.auth.monitor_session().unwrap().0;
     let result = client
-        .monitor_followed(id, &CancellationToken::new())
+        .monitor_followed(id, CachePolicy::Fresh, &CancellationToken::new())
         .await
         .unwrap();
     assert_eq!(result.len(), 2);
@@ -64,7 +64,7 @@ async fn repeated_cursor_partial_failure_and_malformed_identity_never_complete_s
         let (client, _) = client(&server, None).await;
         let id = client.auth.monitor_session().unwrap().0;
         let error = client
-            .monitor_followed(id, &CancellationToken::new())
+            .monitor_followed(id, CachePolicy::Fresh, &CancellationToken::new())
             .await
             .unwrap_err();
         assert!(matches!(
@@ -86,7 +86,11 @@ async fn logout_cancels_scan_between_pages_without_rebinding() {
     let id = client.auth.monitor_session().unwrap().0;
     let pending = {
         let client = client.clone();
-        tokio::spawn(async move { client.monitor_followed(id, &CancellationToken::new()).await })
+        tokio::spawn(async move {
+            client
+                .monitor_followed(id, CachePolicy::Fresh, &CancellationToken::new())
+                .await
+        })
     };
     server.wait_for_requests(1).await;
     client.auth.logout().await.unwrap();
@@ -98,7 +102,7 @@ async fn logout_cancels_scan_between_pages_without_rebinding() {
     assert_eq!(server.requests().len(), 1);
     assert!(
         client
-            .monitor_followed(id, &CancellationToken::new())
+            .monitor_followed(id, CachePolicy::Fresh, &CancellationToken::new())
             .await
             .is_err()
     );
@@ -341,4 +345,85 @@ async fn advance_cycle(monitor: &Monitor) {
     for _ in 0..seconds {
         monitor.test_advance(1).await;
     }
+}
+
+#[tokio::test]
+async fn resume_baseline_bypasses_pre_pause_cache_and_ordinary_scans_reuse_it() {
+    warm_cache_baseline(false).await;
+}
+#[tokio::test]
+async fn suspend_baseline_bypasses_warm_cache_without_global_invalidation() {
+    warm_cache_baseline(true).await;
+}
+async fn warm_cache_baseline(suspend: bool) {
+    let server = Server::new(vec![
+        Reply::json(200, streams(&[("100", "1")], None)),
+        Reply::json(200, streams(&[("100", "1"), ("200", "2")], None)),
+        Reply::json(
+            200,
+            streams(&[("100", "1"), ("200", "2"), ("300", "3")], None),
+        ),
+    ])
+    .await;
+    let (client, _) = client(&server, None).await;
+    let client = Arc::new(client);
+    let root = tempfile::tempdir().unwrap();
+    let settings = Arc::new(SettingsStore::open(root.path()).unwrap());
+    let mut prefs = settings.snapshot();
+    prefs.background.monitoring_enabled = true;
+    prefs.background.notifications_enabled = true;
+    settings.update(prefs).unwrap();
+    let monitor = Arc::new(Monitor::for_test());
+    let sink = Arc::new(Sink::default());
+    monitor.set_sink(sink.clone());
+    monitor.start(client.auth.clone(), client.clone(), settings);
+    phase(&monitor, MonitorPhase::Running).await;
+    let id = client.auth.monitor_session().unwrap().0;
+    let cached = client
+        .monitor_followed(id, CachePolicy::Fresh, &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(cached.len(), 1);
+    assert_eq!(server.requests().len(), 1);
+    if suspend {
+        // Only the monitor clock jumps: the pre-suspend cache deliberately stays
+        // warm, proving baseline policy rather than relying on TTL expiry.
+        monitor.test_advance(3600).await;
+    } else {
+        monitor.pause(true);
+        monitor.test_advance(0).await;
+        monitor.pause(false);
+        monitor.test_advance(0).await;
+    }
+    assert_eq!(server.requests().len(), 2);
+    assert_eq!(monitor.snapshot().live_count, Some(2));
+    assert!(sink.0.lock().unwrap().is_empty());
+    let request = browse::BrowseRequest {
+        session_id: id.to_string(),
+        cursor: None,
+        refresh: false,
+    };
+    let page = client
+        .browse_followed_streams(request.clone(), &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(page.freshness, browse::DataFreshness::Cached);
+    assert_eq!(page.items.len(), 2);
+    // Foreground refresh observes a genuinely later transition; the ordinary
+    // monitor scan may reuse it without another request or a baseline reset.
+    client
+        .browse_followed_streams(
+            browse::BrowseRequest {
+                refresh: true,
+                ..request
+            },
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    advance_cycle(&monitor).await;
+    assert_eq!(server.requests().len(), 3);
+    assert_eq!(sink.0.lock().unwrap().len(), 1);
+    assert_eq!(sink.0.lock().unwrap()[0].broadcaster_id, "3");
+    monitor.shutdown().await;
 }
