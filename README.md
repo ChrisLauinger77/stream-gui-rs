@@ -1,6 +1,8 @@
 # Stream GUI RS
 
 [![Desktop checks](https://github.com/ChrisLauinger77/stream-gui-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ChrisLauinger77/stream-gui-rs/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/github/v/release/ChrisLauinger77/stream-gui-rs)](<>)
+[![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/stream-gui-rs/total.svg)](<>)
 [![GPL-3.0](https://img.shields.io/github/license/ChrisLauinger77/stream-gui-rs)](LICENSE)
 
 <img src="src/assets/app-icon.svg" alt="Stream GUI RS application icon" width="128">
@@ -27,11 +29,11 @@ Stream GUI RS does not bundle Streamlink or a media player. It does not contain 
 
 Published releases provide these native artifacts:
 
-| Platform | Architecture | Artifact | Status |
-| --- | --- | --- | --- |
-| Windows 11 | x86_64 | NSIS installer and portable/Scoop ZIP | Installer and portable package published |
-| Linux | x86_64 | AppImage, Debian `amd64` package, and RPM `x86_64` package | AppImage and Debian package natively tested; RPM installation remains a release check |
-| macOS | Universal (arm64 and x86_64) | Disk image (`.dmg`) containing the universal app | Natively tested on Apple Silicon; native Intel execution remains a release check |
+| Platform   | Architecture                 | Artifact                                                   | Status                                                                                |
+| ---------- | ---------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Windows 11 | x86_64                       | NSIS installer and portable/Scoop ZIP                      | Installer and portable package published                                              |
+| Linux      | x86_64                       | AppImage, Debian `amd64` package, and RPM `x86_64` package | AppImage and Debian package natively tested; RPM installation remains a release check |
+| macOS      | Universal (arm64 and x86_64) | Disk image (`.dmg`) containing the universal app           | Natively tested on Apple Silicon; native Intel execution remains a release check      |
 
 ARM Linux/Windows packages are not currently published. The macOS disk image contains both Apple Silicon and Intel executable slices, but each architecture still requires native exact-artifact validation; cross-compilation alone is not treated as runtime proof.
 
