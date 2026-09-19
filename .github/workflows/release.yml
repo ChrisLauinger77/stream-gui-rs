@@ -15,7 +15,7 @@ concurrency:
 jobs:
   prepare:
     name: Validate release tag
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       version: ${{ steps.metadata.outputs.version }}
     steps:
@@ -40,7 +40,7 @@ jobs:
   linux-x86_64:
     name: Linux x86_64 packages
     needs: prepare
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
@@ -232,7 +232,7 @@ jobs:
   publish:
     name: Publish GitHub Release
     needs: [prepare, linux-x86_64, windows-x86_64, macos-universal]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       actions: read
       contents: write
@@ -293,7 +293,7 @@ jobs:
   update-package-repositories:
     name: Request package repository updates
     needs: publish
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     env:
       GH_TOKEN: ${{ secrets.PACKAGE_REPOSITORIES_TOKEN }}
     steps:
