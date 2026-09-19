@@ -25,7 +25,7 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Opt-in followed-stream monitoring, desktop notifications, and per-channel notification preferences
 - Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
 
-Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. The background features described here are development changes after v0.1.0; published v0.1.0 packages retain their original close-to-exit behavior.
+Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. Background features are included in the upcoming 0.2.0 release; published v0.1.0 packages retain their original close-to-exit behavior.
 
 ## Downloads and platform support
 
@@ -107,11 +107,11 @@ Notification clicks restore the app and select the channel while the original si
 - **Windows:** native toast notifications use the application's installed identity. After a banner times out, its Notification Center entry remains actionable for up to 15 minutes while the app and original monitoring/sign-in session remain active. Pause, logout and Quit retire those entries; notification clicks cannot reopen the app after Quit. Use the installer and its Start-menu shortcut for notification testing; an unregistered portable executable may not support delivery/activation. Installed Notification Center behavior still needs the [native acceptance checks](docs/release-smoke-test.md#windows-notification-center-acceptance).
 - **macOS:** allow notifications explicitly in Settings, then manage denial in macOS System Settings. Notifications require an installed, correctly signed app bundle; a bare development executable reports unavailable. Authorization failures remain visible and can be retried after correcting the installation. See the [notification acceptance guide](docs/notification-acceptance.md) if no permission prompt appears.
 
-See [Phase 5 validation](docs/phase-5-validation.md) for automated evidence and outstanding native platform checks.
+See the [0.2.0 release checks](docs/release-readiness-0.2.0.md) for validation scope and native acceptance requirements.
 
 ## Current limitations
 
-The development tree does not provide embedded video/chat, external chat applications, advanced Streamlink transports or player profiles, an updater, or legacy configuration import. Active sessions and logs are not persisted. See [architecture](docs/architecture.md) for the detailed contracts.
+Stream GUI RS does not provide embedded video/chat, external chat applications, advanced Streamlink transports or player profiles, an updater, or legacy configuration import. Monitoring stops when the application is fully quit. Active sessions and logs are not persisted. See [architecture](docs/architecture.md) for the detailed contracts.
 
 ## Building from source
 

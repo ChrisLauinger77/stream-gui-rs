@@ -1,14 +1,14 @@
 # Release artifact smoke test
 
-Use only the files downloaded from one published tag-driven release. Record the release URL, tag, exact 40-character commit SHA, artifact names, tester, date, OS version, Streamlink version, and player version. Do not rebuild or substitute files after testing.
+Before publication, use only files downloaded from one successful manual Release candidate run. Record its URL, run ID, exact 40-character commit SHA, SHA-256 files, artifact names, tester, date, OS version/architecture, Linux distribution/desktop/session, Streamlink version and player version. After publication, verify that downloads have those same checksums. Do not rebuild or substitute files after testing.
 
 ## Integrity and common checks
 
-- [ ] The release tag points to the intended release commit.
+- [ ] The candidate run identifies the intended commit and version. No tag is needed for candidate testing.
 - [ ] Every downloaded filename identifies the release version, platform, and architecture.
 - [ ] `SHA256SUMS_<platform>_<architecture>.txt` verifies every distributable in its artifact archive.
 - [ ] Install or open the package without setting `TWITCH_CLIENT_ID` or `TWITCH_CLIENT_ID_BUILD`.
-- [ ] The application identifies itself as Stream GUI RS X.Y.Z where version metadata is shown.
+- [ ] The application identifies itself as Stream GUI RS X.Y.Z and the expected short commit in diagnostics; macOS About matches.
 - [ ] Connect to Twitch through the browser Device Code flow.
 - [ ] Quit and relaunch; the authenticated session restores from native secure storage.
 - [ ] Following, Live, Categories, Search, and channel details load real Twitch data.
@@ -68,7 +68,7 @@ Artifact: `Stream-GUI-RS_X.Y.Z_macos_universal.dmg`
 - [ ] Dragging the app to Applications and removing it both work as expected.
 - [ ] After publication, `brew tap ChrisLauinger77/cask` and `brew install --cask stream-gui-rs` install the same universal DMG from the release, and `brew uninstall --cask stream-gui-rs` succeeds.
 
-## Phase 5 background behavior (releases containing Phase 5)
+## Background behavior (0.2.0 and later)
 
 - [ ] Upgrade a version 3 settings file; playback/theme/channel preferences survive and monitoring, notifications and background close default off.
 - [ ] Enable monitoring/notifications, grant permission where requested, and confirm the initial live list is quiet.
@@ -88,9 +88,9 @@ Synthetic native fixtures and cross-target API checks do not substitute for thes
 
 ### Windows Notification Center acceptance
 
-Run against the installed Windows artifact, launched from its Start-menu shortcut. These checks remain pending; Linux policy tests and Windows source/API checks do not verify the shell's activation behavior.
+Run against the exact installed Windows candidate, launched from its Start-menu shortcut. Linux policy tests and Windows source/API checks do not verify the shell's activation behavior.
 
-The [development-only notification trigger](notification-acceptance.md) lets an installed debug build exercise delivery, natural banner timeout, retained activation and cleanup without waiting for Twitch. Use its synthetic target for those checks; retain real-stream/account checks below for monitor/session acceptance and repeat release acceptance against the exact released artifact.
+The [development-only notification trigger](notification-acceptance.md) lets an installed debug build exercise delivery, natural banner timeout, retained activation and cleanup without waiting for Twitch. Use its synthetic target for those checks; retain real-stream/account checks below for monitor/session acceptance and repeat release acceptance against the exact release candidate using a real followed-channel transition. The synthetic control must remain absent from normal release packages; a separate debug acceptance package is supporting evidence only.
 
 - [ ] Confirm the notification's Stream GUI RS identity/icon and the matching entry in Windows notification settings. Enable monitoring and notifications; let the initial baseline complete quietly.
 - [ ] Observe a new followed stream, let its banner time out naturally, and confirm its entry remains in Notification Center. Hide/minimize the app, then click that retained entry within 15 minutes: the app restores/focuses and selects the correct channel exactly once, with no playback launch.
@@ -109,3 +109,23 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --features test-s
 ```
 
 These helper tests do not replace the installed-artifact checks above. macOS bundle permission, denial/re-enable, notification focus, menu-bar controls and Command-Q acceptance remain separate pending checks on both supported native architectures.
+
+## Upgrade from 0.1.0 and result record
+
+At least one real native upgrade is required before approval. Quit 0.1.0 normally with a stored Twitch login and representative playback paths/arguments, quality, channel overrides, browser-chat preference and theme. Install the candidate over it without clearing settings or credential storage. Confirm automatic sign-in and unchanged preferences, new background options off, working playback, and persistence after Quit/relaunch. Never copy or print credentials. Migration stays in memory until the next settings save; that save writes schema 4. Downgrading to 0.1.0 after saving schema 4 is not supported.
+
+Record every row as **PASS**, **FAIL** or **NOT TESTED**, with the artifact name/hash and environment. Record Debian/RPM/AppImage and macOS architectures separately where tested; one desktop cannot establish universal Linux parity.
+
+| Native gate | Windows | Linux | macOS |
+| --- | --- | --- | --- |
+| Install/startup and version/commit | NOT TESTED | NOT TESTED | NOT TESTED |
+| Existing login and settings upgrade | NOT TESTED | NOT TESTED | NOT TESTED |
+| Real browsing/playback, Stop/Restart, two sessions | NOT TESTED | NOT TESTED | NOT TESTED |
+| Notification permission/delivery/click and retention | NOT TESTED | NOT TESTED | NOT TESTED |
+| Tray/menu-bar, Pause/Resume and background close | NOT TESTED | NOT TESTED | NOT TESTED |
+| Hidden playback and restored Watching state | NOT TESTED | NOT TESTED | NOT TESTED |
+| Sleep/network recovery and quiet baseline | NOT TESTED | NOT TESTED | NOT TESTED |
+| Browser chat, explicit Quit and owned-process cleanup | NOT TESTED | NOT TESTED | NOT TESTED |
+| Relaunch persistence | NOT TESTED | NOT TESTED | NOT TESTED |
+
+This table is a blank checklist, not a claim about a candidate. Store completed results with the candidate run identity without changing its source commit. Any post-test source change requires a new candidate.
