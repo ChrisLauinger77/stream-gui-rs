@@ -1203,3 +1203,6 @@ async fn access_expiry_during_suspend_refreshes_before_issuing_a_lease() {
     );
     assert_eq!(service.status().await.phase, AuthPhase::Authenticated);
 }
+
+#[path = "monitor_tests.rs"]
+mod monitor_tests;

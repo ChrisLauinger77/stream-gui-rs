@@ -212,7 +212,7 @@ impl Monitor {
         settings: Arc<SettingsStore>,
     ) {
         let mut machine = state::Transitions::default();
-        let mut session = None;
+        let mut session: Option<(u64, CancellationToken)> = None;
         let mut generation = CancellationToken::new();
         let mut next = Duration::ZERO;
         let mut last_tick = self.clock.now();
@@ -232,9 +232,17 @@ impl Monitor {
             last_tick = now;
             let identity = auth.monitor_session();
             let id = identity.as_ref().map(|(id, _)| *id);
-            if id != session {
+            // Auth validation may temporarily hide public identity without ending
+            // the session. Its cancellation token, not availability, ends history.
+            if identity
+                .as_ref()
+                .is_some_and(|(id, _)| session.as_ref().map(|(previous, _)| previous) != Some(id))
+                || session
+                    .as_ref()
+                    .is_some_and(|(_, cancel)| cancel.is_cancelled())
+            {
                 machine = state::Transitions::default();
-                session = id;
+                session = identity.clone();
                 next = now;
                 failures = 0;
             }
