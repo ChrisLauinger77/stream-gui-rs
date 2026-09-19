@@ -226,7 +226,8 @@ user.
   secure-store entries. HTTP tests need loopback access. Temporary adversarial probes may aid review; retain
   regressions for confirmed bugs.
 
-Run commands from the repository root. Setup is `npm ci`, stable Rust and Node.js 22.12+ (CI uses Node 22),
+Run commands from the repository root. Setup is `npm ci`, stable Rust and Node.js 22.22.2+, 24.15.0+, or
+26+ (CI uses Node 24),
 plus the native prerequisites in README. There is one Cargo package at `src-tauri/Cargo.toml`, not a root
 Cargo workspace.
 

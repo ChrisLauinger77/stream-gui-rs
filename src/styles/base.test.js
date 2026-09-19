@@ -32,7 +32,7 @@ test("primary hover explicitly retains a readable palette in dark and light them
 test("button hover keeps non-primary styling, disabled opacity and visible focus", () => {
   const styles = rules();
   expect(styles.find(rule => rule.selectorText === "button:hover:enabled").style.background).toBe("var(--raised)");
-  expect(styles.find(rule => rule.selectorText === "button:disabled").style.opacity).toBe(".5");
+  expect(Number(styles.find(rule => rule.selectorText === "button:disabled").style.opacity)).toBe(0.5);
   const focus = styles.find(rule => rule.selectorText === ":focus-visible");
   expect(focus.style.outline).toBe("2px solid var(--focus)"); expect(focus.style.getPropertyValue("outline-offset")).toBe("3px");
 });
