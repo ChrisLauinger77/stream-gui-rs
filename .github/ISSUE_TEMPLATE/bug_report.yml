@@ -1,0 +1,152 @@
+name: Bug report
+description: Report a reproducible problem with Stream GUI RS
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem! Please search [existing issues](https://github.com/ChrisLauinger77/stream-gui-rs/issues?q=is%3Aissue) first and try the [latest release](https://github.com/ChrisLauinger77/stream-gui-rs/releases/latest) where practical.
+        This report is public. Never paste Twitch OAuth tokens, credentials, device codes or other secrets.
+  - type: checkboxes
+    id: existing-issues
+    attributes:
+      label: Existing issues
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+  - type: input
+    id: build
+    attributes:
+      label: Stream GUI RS version / build
+      description: Copy the version and commit exactly as shown in About on macOS or Settings → Developer tools → Backend diagnostics on any platform.
+      placeholder: 0.2.0 (c0bbb61)
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS version and environment
+      description: >-
+        Include OS version and architecture; on Linux, also include desktop and Wayland/X11.
+        Examples (not support guarantees): Debian 14 (forky), GNOME, Wayland, x86_64;
+        macOS 27, Apple Silicon; Windows 11 24H2, x86_64.
+    validations:
+      required: true
+  - type: dropdown
+    id: package
+    attributes:
+      label: Installation / package type
+      description: If you select Other, describe it in the additional context field.
+      options:
+        - Windows installer (NSIS)
+        - Windows portable ZIP / Scoop
+        - Linux DEB
+        - Linux RPM
+        - Linux AppImage
+        - macOS DMG / Homebrew cask
+        - Built from source
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Twitch authentication
+        - Browsing / search
+        - Playback / Streamlink
+        - Player integration
+        - Settings
+        - Notifications
+        - Tray / background behavior
+        - Browser chat
+        - Keyboard / accessibility
+        - Installation / packaging
+        - Upgrade / release downloads
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: List the smallest sequence that triggers the problem, including whether it happens every time.
+      placeholder: |
+        1. Open…
+        2. Select…
+        3. Observe…
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: input
+    id: streamlink
+    attributes:
+      label: Streamlink version and installation method
+      description: Strongly recommended for playback problems. Use the detected version in diagnostics or run `streamlink --version`; mention how you installed it.
+      placeholder: Streamlink 8.5.0, installed with pipx
+  - type: dropdown
+    id: player
+    attributes:
+      label: Player
+      description: Optional for problems unrelated to playback.
+      options:
+        - mpv
+        - VLC
+        - Streamlink/default
+        - Custom
+        - Not applicable
+  - type: input
+    id: player-version
+    attributes:
+      label: Player version
+      description: If relevant, include the version and the player name if you selected Custom.
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Did this work in an earlier Stream GUI RS version?
+      options:
+        - "Yes"
+        - "No"
+        - Not sure
+        - First version I tried
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics / logs
+      description: >-
+        Paste only relevant output. Stream GUI RS diagnostics are designed to avoid credentials,
+        but review everything before submitting. DO NOT include Twitch OAuth access tokens,
+        refresh tokens, credentials, private keys or passwords. Remove device codes and private
+        personal information too.
+      render: text
+  - type: textarea
+    id: context
+    attributes:
+      label: Screenshots / additional context
+      description: Drag images into this field if helpful, after removing private details. Include the last known working version or other installation details where relevant.
