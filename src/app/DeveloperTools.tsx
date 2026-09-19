@@ -94,7 +94,7 @@ export function DeveloperTools() {
     {!isTauri() && <p className="notice">Browser preview only. Backend controls require the desktop app: <code>npm run tauri dev</code>.</p>}
     {error && <p role="alert" className="error">{error}</p>}
     <Panel title="Backend">
-      <p>{backend ? `Ready · ${backend.version} · ${backend.platform}` : "Not connected"}</p>
+      <p>{backend ? `Ready · ${backend.version} (${backend.commit}) · ${backend.platform}` : "Not connected"}</p>
       {backend && <p className="muted path">Settings: {backend.settingsPath}</p>}
     </Panel>
     <Authentication status={auth} account={account} busy={pending.has("auth")}

@@ -7,6 +7,7 @@ use ts_rs::TS;
 pub struct BackendDiagnostics {
     pub name: String,
     pub version: String,
+    pub commit: String,
     pub platform: String,
     pub settings_path: String,
     pub settings: Settings,

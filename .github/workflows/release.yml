@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  STREAM_GUI_RS_COMMIT: ${{ github.sha }}
+
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false

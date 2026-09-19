@@ -4,6 +4,8 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use tauri::Manager;
+#[cfg(target_os = "macos")]
+mod about;
 pub(crate) mod browser;
 mod notifications;
 mod tray;
@@ -24,7 +26,14 @@ impl crate::domain::chat::ChatOpener for NativeChatOpener {
 }
 
 fn build_app() -> tauri::Result<tauri::App> {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(about::menu).on_menu_event(|app, event| {
+        if event.id().as_ref() == about::MENU_ID {
+            about::show(app);
+        }
+    });
+    builder
         .invoke_handler(tauri::generate_handler![
             commands::desktop_status,
             commands::pause_monitor,

@@ -41,7 +41,7 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.resetAllMocks();
   vi.mocked(api.diagnostics).mockResolvedValue({
-    name: "Stream GUI RS", version: "0.1.0", platform: "test", settingsPath: "settings.json",
+    name: "Stream GUI RS", version: "0.1.0", commit: "a1b2c3d", platform: "test", settingsPath: "settings.json",
     settings: { background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" }, authConfigured: true,
   });
   vi.mocked(api.authStatus).mockResolvedValue(signedOut);
@@ -56,6 +56,10 @@ afterEach(async () => {
   await act(async () => { root.unmount(); });
   container.remove();
   vi.useRealTimers();
+});
+
+test("diagnostics display the application version and build commit", () => {
+  expect(container.textContent).toContain("Ready · 0.1.0 (a1b2c3d) · test");
 });
 
 test("Stop stays available during OAuth and only disables its own session", async () => {

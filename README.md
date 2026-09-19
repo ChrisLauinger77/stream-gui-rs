@@ -137,6 +137,8 @@ TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --no-bundle --f
 
 No client secret is used. The build fails if a distribution build has no valid embedded public ID. See [authentication](docs/authentication.md) for configuration precedence and PowerShell examples.
 
+Builds embed a seven-character lowercase Git commit in native macOS About and backend diagnostics. CI/release jobs set `STREAM_GUI_RS_COMMIT` to GitHub's exact checkout SHA (including the merge commit for pull-request checks). Local builds use Git HEAD at build time when available; source archives or invalid metadata show `unknown`. An explicit variable takes precedence over local Git and accepts 7–64 hexadecimal characters. No Git installation or source checkout is needed at runtime. Local uncommitted changes are not reflected by a dirty suffix; the identifier describes HEAD. Normal users need no configuration, and application versioning still uses the existing release metadata.
+
 Run the project checks from the repository root:
 
 ```sh

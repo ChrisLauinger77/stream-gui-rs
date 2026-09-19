@@ -21,7 +21,7 @@ required-features = ["desktop"]
 
 [features]
 default = ["desktop"]
-desktop = ["dep:tauri", "dep:tauri-build", "dep:webbrowser", "dep:gio", "dep:windows", "dep:windows-core", "dep:objc2", "dep:objc2-foundation", "dep:objc2-user-notifications", "dep:block2"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:webbrowser", "dep:gio", "dep:windows", "dep:windows-core", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:objc2-user-notifications", "dep:block2"]
 custom-protocol = ["tauri?/custom-protocol"]
 test-support = []
 
@@ -56,7 +56,9 @@ fs2 = "0.4"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", optional = true }
 block2 = { version = "0.6", optional = true }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSBundle", "NSError", "NSObject", "NSString"], optional = true }
+# Tauri's string-only About credits cannot carry a clickable macOS link.
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSAttributedString"], optional = true }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSAttributedString", "NSBundle", "NSDictionary", "NSError", "NSObject", "NSString"], optional = true }
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSettings", "UNNotificationTrigger"], optional = true }
 keyring = { version = "3.6.3", features = ["apple-native"] }
 

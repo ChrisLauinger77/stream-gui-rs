@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Show the build commit and a clickable repository link in the native macOS About panel, and include the commit in backend diagnostics.
+
 ## 0.1.0 - 2026-09-19
 
 First public release.

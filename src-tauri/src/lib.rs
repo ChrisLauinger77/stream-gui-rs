@@ -1,3 +1,4 @@
+pub mod build_info;
 pub mod config;
 pub mod credentials;
 pub mod diagnostics;

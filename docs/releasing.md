@@ -34,4 +34,6 @@ For version `X.Y.Z`, the workflow publishes:
 
 The Windows manifest hashes the portable ZIP and carries Scoop `checkver` and `autoupdate` metadata. The macOS workflow verifies both `arm64` and `x86_64` executable slices with `lipo`. The Linux workflow removes AppImage copies of Wayland and GLib infrastructure libraries that must match the host desktop. The public Twitch client ID comes only from `TWITCH_CLIENT_ID_BUILD`; releases have no synthetic fallback and use no client secret.
 
+Release and Desktop checks workflows pass `${{ github.sha }}` as `STREAM_GUI_RS_COMMIT` to every build, including the binary reused by Windows smoke-test packaging. The build script validates and embeds its first seven hexadecimal characters; it does not derive release identity from a branch name or working-tree state. The existing version synchronization and Twitch client-ID handling are unchanged. See [build metadata](../README.md#building-from-source) for the local/source-archive fallback.
+
 Windows packages remain unsigned, and macOS packages have no Developer ID signature or notarization. Adding trusted signing requires its own reviewed credential and workflow design; checksums do not replace platform signing.

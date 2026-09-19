@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # For pull requests this is the checked-out merge commit, not the branch head.
+  STREAM_GUI_RS_COMMIT: ${{ github.sha }}
+
 jobs:
   check:
     strategy:
@@ -46,6 +50,9 @@ jobs:
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features test-support
       - name: Desktop Rust checks
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support
+      - name: Native macOS About metadata
+        if: runner.os == 'macOS'
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --features test-support desktop::about::tests
       - name: Linux browser dispatch and launcher cleanup
         if: runner.os == 'Linux'
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_browser_open --features test-support

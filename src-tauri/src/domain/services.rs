@@ -156,7 +156,8 @@ impl Services {
     pub fn diagnostics(&self) -> BackendDiagnostics {
         BackendDiagnostics {
             name: "Stream GUI RS".into(),
-            version: env!("CARGO_PKG_VERSION").into(),
+            version: crate::build_info::VERSION.into(),
+            commit: crate::build_info::COMMIT.into(),
             platform: format!("{} / {}", std::env::consts::OS, std::env::consts::ARCH),
             settings_path: self.settings.path().to_string_lossy().into_owned(),
             settings: self.settings.snapshot(),
