@@ -60,7 +60,7 @@ Artifact: `Stream-GUI-RS_X.Y.Z_macos_universal.dmg`
 - [ ] `lipo -archs` reports both `arm64` and `x86_64` for the executable under `Stream GUI RS.app/Contents/MacOS`.
 - [ ] Record the expected Gatekeeper/quarantine behavior for the app without Developer ID signing or notarization.
 - [ ] After the tester explicitly allows it, the app starts without terminal environment variables.
-- [ ] Finder reports version 0.1.0 and the same exact disk image runs natively on Apple Silicon.
+- [ ] Finder reports version X.Y.Z and the same exact disk image runs natively on Apple Silicon.
 - [ ] The same exact disk image runs natively on an Intel Mac.
 - [ ] Keychain persistence, browser sign-in, chat opening, Streamlink discovery, playback, and cleanup pass.
 - [ ] Dragging the app to Applications and removing it both work as expected.
