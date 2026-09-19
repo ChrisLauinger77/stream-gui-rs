@@ -110,11 +110,20 @@ fn local_git_metadata_tracks_packed_and_new_loose_refs() {
         "cargo:rustc-env=STREAM_GUI_RS_BUILD_COMMIT={}\n",
         &first[..7]
     )));
-    for path in ["HEAD", "packed-refs", "refs"] {
-        assert!(stdout.contains(&format!(
-            "cargo:rerun-if-changed={}\n",
-            root.join(".git").join(path).display()
-        )));
+    // Git may return forward slashes inside a Windows path. Compare path
+    // components rather than requiring the platform's exact separator spelling.
+    let watched_paths: Vec<_> = stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix("cargo:rerun-if-changed="))
+        .map(Path::new)
+        .collect();
+    for name in ["HEAD", "packed-refs", "refs"] {
+        let expected = root.join(".git").join(name);
+        assert!(
+            watched_paths.contains(&expected.as_path()),
+            "missing watch for {} in {watched_paths:?}",
+            expected.display()
+        );
     }
     let packed = std::fs::read(root.join(".git/packed-refs")).unwrap();
     git(&["commit", "--allow-empty", "-qm", "second synthetic commit"]);
