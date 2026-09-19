@@ -36,6 +36,7 @@ struct RequestSession {
     id: u64,
     user_id: String,
     cancel: CancellationToken,
+    background: bool,
 }
 
 // One canonical key for network requests and cross-view reuse of fresh pages.
@@ -117,6 +118,7 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
                 id: lease.session_id,
                 user_id: lease.user_id.clone(),
                 cancel: lease.cancel.clone(),
+                background: false,
             });
             if lease.cancel.is_cancelled() {
                 return Err(error(ErrorCode::Unauthenticated));
@@ -149,7 +151,7 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
                 biased;
                 _ = cancel.cancelled() => return Err(error(ErrorCode::Cancelled)),
                 _ = lease.cancel.cancelled() => return Err(error(ErrorCode::Unauthenticated)),
-                result = self.http.get(endpoint, &query, &lease.client_id, &lease.token, cancel) => result,
+                result = self.http.get_with_priority(endpoint, &query, &lease.client_id, &lease.token, cancel, session.as_ref().is_some_and(|s| s.background)) => result,
             };
             match response {
                 Err(error) if error.code == ErrorCode::Unauthenticated && attempt == 0 => {

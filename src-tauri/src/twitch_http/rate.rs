@@ -51,6 +51,13 @@ impl RateLimiter {
             .clone()
     }
     pub async fn reserve(self: &Arc<Self>, cancel: &CancellationToken) -> Result<Reservation> {
+        self.reserve_with_priority(cancel, false).await
+    }
+    pub(crate) async fn reserve_with_priority(
+        self: &Arc<Self>,
+        cancel: &CancellationToken,
+        background: bool,
+    ) -> Result<Reservation> {
         loop {
             // Register before examining state so a completed request cannot
             // notify between unlocking the budget and registering our waiter.
@@ -72,6 +79,23 @@ impl RateLimiter {
                     .snapshot
                     .remaining
                     .map_or(budget.snapshot.in_flight == 0, |n| n > 0);
+                // Background work never queues ahead of browsing or consumes the
+                // last tenth of a known window (at least one, at most 50 points).
+                // Unknown/reset windows still allow one conservative probe.
+                if background
+                    && (!available
+                        || budget.snapshot.in_flight >= 3
+                        || budget.snapshot.remaining.is_some_and(|n| {
+                            n <= budget
+                                .snapshot
+                                .limit
+                                .unwrap_or(10)
+                                .div_ceil(10)
+                                .clamp(1, 50)
+                        }))
+                {
+                    return Err(crate::twitch_http::error(ErrorCode::RateLimited));
+                }
                 if available && budget.snapshot.in_flight < 4 {
                     if let Some(remaining) = &mut budget.snapshot.remaining {
                         *remaining -= 1;
@@ -245,5 +269,73 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(start.elapsed(), Duration::from_secs(30));
+    }
+}
+
+#[cfg(test)]
+mod background_tests {
+    use super::*;
+    #[tokio::test(start_paused = true)]
+    async fn background_yields_low_budget_and_capacity_then_can_probe_after_sleep() {
+        let clock = Clock::for_test();
+        let rate = Arc::new(RateLimiter {
+            clock: clock.clone(),
+            ..Default::default()
+        });
+        let cancel = CancellationToken::new();
+        let mut headers = HeaderMap::new();
+        headers.insert("ratelimit-limit", "100".parse().unwrap());
+        headers.insert("ratelimit-remaining", "10".parse().unwrap());
+        headers.insert("ratelimit-reset", "1800000060".parse().unwrap());
+        rate.observe(&headers, false);
+        assert_eq!(
+            rate.reserve_with_priority(&cancel, true)
+                .await
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::RateLimited
+        );
+        let foreground = rate.reserve(&cancel).await.unwrap();
+        assert_eq!(rate.snapshot().remaining, Some(9));
+        drop(foreground);
+        clock.advance_wall(Duration::from_secs(61));
+        let background = rate.reserve_with_priority(&cancel, true).await.unwrap();
+        assert!(rate.snapshot().remaining.is_none());
+        assert_eq!(
+            rate.reserve_with_priority(&cancel, true)
+                .await
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::RateLimited
+        );
+        headers.insert("ratelimit-reset", "1800000120".parse().unwrap());
+        headers.insert("ratelimit-remaining", "99".parse().unwrap());
+        rate.observe(&headers, false);
+        let first = rate.reserve(&cancel).await.unwrap();
+        let second = rate.reserve(&cancel).await.unwrap();
+        assert_eq!(
+            rate.reserve_with_priority(&cancel, true)
+                .await
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::RateLimited
+        );
+        let third = rate.reserve(&cancel).await.unwrap();
+        assert_eq!(rate.snapshot().in_flight, 4);
+        drop((background, first, second, third));
+        rate.observe(&HeaderMap::new(), true);
+        assert_eq!(
+            rate.reserve_with_priority(&cancel, true)
+                .await
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::RateLimited
+        );
+        tokio::time::advance(Duration::from_secs(60)).await;
+        assert!(rate.reserve_with_priority(&cancel, true).await.is_ok());
     }
 }

@@ -46,6 +46,7 @@ impl TwitchHttp {
         Self::build(base, &format!("{base}/helix/"), timeout).unwrap()
     }
 
+    #[cfg(test)]
     pub(crate) async fn get(
         &self,
         endpoint: &str,
@@ -53,6 +54,19 @@ impl TwitchHttp {
         client_id: &str,
         token: &str,
         cancel: &CancellationToken,
+    ) -> Result<Vec<u8>> {
+        self.get_with_priority(endpoint, query, client_id, token, cancel, false)
+            .await
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn get_with_priority(
+        &self,
+        endpoint: &str,
+        query: &[(String, String)],
+        client_id: &str,
+        token: &str,
+        cancel: &CancellationToken,
+        background: bool,
     ) -> Result<Vec<u8>> {
         // Endpoint is selected by Rust endpoint methods, never by IPC input.
         let mut url = self
@@ -64,7 +78,7 @@ impl TwitchHttp {
             .map_err(|_| error(ErrorCode::Unauthenticated))?;
         authorization.set_sensitive(true);
         for attempt in 0..2 {
-            let reservation = self.rate.reserve(cancel).await?;
+            let reservation = self.rate.reserve_with_priority(cancel, background).await?;
             let response = tokio::select! {
                 biased;
                 _ = cancel.cancelled() => return Err(error(ErrorCode::Cancelled)),

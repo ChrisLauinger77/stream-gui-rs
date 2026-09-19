@@ -214,6 +214,7 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
             id,
             user_id: lease.user_id,
             cancel: lease.cancel,
+            background: false,
         }))
     }
     async fn browse_stream_page(
