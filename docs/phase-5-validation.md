@@ -122,3 +122,18 @@ The cumulative `451b532..HEAD` implementation was inspected again for monitor co
 All test-owned playback/app processes exited; the graphical fixture checked recorded child PIDs, and a final host process-name check found no Stream GUI RS, background-smoke or fake-Streamlink process. Tests used temporary configuration and synthetic credentials; personal preferences and secure-store entries were not changed, so no restoration was needed. Temporary settings were cleaned up by their fixtures.
 
 Windows still requires an installed-artifact build/run and the full Notification Center acceptance procedure linked above. macOS still requires installed-bundle notification permission/denial/re-enable, click focus, menu-bar controls and Command-Q cleanup on Apple Silicon and Intel. The earlier Linux real-service/desktop-variant gaps remain. No push, release, history rewrite or Phase 6 work was performed.
+
+## Development-only notification acceptance follow-up
+
+2026-09-19: added the opt-in debug/test `notification-acceptance` feature and [manual platform procedure](notification-acceptance.md). The fixed test target uses production native delivery and activation without Helix or monitor transitions. Normal builds omit the command and capability; the actual build-script regression rejects the feature in release/non-debug profiles, including configurations with debugging enabled.
+
+Automated checks on Linux:
+
+- Frontend build/type checking and 97 tests passed, including signed-out send/clear, native-action routing from Developer tools, acknowledgement/remount guards and rejection of disabled/non-test targets.
+- Backend suite: 142 unit tests, 28 process lifecycle tests, two build-metadata tests and the build-script configuration regression passed; generated TypeScript matches Rust.
+- Desktop tests: six passed in the default configuration; nine with `test-support,notification-acceptance`, including the real generated capability's local-main/remote access restrictions and Windows timeout/consume/test-only cancellation behavior.
+- All-target check and Clippy with warnings denied passed with and without `notification-acceptance`; rustfmt and diff whitespace checks passed.
+- The two Linux browser regressions and graphical startup regression passed. The graphical background regression passed both close and Quit scenarios with `test-support,notification-acceptance`: private D-Bus delivery of the fixed test, restore, synthetic action, acknowledgement, native cancellation cleanup, unchanged monitor/settings snapshots, and existing fake-process cleanup. Expected private-bus portal/GVFS warnings did not fail assertions.
+- Tauri debug/custom-protocol no-bundle builds passed with and without the opt-in feature, using the synthetic compile-only public client ID.
+
+No human-visible real-server notification, Twitch request, real playback, Windows/macOS native build or installed-artifact acceptance was performed for this follow-up. The graphical Linux test used the production adapter with a synthetic private server; frontend navigation was tested separately with mocked IPC. Windows Notification Center timeout/history/COM activation and macOS bundle behavior remain manual platform checks, now reachable with the developer action.

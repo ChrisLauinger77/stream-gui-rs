@@ -25,6 +25,15 @@ impl crate::domain::chat::ChatOpener for NativeChatOpener {
     }
 }
 
+fn app_context() -> tauri::Context<tauri::Wry> {
+    #[cfg(feature = "notification-acceptance")]
+    let context =
+        tauri::generate_context!(capabilities = ["capabilities/notification-acceptance.json"]);
+    #[cfg(not(feature = "notification-acceptance"))]
+    let context = tauri::generate_context!();
+    context
+}
+
 fn build_app() -> tauri::Result<tauri::App> {
     let builder = tauri::Builder::default();
     #[cfg(target_os = "macos")]
@@ -35,6 +44,8 @@ fn build_app() -> tauri::Result<tauri::App> {
     });
     builder
         .invoke_handler(tauri::generate_handler![
+            #[cfg(feature = "notification-acceptance")]
+            commands::dev_notification_test,
             commands::desktop_status,
             commands::pause_monitor,
             commands::resume_monitor,
@@ -70,7 +81,7 @@ fn build_app() -> tauri::Result<tauri::App> {
             commands::search_categories,
             commands::get_channel,
         ])
-        .build(tauri::generate_context!())
+        .build(app_context())
 }
 
 pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -223,6 +234,8 @@ pub(crate) fn status(app: &tauri::AppHandle) -> crate::domain::background::Deskt
         .lock()
         .expect("native notification state poisoned");
     let expired = state.action.as_ref().is_some_and(|action| match action {
+        #[cfg(feature = "notification-acceptance")]
+        action if notifications::acceptance::is_test_action(action) => false,
         crate::domain::background::DesktopAction::Channel {
             auth_session_id, ..
         } => services
@@ -238,6 +251,7 @@ pub(crate) fn status(app: &tauri::AppHandle) -> crate::domain::background::Deskt
         monitor: services.monitor.snapshot(),
         notification_permission: state.permission,
         notification_click_supported: state.clicks,
+        notification_test_available: cfg!(feature = "notification-acceptance"),
         tray_available: app
             .state::<Arc<Lifecycle>>()
             .tray_created
@@ -262,7 +276,54 @@ pub(crate) fn request_permission(app: &tauri::AppHandle) -> crate::domain::Resul
         .request_permission()
 }
 
+#[cfg(feature = "notification-acceptance")]
+pub(crate) fn notification_test(
+    app: &tauri::AppHandle,
+    request: crate::domain::background::NotificationTestAction,
+) -> crate::domain::Result<()> {
+    app.state::<Arc<notifications::Notifications>>()
+        .test_notification(request)
+}
+
 #[cfg(all(feature = "test-support", target_os = "linux"))]
 mod smoke;
 #[cfg(all(feature = "test-support", target_os = "linux"))]
 pub use smoke::run as run_background_smoke;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn notification_acceptance_permission_requires_feature_and_local_main_window() {
+        use tauri::ipc::Origin;
+        let mut context = super::app_context();
+        let authority = context.runtime_authority_mut();
+        assert_eq!(
+            authority
+                .resolve_access("dev_notification_test", "main", "main", &Origin::Local)
+                .is_some(),
+            cfg!(feature = "notification-acceptance")
+        );
+        assert!(
+            authority
+                .resolve_access("dev_notification_test", "other", "other", &Origin::Local)
+                .is_none()
+        );
+        assert!(
+            authority
+                .resolve_access(
+                    "dev_notification_test",
+                    "main",
+                    "main",
+                    &Origin::Remote {
+                        url: "https://example.invalid".parse().unwrap()
+                    }
+                )
+                .is_none()
+        );
+        assert!(
+            authority
+                .resolve_access("desktop_status", "main", "main", &Origin::Local)
+                .is_some()
+        );
+    }
+}

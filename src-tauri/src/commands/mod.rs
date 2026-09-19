@@ -258,6 +258,14 @@ pub async fn open_channel_chat(
 pub fn desktop_status(app: tauri::AppHandle) -> crate::domain::background::DesktopStatus {
     crate::desktop::status(&app)
 }
+#[cfg(feature = "notification-acceptance")]
+#[tauri::command]
+pub fn dev_notification_test(
+    app: tauri::AppHandle,
+    request: crate::domain::background::NotificationTestAction,
+) -> Result<()> {
+    crate::desktop::notification_test(&app, request)
+}
 #[tauri::command]
 pub fn pause_monitor(services: State<'_, Arc<Services>>) -> crate::monitor::MonitorStatus {
     services.monitor.pause(true)

@@ -108,23 +108,24 @@ impl Server {
                                     &(vec!["actions", "body-markup"],).to_variant(),
                                 )),
                                 "Notify" => {
+                                    let mut count = calls.lock().unwrap();
+                                    let acceptance = *count >= 2;
                                     assert_eq!(
                                         params.child_value(0).get::<String>().unwrap(),
                                         "Stream GUI RS"
                                     );
                                     assert_eq!(
                                         params.child_value(3).get::<String>().unwrap(),
-                                        "Synthetic channel is live"
+                                        if acceptance { "TEST notification: Synthetic channel is live" } else { "Synthetic channel is live" }
                                     );
                                     assert_eq!(
                                         params.child_value(4).get::<String>().unwrap(),
-                                        "&lt;Test&gt; &amp; title\nCategory"
+                                        if acceptance { "Native notification acceptance test\nSynthetic target — no Twitch data" } else { "&lt;Test&gt; &amp; title\nCategory" }
                                     );
                                     assert_eq!(
                                         params.child_value(5).get::<Vec<String>>().unwrap(),
                                         ["default", "Show channel"]
                                     );
-                                    let mut count = calls.lock().unwrap();
                                     *count += 1;
                                     invocation.return_value(Some(&(*count,).to_variant()));
                                 }

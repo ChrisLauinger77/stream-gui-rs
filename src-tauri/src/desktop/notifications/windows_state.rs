@@ -74,6 +74,29 @@ impl Targets {
 mod tests {
     use super::*;
     use tokio_util::sync::CancellationToken;
+    #[cfg(feature = "notification-acceptance")]
+    #[test]
+    fn acceptance_notifications_use_normal_retention_and_clear_only_test_targets() {
+        let tests = super::super::acceptance::TestNotifications::default();
+        let mut targets = Targets::default();
+        let real = targets.insert(event("123")).unwrap();
+        let test = targets.insert(tests.event()).unwrap();
+        targets.dismissed(&test, true);
+        assert!(targets.collect_retired(false).is_empty());
+        assert_eq!(
+            targets
+                .activate(APP_ID, &test, false)
+                .unwrap()
+                .broadcaster_id,
+            "0"
+        );
+        assert_eq!(targets.collect_retired(false), [test]);
+        let test = targets.insert(tests.event()).unwrap();
+        tests.clear();
+        assert!(targets.activate(APP_ID, &test, false).is_none());
+        assert_eq!(targets.collect_retired(false), [test]);
+        assert!(targets.activate(APP_ID, &real, false).is_some());
+    }
     fn event(id: &str) -> LiveNotification {
         LiveNotification {
             auth_session_id: "1".into(),

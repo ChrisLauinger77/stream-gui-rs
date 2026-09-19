@@ -89,6 +89,8 @@ Synthetic native fixtures and cross-target API checks do not substitute for thes
 
 Run against the installed Windows artifact, launched from its Start-menu shortcut. These checks remain pending; Linux policy tests and Windows source/API checks do not verify the shell's activation behavior.
 
+The [development-only notification trigger](notification-acceptance.md) lets an installed debug build exercise delivery, natural banner timeout, retained activation and cleanup without waiting for Twitch. Use its synthetic target for those checks; retain real-stream/account checks below for monitor/session acceptance and repeat release acceptance against the exact released artifact.
+
 - [ ] Confirm the notification's Stream GUI RS identity/icon and the matching entry in Windows notification settings. Enable monitoring and notifications; let the initial baseline complete quietly.
 - [ ] Observe a new followed stream, let its banner time out naturally, and confirm its entry remains in Notification Center. Hide/minimize the app, then click that retained entry within 15 minutes: the app restores/focuses and selects the correct channel exactly once, with no playback launch.
 - [ ] Click a visible banner in a separate trial; verify the same navigation and no second navigation from another activation callback.

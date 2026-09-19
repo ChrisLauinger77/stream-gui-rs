@@ -649,8 +649,65 @@ async function toggleControl(label: string) {
 }
 const desktopSnapshot: import("../lib/generated").DesktopStatus = {
   monitor: { phase: "running", paused: false, liveCount: 3, stale: false, error: null, retryInSeconds: 60, notificationError: false },
-  notificationPermission: "not_requested", notificationClickSupported: true, trayAvailable: true, action: null,
+  notificationPermission: "not_requested", notificationClickSupported: true, notificationTestAvailable: false, trayAvailable: true, action: null,
 };
+const testNotification = {
+  kind: "channel" as const, id: "native-test", authSessionId: "notification-acceptance", broadcasterId: "0", displayName: "TEST notification: Synthetic channel",
+};
+test("native acceptance controls require the backend build feature", async () => {
+  vi.mocked(api.desktopStatus).mockResolvedValue(desktopSnapshot);
+  vi.mocked(api.diagnostics).mockRejectedValue({ code: "internal" });
+  await render(); await click("Settings"); await click("Developer tools");
+  expect(text()).not.toContain("Send test notification");
+  expect(api.devNotificationTest).not.toHaveBeenCalled();
+});
+test("signed-out developer tools send and clear fixed tests and route native actions", async () => {
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  vi.mocked(api.diagnostics).mockRejectedValue({ code: "internal" });
+  const enabled = { ...desktopSnapshot, notificationTestAvailable: true };
+  vi.mocked(api.desktopStatus).mockResolvedValue(enabled);
+  vi.mocked(api.devNotificationTest).mockResolvedValue(null);
+  vi.mocked(api.acknowledgeDesktopAction).mockResolvedValue(null);
+  await render(); await click("Settings"); await click("Developer tools");
+  await click("Send test notification");
+  expect(api.devNotificationTest).toHaveBeenLastCalledWith("send");
+  expect(text()).toContain("Test notification queued");
+  await click("Clear test notifications");
+  expect(api.devNotificationTest).toHaveBeenLastCalledWith("clear");
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...enabled, action: testNotification });
+  await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+  expect(text()).toContain("TEST notification · Synthetic channel");
+  expect(document.activeElement?.textContent).toBe("TEST notification · Synthetic channel");
+  expect(api.acknowledgeDesktopAction).toHaveBeenCalledWith("native-test");
+  expect(api.channel).not.toHaveBeenCalled(); expect(api.followedStreams).not.toHaveBeenCalled();
+  expect(api.account).not.toHaveBeenCalled(); expect(api.launch).not.toHaveBeenCalled();
+  expect(api.pauseMonitor).not.toHaveBeenCalled(); expect(api.savePlaybackSettings).not.toHaveBeenCalled();
+  // A still-cached snapshot must not replay an acknowledged action on remount.
+  await click("Developer tools"); await click("← Back to browsing");
+  expect(text()).not.toContain("TEST notification · Synthetic channel");
+  expect(api.acknowledgeDesktopAction).toHaveBeenCalledOnce();
+});
+test("test activation retries acknowledgement without reopening the dismissed target", async () => {
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  vi.mocked(api.desktopStatus).mockImplementation(async () => ({ ...desktopSnapshot, notificationTestAvailable: true, action: testNotification }));
+  vi.mocked(api.acknowledgeDesktopAction).mockRejectedValueOnce({ code: "internal" }).mockResolvedValue(null);
+  await render(); expect(text()).toContain("TEST notification · Synthetic channel");
+  await click("Back to browsing");
+  await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+  expect(text()).not.toContain("TEST notification · Synthetic channel");
+  expect(api.acknowledgeDesktopAction).toHaveBeenCalledTimes(2);
+});
+test.each([
+  [false, testNotification],
+  [true, { ...testNotification, broadcasterId: "123" }],
+  [true, { ...testNotification, authSessionId: "old-session" }],
+])("test navigation rejects disabled builds or non-test identities (%s, %j)", async (notificationTestAvailable, action) => {
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, notificationTestAvailable, action });
+  await render();
+  expect(text()).not.toContain("TEST notification · Synthetic channel");
+  expect(api.acknowledgeDesktopAction).not.toHaveBeenCalled(); expect(api.channel).not.toHaveBeenCalled();
+});
 test("Background settings persist intent and pause independently of browsing", async () => {
   vi.mocked(api.desktopStatus).mockResolvedValue(desktopSnapshot);
   vi.mocked(api.savePlaybackSettings).mockImplementation(async value => value);

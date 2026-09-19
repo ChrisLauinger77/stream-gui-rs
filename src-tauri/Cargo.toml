@@ -24,6 +24,8 @@ default = ["desktop"]
 desktop = ["dep:tauri", "dep:tauri-build", "dep:webbrowser", "dep:gio", "dep:windows", "dep:windows-core", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:objc2-user-notifications", "dep:block2"]
 custom-protocol = ["tauri?/custom-protocol"]
 test-support = []
+# Opt-in native notification acceptance controls; build.rs rejects release profiles.
+notification-acceptance = []
 
 [[bin]]
 name = "background-smoke"

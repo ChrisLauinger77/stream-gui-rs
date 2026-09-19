@@ -101,6 +101,7 @@ pub fn typescript_bindings() -> String {
     let declarations = [
         ErrorCode::decl(&config),
         background::NotificationPermission::decl(&config),
+        background::NotificationTestAction::decl(&config),
         background::DesktopAction::decl(&config),
         background::DesktopStatus::decl(&config),
         background::AcknowledgeDesktopAction::decl(&config),

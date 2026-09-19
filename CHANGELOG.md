@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add an opt-in debug-build native notification acceptance action with a safe synthetic target and test-only cleanup.
 - Show the build commit and a clickable repository link in the native macOS About panel, and include the commit in backend diagnostics.
 
 ## 0.1.0 - 2026-09-19

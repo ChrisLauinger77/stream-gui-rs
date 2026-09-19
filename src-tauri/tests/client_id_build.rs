@@ -33,6 +33,7 @@ fn build_script_enforces_distribution_configuration() {
             .env("DEBUG", "true")
             .env("TWITCH_CLIENT_ID", "runtimeOverrideCannotSatisfyBuild")
             .env_remove("TWITCH_CLIENT_ID_BUILD")
+            .env_remove("CARGO_FEATURE_NOTIFICATION_ACCEPTANCE")
             .env_remove("CARGO_FEATURE_CUSTOM_PROTOCOL");
         if distribution {
             command.env("CARGO_FEATURE_CUSTOM_PROTOCOL", "1");
@@ -103,4 +104,25 @@ fn build_script_enforces_distribution_configuration() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("cargo:rustc-env=STREAM_GUI_RS_EMBEDDED_TWITCH_CLIENT_ID=\n"));
     assert!(!stdout.contains("runtimeOverrideCannotSatisfyBuild"));
+
+    // The opt-in acceptance surface must fail closed even in release profiles
+    // configured with debug information/assertions. Packaged debug is permitted.
+    for profile in ["debug", "release", "distribution"] {
+        let output = Command::new(&script)
+            .current_dir(root)
+            .env("PROFILE", profile)
+            .env("DEBUG", "true")
+            .env("CARGO_FEATURE_NOTIFICATION_ACCEPTANCE", "1")
+            .env("CARGO_FEATURE_CUSTOM_PROTOCOL", "1")
+            .env("TWITCH_CLIENT_ID_BUILD", "syntheticBuildClient123")
+            .output()
+            .unwrap();
+        assert_eq!(output.status.success(), profile == "debug");
+        if profile != "debug" {
+            assert!(
+                String::from_utf8_lossy(&output.stderr)
+                    .contains("notification-acceptance is only available in debug/test builds")
+            );
+        }
+    }
 }

@@ -154,6 +154,8 @@ git diff --check
 
 The synthetic ID in the final command is only for local compilation checks and cannot authenticate. Official release artifacts use the registered public ID from GitHub Actions. Tests use synthetic credentials, a native fake Streamlink executable, and loopback HTTP fixtures; they do not access real Twitch credentials.
 
+For native notification acceptance without a Twitch live transition, build with the opt-in `notification-acceptance` feature and open **Settings → Developer tools → Send test notification**. It is restricted to debug/test builds; normal builds omit the command and permission. See [notification acceptance setup and platform steps](docs/notification-acceptance.md), including installed debug packages for Windows and macOS.
+
 ## Reporting issues
 
 [Open a GitHub issue](https://github.com/ChrisLauinger77/stream-gui-rs/issues) with your operating system and version, Stream GUI RS version, Streamlink version, selected player, reproduction steps, and relevant sanitized session diagnostics. Do not paste OAuth tokens, refresh tokens, device codes, credential-store exports, or other secrets.

@@ -188,6 +188,43 @@ async fn check_notifications(
     tokio::time::sleep(Duration::from_millis(250)).await;
     assert_eq!(server.delivered(), 2);
     assert!(native.shared.state.lock().unwrap().action.is_none());
+    #[cfg(feature = "notification-acceptance")]
+    {
+        use crate::domain::background::NotificationTestAction::{Clear, Send};
+        let services = app.state::<Arc<Services>>();
+        let before = serde_json::to_value(services.monitor.snapshot()).unwrap();
+        let settings = serde_json::to_value(services.settings.snapshot()).unwrap();
+        crate::commands::dev_notification_test(app.clone(), Send)?;
+        wait_until(|| server.delivered() == 3).await;
+        hide_window(app);
+        server.click(3);
+        wait_until(|| native.shared.state.lock().unwrap().action.is_some()).await;
+        let snapshot = status(app);
+        assert!(snapshot.notification_test_available);
+        let action = snapshot.action.unwrap();
+        assert!(notifications::acceptance::is_test_action(&action));
+        wait_until(|| {
+            window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(true)
+        })
+        .await;
+        acknowledge_action(app, action.id());
+        assert!(status(app).action.is_none());
+        server.click(3); // The consumed target cannot activate again.
+        crate::commands::dev_notification_test(app.clone(), Send)?;
+        wait_until(|| server.delivered() == 4).await;
+        crate::commands::dev_notification_test(app.clone(), Clear)?;
+        wait_until(|| server.closed(4)).await;
+        server.click(4);
+        assert_eq!(
+            serde_json::to_value(services.monitor.snapshot()).unwrap(),
+            before
+        );
+        assert_eq!(
+            serde_json::to_value(services.settings.snapshot()).unwrap(),
+            settings
+        );
+        assert!(status(app).action.is_none());
+    }
     assert_eq!(
         app.state::<Arc<Services>>().sessions.sessions().await.len(),
         2

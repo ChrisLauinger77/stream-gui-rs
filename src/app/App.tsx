@@ -11,20 +11,22 @@ import { Playback } from "../features/Playback";
 import { PlaybackSettings } from "../features/PlaybackSettings";
 import { api } from "../lib/ipc";
 import { useDesktop } from "./useDesktop";
+import { isNotificationTest, NotificationAcceptance } from "./NotificationAcceptance";
 import { useAppearance } from "./useAppearance";
 import { useShortcuts, shortcutLabels } from "./shortcuts";
 
 export function App() {
   const [developer, setDeveloper] = useState(false);
-  if (developer) return <><div className="developer-banner"><button onClick={() => setDeveloper(false)}>← Back to browsing</button><span>Developer tools · backend diagnostics</span></div><DeveloperTools /></>;
-  return <Application developer={() => setDeveloper(true)} />;
-}
-function Application({ developer }: { developer: () => void }) {
-  const auth = useAuthentication();
   const desktop = useDesktop();
-  const handledAction = useRef<string | null>(null);
-  const acknowledgedAction = useRef<string | null>(null);
-  const acknowledgingAction = useRef(false);
+  useEffect(() => { if (desktop.status?.action) setDeveloper(false); }, [desktop.status?.action?.id]);
+  if (developer) return <><div className="developer-banner"><button onClick={() => setDeveloper(false)}>← Back to browsing</button><span>Developer tools · backend diagnostics</span></div><NotificationAcceptance desktop={desktop} /><DeveloperTools /></>;
+  return <Application desktop={desktop} developer={() => setDeveloper(true)} />;
+}
+function Application({ desktop, developer }: { desktop: ReturnType<typeof useDesktop>; developer: () => void }) {
+  const auth = useAuthentication();
+  const actionState = desktop.actions.current;
+  const [notificationTest, setNotificationTest] = useState(() => isNotificationTest(desktop.status) && actionState.handled !== desktop.status?.action?.id);
+  const testHeading = useRef<HTMLHeadingElement>(null);
   const [settings, setSettings] = useState(false);
   const [watching, setWatching] = useState(false);
   const playback = usePlayback();
@@ -38,20 +40,27 @@ function Application({ developer }: { developer: () => void }) {
   useEffect(() => {
     const action = desktop.status?.action;
     if (!action) return;
-    if (handledAction.current !== action.id) {
+    if (actionState.handled !== action.id) {
       if (action.kind === "channel") {
-        if (action.authSessionId !== auth.sessionId || !workspace.current) return;
-        setSettings(false); setWatching(false); workspace.current.channel(action.broadcasterId, action.displayName);
-      } else { setSettings(false); setWatching(true); }
-      handledAction.current = action.id;
+        if (isNotificationTest(desktop.status)) {
+          setNotificationTest(true); setSettings(false); setWatching(false);
+        } else {
+          if (action.authSessionId !== auth.sessionId) return;
+          setNotificationTest(false);
+          if (!workspace.current) return;
+          setSettings(false); setWatching(false); workspace.current.channel(action.broadcasterId, action.displayName);
+        }
+      } else { setNotificationTest(false); setSettings(false); setWatching(true); }
+      actionState.handled = action.id;
     }
-    if (acknowledgedAction.current === action.id || acknowledgingAction.current) return;
-    acknowledgingAction.current = true;
+    if (actionState.acknowledged === action.id || actionState.acknowledging) return;
+    actionState.acknowledging = true;
     void api.acknowledgeDesktopAction(action.id)
-      .then(() => { acknowledgedAction.current = action.id; })
+      .then(() => { actionState.acknowledged = action.id; })
       .catch(() => { /* Retry acknowledgement on the next snapshot without navigating again. */ })
-      .finally(() => { acknowledgingAction.current = false; });
-  }, [desktop.status?.action, auth.sessionId]);
+      .finally(() => { actionState.acknowledging = false; });
+  }, [desktop.status, auth.sessionId, notificationTest, actionState]);
+  useEffect(() => { if (notificationTest) testHeading.current?.focus(); }, [notificationTest]);
   useEffect(() => { if (settings) settingsHeading.current?.focus(); }, [settings]);
   useEffect(() => { if (watching) watchingPanel.current?.querySelector<HTMLElement>("h2")?.focus(); }, [watching]);
   const navigate = (section: "search" | "following" | "live" | "categories") => {
@@ -60,7 +69,7 @@ function Application({ developer }: { developer: () => void }) {
   useShortcuts({
     search: () => navigate("search"), following: () => navigate("following"), live: () => navigate("live"), categories: () => navigate("categories"),
     watching: () => { setWatching(true); setSettings(false); }, settings: () => { setSettings(true); setWatching(false); },
-    back: () => { if (settings) setSettings(false); else if (watching) setWatching(false); else workspace.current?.back(); },
+    back: () => { if (settings) setSettings(false); else if (watching) setWatching(false); else if (notificationTest) setNotificationTest(false); else workspace.current?.back(); },
     refresh: () => { if (!settings) workspace.current?.refresh(); },
   });
   const watch = useCallback((broadcasterId: string) => {
@@ -89,7 +98,12 @@ function Application({ developer }: { developer: () => void }) {
       stop={id => { void playback.run(`stop:${id}`, () => api.stop(id), "Playback stopped."); }}
       restart={(session, quality) => { void playback.run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), "Streamlink restarted."); }} /></div>}
     {auth.error && <p className="error" role="alert">{auth.error}</p>}
-    {auth.sessionId ? <BrowserWorkspace actionsRef={workspace} settingsRevision={settingsRevision} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} pending={playback.pending} /> :
+    {notificationTest ? <main className="settings-panel">
+      <h1 tabIndex={-1} ref={testHeading}>TEST notification · Synthetic channel</h1>
+      <p>The native notification activated this local target. No Twitch channel data or playback is involved.</p>
+      <button onClick={() => setNotificationTest(false)}>Back to browsing</button>
+      <button onClick={developer}>Developer tools</button>
+    </main> : auth.sessionId ? <BrowserWorkspace actionsRef={workspace} settingsRevision={settingsRevision} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} pending={playback.pending} /> :
       <SignIn status={auth.status} account={auth.account} busy={auth.busy} run={auth.run} />}
     <footer className="app-footer"><span>Twitch browsing · Streamlink desktop</span><span>{auth.sessionId ? "Connected to Twitch" : "Connect your Twitch account"}</span></footer>
   </div>;

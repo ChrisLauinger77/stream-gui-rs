@@ -12,6 +12,8 @@ export function useDesktop() {
   const pending = useRef(false);
   const mounted = useRef(false);
   const revision = useRef(0);
+  // Keep consumption guards across the developer-tools/application switch.
+  const actions = useRef({ handled: null as string | null, acknowledged: null as string | null, acknowledging: false });
   useEffect(() => {
     mounted.current = true;
     if (!isTauri()) return () => { mounted.current = false; };
@@ -39,5 +41,5 @@ export function useDesktop() {
     } catch (error) { if (mounted.current) setError(friendlyError(error)); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   };
-  return { status, busy, error, run };
+  return { status, busy, error, run, actions };
 }

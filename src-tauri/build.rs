@@ -90,11 +90,18 @@ fn configure_twitch_client_id() {
 }
 
 fn main() {
+    assert!(
+        std::env::var_os("CARGO_FEATURE_NOTIFICATION_ACCEPTANCE").is_none()
+            || std::env::var("PROFILE").as_deref() == Ok("debug"),
+        "notification-acceptance is only available in debug/test builds"
+    );
     configure_twitch_client_id();
     configure_build_commit();
     #[cfg(feature = "desktop")]
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
+            #[cfg(feature = "notification-acceptance")]
+            "dev_notification_test",
             "desktop_status",
             "pause_monitor",
             "resume_monitor",

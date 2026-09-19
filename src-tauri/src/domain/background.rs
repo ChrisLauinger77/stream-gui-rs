@@ -12,6 +12,13 @@ pub enum NotificationPermission {
     OsManaged,
 }
 
+#[derive(Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum NotificationTestAction {
+    Send,
+    Clear,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(
     tag = "kind",
@@ -42,6 +49,7 @@ pub struct DesktopStatus {
     pub monitor: crate::monitor::MonitorStatus,
     pub notification_permission: NotificationPermission,
     pub notification_click_supported: bool,
+    pub notification_test_available: bool,
     pub tray_available: bool,
     pub action: Option<DesktopAction>,
 }

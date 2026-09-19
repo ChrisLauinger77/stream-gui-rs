@@ -15,6 +15,9 @@ use std::{
 use tauri::Manager;
 use tokio_util::sync::CancellationToken;
 
+#[cfg(feature = "notification-acceptance")]
+pub(super) mod acceptance;
+
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
@@ -66,21 +69,23 @@ impl Shared {
         let app = self.app.clone();
         let stop = self.stop.clone();
         let _ = self.app.run_on_main_thread(move || {
-            if event.cancelled() || stop.is_cancelled() {
-                return;
-            }
             let notifications = app.state::<Arc<Notifications>>();
-            notifications
+            let mut state = notifications
                 .shared
                 .state
                 .lock()
-                .expect("native notification state poisoned")
-                .action = Some(DesktopAction::Channel {
+                .expect("native notification state poisoned");
+            // Serialize the final cancellation check with clearing a pending action.
+            if event.cancelled() || stop.is_cancelled() {
+                return;
+            }
+            state.action = Some(DesktopAction::Channel {
                 id: uuid::Uuid::new_v4().to_string(),
                 auth_session_id: event.auth_session_id,
                 broadcaster_id: event.broadcaster_id,
                 display_name: event.display_name,
             });
+            drop(state);
             super::show_window(&app);
         });
     }
@@ -93,6 +98,8 @@ pub(super) struct Notifications {
     pub shared: Arc<Shared>,
     sender: SyncSender<Command>,
     thread: Mutex<Option<std::thread::JoinHandle<()>>>,
+    #[cfg(feature = "notification-acceptance")]
+    tests: acceptance::TestNotifications,
 }
 impl Notifications {
     pub fn new(app: tauri::AppHandle) -> Arc<Self> {
@@ -144,12 +151,40 @@ impl Notifications {
             shared,
             sender,
             thread: Mutex::new(Some(thread)),
+            #[cfg(feature = "notification-acceptance")]
+            tests: acceptance::TestNotifications::default(),
         })
     }
     pub fn request_permission(&self) -> Result<()> {
         self.sender
             .try_send(Command::Permission)
             .map_err(|_| delivery_error())
+    }
+    #[cfg(feature = "notification-acceptance")]
+    pub fn test_notification(
+        &self,
+        request: crate::domain::background::NotificationTestAction,
+    ) -> Result<()> {
+        use crate::domain::background::NotificationTestAction;
+        match request {
+            NotificationTestAction::Send => self.deliver(self.tests.event()),
+            NotificationTestAction::Clear => {
+                self.tests.clear();
+                let mut state = self
+                    .shared
+                    .state
+                    .lock()
+                    .expect("native notification state poisoned");
+                if state
+                    .action
+                    .as_ref()
+                    .is_some_and(acceptance::is_test_action)
+                {
+                    state.action = None;
+                }
+                Ok(())
+            }
+        }
     }
     pub async fn shutdown(&self) {
         self.shared.stop.cancel();
