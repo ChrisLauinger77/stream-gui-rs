@@ -11,6 +11,8 @@ Stream GUI RS is a native desktop application for browsing Twitch and watching l
 
 This is an independent rewrite inspired by [Streamlink Twitch GUI](https://github.com/streamlink/streamlink-twitch-gui). It is not affiliated with Twitch or the original project.
 
+![image](screenshot.png)
+
 ## Features
 
 - Twitch Device Code sign-in with credentials stored in Keychain, Credential Manager, or Secret Service
