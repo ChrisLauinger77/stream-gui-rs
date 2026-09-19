@@ -22,8 +22,10 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Persistent global playback settings and per-channel overrides
 - Twitch chat in the system browser
 - System, Light, and Dark themes plus focused application shortcuts
+- Opt-in followed-stream monitoring, desktop notifications, and per-channel notification preferences
+- Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
 
-Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client, and it does not run background notifications or a tray service.
+Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. The background features described here are development changes after v0.1.0; published v0.1.0 packages retain their original close-to-exit behavior.
 
 ## Downloads and platform support
 
@@ -87,13 +89,29 @@ Official installed builds contain the project's public Twitch application ID. Us
 
 Rust owns Twitch credentials, settings, native processes, and session state. OAuth tokens stay outside the web interface, settings, diagnostics, and Streamlink arguments. Twitch browsing uses a bounded cache and explicit pagination. Streamlink configuration files and sideloaded plugins are disabled for launches from this app.
 
-Navigation, interface reload, and Twitch logout leave existing streams running so they remain controllable from **Watching**. Closing the main window or quitting stops owned Streamlink/player process trees. A custom player that deliberately detaches itself is outside that cleanup boundary.
+Navigation, interface reload, and Twitch logout leave existing streams running so they remain controllable from **Watching**. By default, closing the main window stops owned Streamlink/player process trees. With background close enabled, closing keeps monitoring and playback running; explicit Quit always cleans up owned processes. A custom player that deliberately detaches itself is outside that cleanup boundary.
 
 The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectively, with source fallback when Twitch does not offer a matching rendition. They are preferences rather than guaranteed resolution caps.
 
+## Background monitoring and notifications
+
+In **Settings → Background**, enable **Monitor followed live streams**, choose a 1, 2, or 5 minute interval, and enable notifications. All background preferences default off, including when upgrading existing settings. Channel preferences can inherit, enable, or disable the global notification default. Monitoring still requires sign-in; notification permission is independent.
+
+The first scan is quiet. Later newly observed Twitch stream IDs can notify with channel, title, and category. Pause stops polling until Resume or application restart. Resume, waking from sleep, and recovering from an outage establish a quiet baseline, without replaying missed transitions. Incomplete scans retain a marked previous count and retry with bounded backoff. Very large or slow scans can report incomplete monitoring; they never silently report a partial list as complete. At most ten eligible notifications are sent per scan; excess transitions are suppressed rather than queued into a later burst.
+
+Notification clicks restore the app and select the channel while the original sign-in session remains valid; they do not start playback. **Watching** and **Quit** are available from the tray menu, and Quit is also in the main interface. Quit's label indicates active streams that it will stop.
+
+**Keep Stream GUI RS running in the background when the window is closed** is opt-in. Normal minimize remains the OS minimize action. Background close hides the window when a tray is available, or minimizes it when there is no usable tray. Playback continues in both cases; restore the app to use Stop/Restart.
+
+- **Linux:** notification delivery and click actions depend on the desktop notification server. The UI reports OS-managed delivery, not a permission grant. A StatusNotifier host and an Ayatana/AppIndicator library are needed for the tray; GNOME may need an indicator extension. A missing library/host falls back to minimize. Losing the host restores a hidden window.
+- **Windows:** native toast notifications use the application's installed identity. Use the installer and its Start-menu shortcut for notification testing; an unregistered portable executable may not support delivery/activation.
+- **macOS:** allow notifications explicitly in Settings, then manage denial in macOS System Settings. Notifications require the installed app bundle; a bare development executable reports unavailable.
+
+See [Phase 5 validation](docs/phase-5-validation.md) for automated evidence and outstanding native platform checks.
+
 ## Current limitations
 
-The current release does not provide background followed-stream monitoring, notifications, tray behavior, embedded video/chat, external chat applications, advanced Streamlink transports or player profiles, an updater, or legacy configuration import. Active sessions and logs are not persisted. See [architecture](docs/architecture.md) for the detailed contracts.
+The development tree does not provide embedded video/chat, external chat applications, advanced Streamlink transports or player profiles, an updater, or legacy configuration import. Active sessions and logs are not persisted. See [architecture](docs/architecture.md) for the detailed contracts.
 
 ## Building from source
 
@@ -102,6 +120,7 @@ Build requirements are separate from the runtime requirements above:
 - stable Rust 1.85 or newer
 - Node.js 22.22.2+, 24.15.0+, or 26+ with npm; CI uses Node 24
 - [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for the target platform
+- on Debian/Ubuntu, `libayatana-appindicator3-dev` for tray support alongside the existing native prerequisites
 
 Install locked frontend dependencies and start development with your own registered public Twitch client ID:
 

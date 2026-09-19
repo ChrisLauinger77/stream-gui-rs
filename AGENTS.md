@@ -37,6 +37,7 @@ authoritative Twitch state, it probably belongs in Rust. Theme preference also p
 | Settings and public client-ID validation | `src-tauri/src/config/` |
 | Discovery, probing, pure argv, sole supervisor | `src-tauri/src/streamlink/` |
 | OS process ownership / safe backend diagnostics | `src-tauri/src/platform/`, `src-tauri/src/diagnostics/` |
+| Followed-live monitor and native notifications/tray | `src-tauri/src/monitor/`, `src-tauri/src/desktop/` |
 | Suspend-aware auth/cache/rate clock | `src-tauri/src/time.rs` |
 | Shell, themes and auth hook | `src/app/` |
 | Browsing, details, search and navigation snapshots | `src/browse/` |
@@ -109,8 +110,8 @@ user.
 - Preserve `RequestSession` binding, lease cancellation and generation checks. The public session ID selects
   a Rust-validated session; it grants no authority. Add deterministic regressions when changing these
   concurrency boundaries.
-- Respect opaque cursor pagination and bounded ID batches. Fetch one requested page at a time; no automatic
-  exhaustive crawling. Keep stream IDs distinct from broadcaster/user IDs, login names and display names.
+- Respect opaque cursor pagination and bounded ID batches. Foreground operations fetch one requested page at a time. The Rust monitor alone assembles bounded complete
+  followed-live scans through the same client/cache/rate budget; never accept a partial scan as complete. Keep stream IDs distinct from broadcaster/user IDs, login names and display names.
 - A failed/incomplete API response cannot establish offline status. Preserve explicit network/error,
   unknown, stale, partial and unavailable semantics.
 - Cache only typed public data, scoped to the original session/account. Keep cache/body/query/concurrency
@@ -149,19 +150,20 @@ user.
   continue draining. Redaction is not a universal detector for arbitrary custom-executable output.
 - Navigation, webview reload and logout leave streams running; existing sessions remain
   stoppable/restartable. New browsing launches require authentication.
-- Window close/Quit stops owned playback and exits. Unix process groups and Windows kill-on-close jobs own
+- Window close defaults to cleanup and exit. Opt-in background close hides with a usable tray, otherwise
+  minimizes. Normal minimize is unchanged; explicit Quit always stops monitoring and owned playback and exits. Unix process groups and Windows kill-on-close jobs own
   descendants; intentionally detached players escape that boundary. Do not imply forced termination
   guarantees normal cleanup.
 
 ## Settings and launch configuration
 
-- `SettingsStore` owns strict version 3 settings: global Streamlink/player/quality/chat/theme preferences
+- `SettingsStore` owns strict version 4 settings: global Streamlink/player/quality/chat/theme/background preferences
   and sparse channel overrides, under Tauri's app config directory. Preserve atomic replacement, in-memory
-  migrations from this app's versions 1 and 2, and rejection of malformed/unknown schemas without overwrite.
+  migrations from this app's versions 1, 2 and 3, and rejection of malformed/unknown schemas without overwrite.
   Files are bounded to 256 KiB and channel overrides to 1,000 records.
 - Precedence is global defaults → optional channel overrides → optional request quality → immutable
   effective snapshot in `LaunchSpec` and the session. `quality: null` inherits; resolve only in Rust.
-- Channel overrides use stable positive decimal broadcaster IDs. Quality/chat null means inherit; false
+- Channel overrides use stable positive decimal broadcaster IDs. Quality/chat/notifications null means inherit; false
   explicitly disables chat. Remove fully inherited records. These local preferences apply across accounts;
   they never grant authentication or playback authority.
 - Saving settings does not mutate running processes. Explicit restart resolves current settings, retaining
@@ -248,7 +250,7 @@ TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --deb
 git diff --check
 ```
 
-On Linux, also run `cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_browser_open --features test-support`. It isolates XDG associations and uses the native fixture; it must never open the real browser. The `linux_startup` regression is ignored in headless runs; explicitly run it with `-- --ignored` in a graphical session after changing native setup/error handling.
+On Linux, also run `cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_browser_open --features test-support`. It isolates XDG associations and uses the native fixture; it must never open the real browser. The `linux_startup` regression is ignored in headless runs; explicitly run it with `-- --ignored` in a graphical session after changing native setup/error handling. After background desktop changes, also run `cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_background --features test-support -- --ignored` in a graphical Linux session. It uses `dbus-run-session`, a synthetic notification server, isolated settings and fake playback; never substitute the real notification server.
 
 `npm run build` includes TypeScript checking. The local build command above uses a synthetic public ID for
 compilation only. CI uses the repository secret `TWITCH_CLIENT_ID_BUILD` when available, otherwise the
@@ -291,12 +293,13 @@ cross-compilation or process status does not prove native behavior.
 - `docs/authentication.md`: OAuth/storage, build/runtime ID precedence and native checks.
 - `docs/helix.md`: HTTP, retry, pagination, cache and session-isolation contracts.
 - `docs/phase-0-validation.md`, `docs/phase-1-validation.md`, `docs/phase-2-validation.md`,
-  `docs/phase-3-validation.md`, `docs/phase-4-validation.md`: historical evidence and manual gaps, not proof of a current run. Use current
+  `docs/phase-3-validation.md`, `docs/phase-4-validation.md`, `docs/phase-5-validation.md`: historical evidence and manual gaps, not proof of a current run. Use current
   README/CI build commands.
 
-The current tree implements the Phase 4 MVP: browsing/playback, persistent global/channel preferences,
-restricted browser chat, themes and focused shortcuts. Background monitoring, notifications/tray, advanced transports/chat
-clients, legacy import and updater polish remain deferred. Annotated `vMAJOR.MINOR.PATCH` tags trigger the
+The current tree implements Phase 5: the Phase 4 browsing/playback/settings MVP plus opt-in Rust followed-live
+monitoring, native notifications/tray and background window behavior. Preserve quiet baselines on startup,
+resume and recovery, session cancellation, bounded stream-ID deduplication and foreground rate priority.
+Advanced transports/chat clients, legacy import and updater polish remain deferred. Annotated `vMAJOR.MINOR.PATCH` tags trigger the
 native publishing workflow; version preparation is documented in `docs/releasing.md`. Do not start another phase as incidental cleanup. Keep detailed architecture, user setup and validation history in
 their respective documents rather than expanding this guide.
 

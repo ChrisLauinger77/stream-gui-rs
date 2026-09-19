@@ -65,3 +65,21 @@ Artifact: `Stream-GUI-RS_X.Y.Z_macos_universal.dmg`
 - [ ] Keychain persistence, browser sign-in, chat opening, Streamlink discovery, playback, and cleanup pass.
 - [ ] Dragging the app to Applications and removing it both work as expected.
 - [ ] After publication, `brew tap ChrisLauinger77/cask` and `brew install --cask stream-gui-rs` install the same universal DMG from the release, and `brew uninstall --cask stream-gui-rs` succeeds.
+
+## Phase 5 background behavior (releases containing Phase 5)
+
+- [ ] Upgrade a version 3 settings file; playback/theme/channel preferences survive and monitoring, notifications and background close default off.
+- [ ] Enable monitoring/notifications, grant permission where requested, and confirm the initial live list is quiet.
+- [ ] Observe a genuinely new followed stream; one notification contains the correct channel/title/category. Repeated polls and a brief disappearance do not repeat it.
+- [ ] Channel notification Inherit/Enabled/Disabled overrides behave as displayed.
+- [ ] Click a notification while hidden/minimized: restore/focus the app and select the channel without launching playback. An old-account notification cannot navigate after logout/re-login.
+- [ ] Pause from Settings and tray; Resume quietly. Reload the interface and confirm native monitoring/playback/tray state reconstructs.
+- [ ] Disconnect/reconnect networking and suspend/resume the computer: recovery is quiet, the next future transition can notify, and foreground browsing remains responsive.
+- [ ] Tray Show/Hide/Watching/monitor controls reflect Rust state. Normal minimize remains an OS minimize.
+- [ ] With background close enabled, close while two real streams play, restore, then Stop/Restart each independently. Explicit Quit stops owned processes and ends monitoring.
+- [ ] With background close disabled, closing exits and cleans up playback.
+- [ ] Linux: test both an action-capable notification server and one without actions; verify app identity. Test with/without a StatusNotifier host and indicator library, including loss of a host while hidden.
+- [ ] Windows: test the installed Start-menu identity, denied notifications, click activation, and tray controls. Record portable-build limitations separately.
+- [ ] macOS: test the installed bundle, first permission prompt, denial/re-enable through System Settings, click focus, menu-bar controls, and Command-Q with playback.
+
+Synthetic native fixtures and cross-target API checks do not substitute for these exact-artifact observations. Record missing checks explicitly.

@@ -4,7 +4,7 @@ The implementation follows the [Twitch API reference](https://dev.twitch.tv/docs
 
 ## Entry points and ownership
 
-`Services` constructs one `TwitchHttp` pool, one `AuthService`, and one `HelixClient`. All callers, including a later background monitor, should use this shared client rather than create independent pools/rate budgets/caches. No followed-stream monitor is started in Phase 1.
+`Services` constructs one `TwitchHttp` pool, one `AuthService`, and one `HelixClient`. Foreground browsing and the Phase 5 Rust monitor share these exact instances. They do not create independent pools, rate budgets or caches.
 
 | Rust method | Helix path | Cache class |
 | --- | --- | --- |
@@ -34,7 +34,7 @@ A GET gets at most one retry after 250 ms for network/timeouts or HTTP 500/502/5
 
 The shared coordinator tracks `Ratelimit-Limit`, `Ratelimit-Remaining` and Unix `Ratelimit-Reset`. A reservation accounts for requests already in flight. Out-of-order same-window responses cannot increase the local budget; older-window responses are ignored. At most four requests run concurrently with known budget, and one with unknown budget. When the window expires, one request probes the new budget. This deliberately favors conservative under-use over excess requests.
 
-HTTP 429 immediately reports `rate_limited` and blocks subsequent reservations until reset (or bounded Retry-After/fallback delay when headers are absent). Waiters sleep or await notification/cancellation; there is no busy-wait or independent frontend retry loop. A long rate wait has no arbitrary overall timeout and remains cancellable. Future callers can inspect `rate_status()`. Reset deadlines use the shared suspend-aware clock helper; already-waiting reservations reconcile at least once per second of uptime. Unix reset calculations use its non-rewinding wall-time projection, so a backward clock adjustment cannot turn an existing short wait into hours. An elapsed reset permits one probe until new headers confirm the budget.
+HTTP 429 immediately reports `rate_limited` and blocks subsequent reservations until reset (or bounded Retry-After/fallback delay when headers are absent). Waiters sleep or await notification/cancellation; there is no busy-wait or independent frontend retry loop. A long rate wait has no arbitrary overall timeout and remains cancellable. Callers can inspect `rate_status()`. Reset deadlines use the shared suspend-aware clock helper; already-waiting reservations reconcile at least once per second of uptime. Unix reset calculations use its non-rewinding wall-time projection, so a backward clock adjustment cannot turn an existing short wait into hours. An elapsed reset permits one probe until new headers confirm the budget.
 
 ## Pagination and batches
 
@@ -57,3 +57,11 @@ The in-memory Rust cache stores typed public model data only, after dropping unk
 Capacity is 128 entries, 8 MiB of cached payloads total, and 2 MiB per entry, with oldest-inserted eviction. Oversized responses can be returned within the HTTP body cap but are not cached. Cache keys/entry overhead have separate fixed bounds from query/entry limits. Expired entries may remain within capacity for explicit stale reads.
 
 `Fresh` returns an unexpired hit or fetches; `Refresh` bypasses lookup; `AllowStale` may return an expired hit with explicit `Freshness::Stale` and age. Cache age counts time spent asleep. Observed age never decreases after a backward clock adjustment. No silent stale-on-error or background revalidation occurs. Invalidation is explicit by class or whole cache. Future consumers can share metadata and choose refresh/stale behavior without building another authoritative frontend cache.
+
+## Background followed-live scans
+
+`monitor_followed` pins the original authenticated request session, reads 30 records per page using the same query keys as Following, and reuses only fresh cache entries. It waits 100 ms between pages, caps a scan at 100 pages/3,000 input records, rejects repeated cursors and malformed live identities, and deduplicates by actual stream ID. A scan must reach the end; capacity, timeout, cancellation, rate limits or partial failure never establish a complete baseline or offline status. The service deadline is 45 seconds.
+
+Background reservations use the existing coordinator without entering its foreground wait queue. They defer when capacity is constrained (three or more requests in flight) or remaining budget is at/below 10% of the limit, clamped to 1–50 requests. Unknown/reset windows retain the original single-probe rule. A deferred background scan reports rate limiting and uses monitor backoff; interactive callers retain the coordinator's normal cancellable wait behavior. This is conservative priority, not a separate token budget or scheduler.
+
+Successful monitor pages can serve foreground Following; simultaneous cache misses are not coalesced, but share the same concurrency/rate bounds. See [monitor ownership and recovery](architecture.md#background-monitor-and-native-lifecycle).
