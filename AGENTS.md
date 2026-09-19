@@ -277,6 +277,11 @@ cross-compilation or process status does not prove native behavior.
   When committing, use Conventional Commits with a short lowercase imperative subject. Aim for a clean tree
   without discarding others' work; report any remaining changes. Never rewrite history, push or publish
   unasked.
+- A user request to `create release X.Y.Z` authorizes the complete documented release sequence: update every
+  version location with `npm run release:version -- X.Y.Z`, validate and review the result, commit and push the
+  preparation to `main`, wait for Desktop checks and CodeQL, then create and push the annotated `vX.Y.Z` tag.
+  Do not request separate confirmation for those steps. The tag-triggered workflow owns package creation and
+  GitHub Release publication.
 
 ## Documentation and current scope
 
