@@ -54,6 +54,8 @@ jobs:
         run: npm run build
       - name: Frontend concurrency contracts
         run: npm test
+      - name: Candidate promotion guards
+        run: node --test scripts/verify-release-candidate.tests.mjs
       - name: Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
       - name: Domain, build configuration, HTTP and native process contracts

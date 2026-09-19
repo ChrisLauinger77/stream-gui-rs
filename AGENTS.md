@@ -282,9 +282,11 @@ cross-compilation or process status does not prove native behavior.
   unasked.
 - A user request to `create release X.Y.Z` authorizes the complete documented release sequence: update every
   version location with `npm run release:version -- X.Y.Z`, validate and review the result, commit and push the
-  preparation to `main`, wait for Desktop checks and CodeQL, then create and push the annotated `vX.Y.Z` tag.
-  Do not request separate confirmation for those steps. The tag-triggered workflow owns package creation and
-  GitHub Release publication.
+  preparation to `main`, wait for Desktop checks and CodeQL, build a candidate and complete the documented
+  native acceptance gate, then create and push the annotated `vX.Y.Z` tag with its approved `Candidate-Run`
+  trailer. Do not request separate permission for already authorized steps. A hardening-only request that
+  forbids tagging/publication stops before that final step. The manual workflow builds packages; the
+  tag-triggered workflow publishes those exact tested bytes without rebuilding.
 
 ## Documentation and current scope
 

@@ -1,19 +1,23 @@
 # Maintainer release process
 
-Releases are tag-driven. Pushing an annotated `vMAJOR.MINOR.PATCH` tag starts the native Linux, Windows, and macOS builds and publishes their exact artifacts after every job succeeds. There is no manual release-workflow dispatch.
+The **Release** workflow has two paths: manual dispatch builds a non-publishing candidate from the exact `main` revision captured by GitHub; a later annotated tag promotes the selected candidate's existing artifacts without rebuilding. A manual candidate run never creates a GitHub Release or requests package-repository updates.
 
-When preparing version `X.Y.Z`:
+## Prepare and test a candidate
 
-1. Confirm `main` is clean and current. Add user-facing changes beneath `## Unreleased` in `CHANGELOG.md` during normal development.
-2. Run `npm run release:version -- X.Y.Z`. The command updates `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`, and moves the accumulated changelog entry under a dated `X.Y.Z` heading.
-3. Review the version diff and run the full validation commands from `AGENTS.md`, including native checks relevant to the changes.
-4. Commit the prepared release as `chore(release): prepare X.Y.Z`, push `main`, and wait for Desktop checks and CodeQL to pass.
-5. Create an annotated tag at that exact commit with `git tag -a vX.Y.Z -m "Stream GUI RS X.Y.Z"`, then push it with `git push origin vX.Y.Z`.
-6. The **Release** workflow validates that the tag, application metadata, Cargo metadata, npm metadata, Tauri configuration, and dated changelog heading all identify the same version. It then builds native packages, verifies architectures and checksums, creates a draft GitHub Release, uploads and compares the complete asset set, and publishes the release. A failed platform build leaves no public release.
-7. The workflow requests Scoop and Homebrew updates immediately when `PACKAGE_REPOSITORIES_TOKEN` is configured. Both package repositories also check daily as a fallback.
-8. Run [the release artifact smoke test](release-smoke-test.md) against the files downloaded from the published release. Record any unsupported or unverified native target honestly.
+1. Confirm `main` is clean and current. Add user-facing changes beneath `## Unreleased` in `CHANGELOG.md`.
+2. Run `npm run release:version -- X.Y.Z`. This synchronizes Cargo, npm, both lockfiles and Tauri metadata, and moves the changelog into a dated version heading. The date is the preparation date until publication.
+3. Prepare `docs/release-notes-X.Y.Z.md`, inspect the version diff, and run the full validation in `AGENTS.md`.
+4. Commit and push the preparation to `main`. Wait for Desktop checks and CodeQL, then dispatch **Release** on `main`. Record the captured full SHA and workflow run ID; every platform verifies that same SHA.
+5. Download the three platform artifact archives and verify their SHA-256 files. Complete the [native smoke checklist](release-smoke-test.md) on those exact packages, including a real upgrade with existing credentials on at least one platform. Compilation is not native acceptance.
+6. If a source/configuration fix is needed, commit it and dispatch a new complete candidate. Restart affected acceptance. Never combine revisions, replace tested files, or rerun a candidate run: a fresh dispatch receives a new identity. Candidates are retained for 30 days and excluded from the weekly one-day cleanup. Expired candidates must be rebuilt and retested.
 
-Do not create lightweight release tags, move a published tag, rebuild assets outside the tag workflow, or publish a release whose workflow failed.
+## Publication after explicit approval
+
+Only after the exact candidate passes all release gates, select its successful first-attempt run in an annotated `vMAJOR.MINOR.PATCH` tag. The annotation must contain a `Candidate-Run: <approved-run-id>` Git trailer after a blank line. The tag must point to the approved candidate commit. Lightweight tags, missing trailers, another revision/workflow/branch, failed runs and rerun candidates are rejected.
+
+Pushing the approved annotated tag triggers promotion. The workflow validates all version sources, the selected run and complete checksummed asset set. It uses the committed release notes, creates a draft release, uploads the selected candidate bytes, downloads and compares them, then publishes. No package rebuild occurs during promotion. Do not move tags or substitute files. A failed promotion must be investigated before resuming its draft; do not publish manually around a failed check.
+
+The workflow requests Scoop and Homebrew updates when `PACKAGE_REPOSITORIES_TOKEN` is configured. Both package repositories also check daily as a fallback. Check their installation after publication and verify the public release page and downloaded checksums.
 
 ## Package repository notification
 

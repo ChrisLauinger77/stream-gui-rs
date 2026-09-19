@@ -1,12 +1,14 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*.*.*"
 
 permissions:
   contents: read
+  actions: read
 
 env:
   STREAM_GUI_RS_COMMIT: ${{ github.sha }}
@@ -17,31 +19,47 @@ concurrency:
 
 jobs:
   prepare:
-    name: Validate release tag
+    name: Validate candidate or release tag
     runs-on: ubuntu-26.04
     outputs:
       version: ${{ steps.metadata.outputs.version }}
+      candidate-run: ${{ steps.metadata.outputs.candidate-run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify annotated tag and version metadata
+      - name: Verify source, version and candidate identity
         id: metadata
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            echo 'Release tags must use vMAJOR.MINOR.PATCH.' >&2
-            exit 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            test "$GITHUB_REF" = refs/heads/main
+            test "$GITHUB_RUN_ATTEMPT" = 1
+            version=$(node -p 'require("./package.json").version')
+            candidate_run=$GITHUB_RUN_ID
+          else
+            [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]
+            version=${BASH_REMATCH[1]}
+            test "$(git cat-file -t "$GITHUB_REF")" = tag
+            test "$(git rev-list -n 1 "$GITHUB_REF")" = "$GITHUB_SHA"
+            candidate_run=$(git for-each-ref --format='%(contents:trailers:key=Candidate-Run,valueonly)' "$GITHUB_REF")
+            [[ "$candidate_run" =~ ^[0-9]+$ ]]
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$candidate_run" > candidate-run.json
+            node scripts/verify-release-candidate.mjs candidate-run.json "$GITHUB_SHA"
           fi
-          version=${BASH_REMATCH[1]}
-          test "$(git cat-file -t "$GITHUB_REF")" = tag
-          test "$(git rev-list -n 1 "$GITHUB_REF")" = "$(git rev-parse HEAD)"
           node scripts/set-version.mjs --check "$version"
+          test -f "docs/release-notes-$version.md"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "candidate-run=$candidate_run" >> "$GITHUB_OUTPUT"
+          echo "Source: $GITHUB_SHA; version: $version; candidate run: $candidate_run" >> "$GITHUB_STEP_SUMMARY"
 
   linux-x86_64:
     name: Linux x86_64 packages
+    if: github.event_name == 'workflow_dispatch'
     needs: prepare
     runs-on: ubuntu-26.04
     timeout-minutes: 45
@@ -52,8 +70,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify exact tag commit
-        run: test "$(git rev-list -n 1 "$GITHUB_REF")" = "$(git rev-parse HEAD)"
+      - name: Verify exact source commit
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
@@ -71,13 +89,15 @@ jobs:
       - name: Build release packages
         env:
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
-        run: npm run tauri build -- --bundles appimage,deb,rpm --features custom-protocol --ci
+        run: npm run tauri build -- --bundles appimage,deb,rpm --features custom-protocol --ci -- --locked
       - name: Repair AppImage host-library compatibility
         shell: bash
         run: |
           appimage=$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)
           test -n "$appimage"
           scripts/patch-appimage.sh "$appimage" "$appimage" "$VERSION"
+      - name: Verify frozen dependencies
+        run: git diff --exit-code -- package-lock.json src-tauri/Cargo.lock
       - name: Stage release files
         shell: bash
         run: |
@@ -98,6 +118,7 @@ jobs:
 
   windows-x86_64:
     name: Windows x86_64 packages
+    if: github.event_name == 'workflow_dispatch'
     needs: prepare
     runs-on: windows-2025
     timeout-minutes: 45
@@ -108,10 +129,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify exact tag commit and architecture
+      - name: Verify exact source commit and architecture
         shell: bash
         run: |
-          test "$(git rev-list -n 1 "$GITHUB_REF")" = "$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$RUNNER_ARCH" = X64
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -130,7 +151,9 @@ jobs:
       - name: Build release installer
         env:
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
-        run: npm run tauri build -- --bundles nsis --features custom-protocol --ci
+        run: npm run tauri build -- --bundles nsis --features custom-protocol --ci -- --locked
+      - name: Verify frozen dependencies
+        run: git diff --exit-code -- package-lock.json src-tauri/Cargo.lock
       - name: Report Authenticode status
         shell: pwsh
         run: Get-AuthenticodeSignature 'src-tauri/target/release/stream-gui-rs.exe' | Format-List Status,StatusMessage,SignerCertificate
@@ -176,6 +199,7 @@ jobs:
 
   macos-universal:
     name: macOS universal disk image
+    if: github.event_name == 'workflow_dispatch'
     needs: prepare
     runs-on: macos-26
     timeout-minutes: 45
@@ -186,10 +210,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify exact tag commit and architecture
+      - name: Verify exact source commit and architecture
         shell: bash
         run: |
-          test "$(git rev-list -n 1 "$GITHUB_REF")" = "$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(uname -m)" = arm64
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -206,7 +230,7 @@ jobs:
       - name: Build release disk image
         env:
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
-        run: npm run tauri build -- --target universal-apple-darwin --bundles app,dmg --features custom-protocol --ci
+        run: npm run tauri build -- --target universal-apple-darwin --bundles app,dmg --features custom-protocol --ci -- --locked
       - name: Verify universal application binary
         shell: bash
         run: |
@@ -220,6 +244,8 @@ jobs:
         run: |
           codesign --verify --deep --strict --verbose=2 'src-tauri/target/universal-apple-darwin/release/bundle/macos/Stream GUI RS.app'
           codesign --display --verbose=4 'src-tauri/target/universal-apple-darwin/release/bundle/macos/Stream GUI RS.app'
+      - name: Verify frozen dependencies
+        run: git diff --exit-code -- package-lock.json src-tauri/Cargo.lock
       - name: Stage release files
         shell: bash
         run: |
@@ -234,13 +260,19 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  publish:
-    name: Publish GitHub Release
+  verify-artifacts:
+    name: Verify complete candidate artifact set
+    if: >-
+      always() && needs.prepare.result == 'success' &&
+      (github.event_name == 'push' ||
+       (needs.linux-x86_64.result == 'success' &&
+        needs.windows-x86_64.result == 'success' &&
+        needs.macos-universal.result == 'success'))
     needs: [prepare, linux-x86_64, windows-x86_64, macos-universal]
     runs-on: ubuntu-26.04
     permissions:
       actions: read
-      contents: write
+      contents: read
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
       GH_TOKEN: ${{ github.token }}
@@ -249,6 +281,9 @@ jobs:
         with:
           path: release
           merge-multiple: true
+          run-id: ${{ needs.prepare.outputs.candidate-run }}
+          github-token: ${{ github.token }}
+          pattern: Stream-GUI-RS_${{ needs.prepare.outputs.version }}_*
       - name: Verify complete release set
         shell: bash
         run: |
@@ -273,6 +308,31 @@ jobs:
           zip_hash=$(sha256sum "Stream-GUI-RS_${VERSION}_windows_x86_64.zip" | cut -d' ' -f1)
           manifest_hash=$(jq -r '.architecture["64bit"].hash' stream-gui-rs.json)
           test "$zip_hash" = "$manifest_hash"
+
+  publish:
+    name: Publish tested candidate without rebuilding
+    if: >-
+      !cancelled() && github.event_name == 'push' &&
+      needs.prepare.result == 'success' && needs.verify-artifacts.result == 'success'
+    needs: [prepare, verify-artifacts]
+    runs-on: ubuntu-26.04
+    permissions:
+      actions: read
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: release
+          merge-multiple: true
+          run-id: ${{ needs.prepare.outputs.candidate-run }}
+          github-token: ${{ github.token }}
+          pattern: Stream-GUI-RS_${{ needs.prepare.outputs.version }}_*
       - name: Create or resume draft release
         shell: bash
         run: |
@@ -284,7 +344,7 @@ jobs:
               --verify-tag \
               --draft \
               --title "Stream GUI RS ${VERSION}" \
-              --generate-notes
+              --notes-file "docs/release-notes-$VERSION.md"
           fi
           gh release upload "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --clobber
       - name: Verify uploaded assets and publish
@@ -293,6 +353,8 @@ jobs:
           find release -maxdepth 1 -type f -printf '%f\n' | sort > /tmp/expected-assets
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort > /tmp/uploaded-assets
           diff -u /tmp/expected-assets /tmp/uploaded-assets
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir uploaded
+          diff -qr release uploaded
           gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
 
   update-package-repositories:
