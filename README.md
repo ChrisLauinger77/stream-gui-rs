@@ -100,7 +100,7 @@ The current release does not provide background followed-stream monitoring, noti
 Build requirements are separate from the runtime requirements above:
 
 - stable Rust 1.85 or newer
-- Node.js 22.12 or newer with npm; CI uses Node 22
+- Node.js 22.22.2+, 24.15.0+, or 26+ with npm; CI uses Node 24
 - [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for the target platform
 
 Install locked frontend dependencies and start development with your own registered public Twitch client ID:
