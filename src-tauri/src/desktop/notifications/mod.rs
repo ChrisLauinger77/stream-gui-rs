@@ -30,6 +30,8 @@ mod windows_state;
 use windows::Worker;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(any(target_os = "macos", test))]
+mod macos_permission;
 #[cfg(target_os = "macos")]
 use macos::Worker;
 
@@ -167,7 +169,16 @@ impl Notifications {
     ) -> Result<()> {
         use crate::domain::background::NotificationTestAction;
         match request {
-            NotificationTestAction::Send => self.deliver(self.tests.event()),
+            NotificationTestAction::Send => {
+                acceptance::check_permission(
+                    self.shared
+                        .state
+                        .lock()
+                        .expect("native notification state poisoned")
+                        .permission,
+                )?;
+                self.deliver(self.tests.event())
+            }
             NotificationTestAction::Clear => {
                 self.tests.clear();
                 let mut state = self

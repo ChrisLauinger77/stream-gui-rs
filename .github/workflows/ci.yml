@@ -96,6 +96,11 @@ jobs:
         # Rebuild with the opt-in feature; the normal build above must omit it.
         # --bundles selects packaging even with bundle.active=false.
         run: npm run tauri build -- --debug --bundles ${{ matrix.bundles }} --features custom-protocol,notification-acceptance --ci
+      - name: Verify macOS app bundle signature
+        if: runner.os == 'macOS' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          codesign --verify --deep --strict --verbose=2 'src-tauri/target/debug/bundle/macos/Stream GUI RS.app'
+          codesign --display --verbose=2 'src-tauri/target/debug/bundle/macos/Stream GUI RS.app'
       - name: Verify packaged Windows GUI subsystem
         if: runner.os == 'Windows'
         shell: pwsh

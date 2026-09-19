@@ -39,7 +39,7 @@ Published releases provide these native artifacts:
 
 ARM Linux/Windows packages are not currently published. The macOS disk image contains both Apple Silicon and Intel executable slices, but each architecture still requires native exact-artifact validation; cross-compilation alone is not treated as runtime proof.
 
-The Windows installer is not code-signed, so Windows may show a SmartScreen warning. The macOS app has no Developer ID signature or notarization; its Apple Silicon bundle may receive only an ad-hoc signature, and Gatekeeper may block its first launch. Verify every downloaded file against the accompanying SHA-256 checksum.
+The Windows installer is not code-signed, so Windows may show a SmartScreen warning. The macOS app bundle is ad-hoc signed but has no Developer ID signature or notarization, and Gatekeeper may block its first launch. Verify every downloaded file against the accompanying SHA-256 checksum.
 
 ## Runtime requirements
 
@@ -105,7 +105,7 @@ Notification clicks restore the app and select the channel while the original si
 
 - **Linux:** notification delivery and click actions depend on the desktop notification server. The UI reports OS-managed delivery, not a permission grant. A StatusNotifier host and an Ayatana/AppIndicator library are needed for the tray; GNOME may need an indicator extension. A missing library/host falls back to minimize. Losing the host restores a hidden window.
 - **Windows:** native toast notifications use the application's installed identity. After a banner times out, its Notification Center entry remains actionable for up to 15 minutes while the app and original monitoring/sign-in session remain active. Pause, logout and Quit retire those entries; notification clicks cannot reopen the app after Quit. Use the installer and its Start-menu shortcut for notification testing; an unregistered portable executable may not support delivery/activation. Installed Notification Center behavior still needs the [native acceptance checks](docs/release-smoke-test.md#windows-notification-center-acceptance).
-- **macOS:** allow notifications explicitly in Settings, then manage denial in macOS System Settings. Notifications require the installed app bundle; a bare development executable reports unavailable.
+- **macOS:** allow notifications explicitly in Settings, then manage denial in macOS System Settings. Notifications require an installed, correctly signed app bundle; a bare development executable reports unavailable. Authorization failures remain visible and can be retried after correcting the installation. See the [notification acceptance guide](docs/notification-acceptance.md) if no permission prompt appears.
 
 See [Phase 5 validation](docs/phase-5-validation.md) for automated evidence and outstanding native platform checks.
 

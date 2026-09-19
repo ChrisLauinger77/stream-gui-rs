@@ -2,7 +2,7 @@
 
 The `notification-acceptance` Cargo feature exposes **Settings → Developer tools → Native notification acceptance**. It is off by default and rejected by the build script in release/non-debug profiles, even if debug assertions are enabled. Release builds do not expose its command, permission or UI controls. No version change or release is needed.
 
-Each **Send test notification** queues fixed, clearly labeled test content through the same production adapter as followed-live notifications. Clicking uses the real OS callback, opaque activation lookup, window restore/focus and acknowledged desktop action. The destination is **TEST notification · Synthetic channel**, a local view with no channel request, playback or chat action. Twitch sign-in, HTTP and monitoring are not required. Sending or clearing does not change settings, monitor baselines or deduplication.
+Each **Send test notification** queues fixed, clearly labeled test content through the same production adapter as followed-live notifications. Sending is enabled only when Rust reports granted or OS-managed permission; the backend also rejects tests while permission is unknown, unrequested, denied or unavailable. “Queued” confirms worker submission, not OS delivery. Clicking uses the real OS callback, opaque activation lookup, window restore/focus and acknowledged desktop action. The destination is **TEST notification · Synthetic channel**, a local view with no channel request, playback or chat action. Twitch sign-in, HTTP and monitoring are not required. Sending or clearing does not change settings, monitor baselines or deduplication.
 
 ## CI acceptance packages
 
@@ -36,6 +36,15 @@ TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --deb
 ```
 
 Open `src-tauri/target/debug/bundle/macos/Stream GUI RS.app` as an application bundle. In Developer tools, use **Allow desktop notifications** if permission is not requested. If denied, re-enable in System Settings. A bare executable cannot exercise the macOS notification adapter. Test separately on the supported native architectures.
+
+Tauri explicitly ad-hoc signs the completed macOS app bundle, and CI verifies that signature before uploading the package. This requires no Apple credentials and does not provide Developer ID trust or notarization. If no permission prompt appears and the app is absent from System Settings → Notifications, inspect the installed bundle:
+
+```sh
+codesign --display --verbose=2 '/Applications/Stream GUI RS.app'
+codesign --verify --deep --strict --verbose=2 '/Applications/Stream GUI RS.app'
+```
+
+An executable-only `linker-signed` signature with `Info.plist=not bound` and `Sealed Resources=none` is not a valid signed application bundle. Rebuild/install the corrected package. Authorization errors remain **unavailable** instead of being overwritten by a later **not requested** poll; **Retry desktop notifications** requests authorization again after correcting the installation. A valid signature is a prerequisite, not proof that macOS will grant permission or display a notification.
 
 An installed Linux debug package can be built with the same command using `--bundles deb` (or the package format appropriate to the host). Linux notification history/action support varies by desktop; record the notification server and whether it advertises actions.
 

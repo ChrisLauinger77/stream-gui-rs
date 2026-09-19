@@ -153,3 +153,22 @@ TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 cargo test --locked --manife
 Run `npm run build` first to refresh the embedded frontend. This graphical test requires a Wayland session; the existing background test can be selected separately with `close_background_restore` on X11.
 
 Frontend build and 97 tests, 142 backend unit tests, 28 process tests, build metadata/configuration guards, six desktop unit tests, two isolated browser tests, malformed-settings startup, all-target checking, strict Clippy, formatting and diff checks passed. A normal debug/custom-protocol `.deb` also built with the synthetic compile-only public ID. Windows/macOS execution and manual installed-package pointer/drag checks were not performed.
+
+## macOS notification bundle-signature correction
+
+2026-09-19: the tester reported that the installed Apple Silicon acceptance package at `83d8085` showed no authorization prompt or System Settings entry. On macOS 27.0, `codesign` reported an executable-only `adhoc,linker-signed` signature, an unbound Info.plist and no sealed resources; strict bundle verification failed. After quitting, explicitly ad-hoc signing the complete installed bundle with identifier `io.github.stream-gui-rs`, and reopening it, the tester confirmed that the permission prompt appeared and the test notification worked. This is user-reported native evidence for repairing that existing build, not execution of the new source below.
+
+Tauri now explicitly ad-hoc signs completed macOS bundles. Both CI acceptance packaging and release packaging fail if strict bundle signature verification fails. No Apple credentials, Developer ID signing or notarization were added. The macOS permission adapter serializes settings and authorization callbacks, preserves an authorization error across NotDetermined polls and permits an explicit retry. The acceptance UI and backend reject sending before granted/OS-managed permission; queue acknowledgement explicitly does not assert OS delivery.
+
+Validation on Linux:
+
+- Frontend production build/typecheck and 102 tests passed, including unavailable/unrequested/denied/unknown test-send guards and retry-to-granted behavior.
+- 142 backend unit tests, 29 native process tests and build metadata/client-ID guards passed; generated DTO equality remained intact.
+- 12 native notification unit tests passed with `test-support,notification-acceptance`, including callback serialization, retry, error persistence and permission gating.
+- All-target checking and strict Clippy passed; Clippy also passed with the acceptance feature enabled.
+- The normal debug/custom-protocol Tauri build passed without bundling, using the synthetic compile-only public client ID. Formatting and diff whitespace checks passed.
+- The graphical Linux background regression passed both close and Quit scenarios with the acceptance feature, packaged frontend and synthetic private D-Bus notification service. Both isolated browser regressions passed. Private-bus portal/GVFS warnings did not fail the checks.
+- A temporary harness checked the actual macOS adapter and its permission policy against objc2 APIs for `aarch64-apple-darwin`, including all-target strict Clippy with the repository's Rust minimum version. This was a metadata/API check, not a macOS link or app execution.
+- Both workflow files parsed as YAML. The new macOS signing/verification workflow steps require a subsequent macOS CI run; they cannot execute on this Linux host.
+
+The tester's repaired package confirms prompt and test delivery on Apple Silicon. Fresh-artifact installation, Intel, denial/re-enable, click focus/navigation and retained-notification cleanup remain native acceptance checks for this correction. No Windows native execution, real Twitch request or live playback test was performed.

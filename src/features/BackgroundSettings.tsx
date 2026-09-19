@@ -7,9 +7,9 @@ const phases: Record<MonitorPhase, string> = {
   disabled: "Monitoring is disabled", signed_out: "Sign in to start monitoring", paused: "Monitoring is paused",
   baseline: "Establishing a quiet baseline…", running: "Monitoring followed streams", recovering: "Waiting to recover", stopped: "Monitoring stopped",
 };
-const permissions: Record<NotificationPermission, string> = {
+export const notificationPermissionMessages: Record<NotificationPermission, string> = {
   unknown: "Checking system permission…", not_requested: "Permission has not been requested", granted: "Notifications allowed",
-  denied: "Notifications denied — change this in system settings", unavailable: "Native notifications unavailable (an installed app may be required)",
+  denied: "Notifications denied — change this in system settings", unavailable: "Native notifications unavailable. Check the app installation and OS permissions, then retry.",
   os_managed: "Delivery is controlled by your desktop notification settings",
 };
 export function BackgroundSettings({ value, change, desktop }: { value: Preferences; change: (value: Preferences) => void; desktop: ReturnType<typeof useDesktop> }) {
@@ -28,8 +28,9 @@ export function BackgroundSettings({ value, change, desktop }: { value: Preferen
       {status.monitor.error && <p className="muted">{errorText(status.monitor.error)} Retrying in about {status.monitor.retryInSeconds} seconds.</p>}
       <button type="button" disabled={desktop.busy || status.monitor.phase === "disabled"} onClick={() => { void desktop.run(status.monitor.paused ? api.resumeMonitor : api.pauseMonitor); }}>{status.monitor.paused ? "Resume monitoring" : "Pause monitoring"}</button>
       <p className="muted">Pause lasts until Resume or application restart.</p>
-      <p>{permissions[status.notificationPermission]}</p>
+      <p>{notificationPermissionMessages[status.notificationPermission]}</p>
       {status.notificationPermission === "not_requested" && <button type="button" disabled={desktop.busy} onClick={() => { void desktop.run(api.requestNotificationPermission); }}>Allow desktop notifications</button>}
+      {status.notificationPermission === "unavailable" && <button type="button" disabled={desktop.busy} onClick={() => { void desktop.run(api.requestNotificationPermission); }}>Retry desktop notifications</button>}
       {!status.notificationClickSupported && <p className="muted">This notification provider does not support channel click actions. Restore the app from its tray or taskbar.</p>}
       {!status.trayAvailable && <p className="muted">A tray is not available. Background close will minimize the window.</p>}
       {status.monitor.notificationError && <p role="status">A notification could not be delivered. Monitoring continues.</p>}

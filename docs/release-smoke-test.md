@@ -59,6 +59,7 @@ Artifact: `Stream-GUI-RS_X.Y.Z_macos_universal.dmg`
 - [ ] The disk image mounts and contains `Stream GUI RS.app`.
 - [ ] `lipo -archs` reports both `arm64` and `x86_64` for the executable under `Stream GUI RS.app/Contents/MacOS`.
 - [ ] Record the expected Gatekeeper/quarantine behavior for the app without Developer ID signing or notarization.
+- [ ] `codesign --verify --deep --strict --verbose=2 '/Applications/Stream GUI RS.app'` succeeds. The installed bundle has sealed resources and a bound Info.plist, not merely a linker-generated executable signature.
 - [ ] After the tester explicitly allows it, the app starts without terminal environment variables.
 - [ ] Finder reports version X.Y.Z and the same exact disk image runs natively on Apple Silicon.
 - [ ] Open **Stream GUI RS → About Stream GUI RS**: the native panel shows `Stream GUI RS` and `Version X.Y.Z (<first seven characters of the release commit>)`, with no duplicate application version. Click the repository link and confirm the default browser opens `https://github.com/ChrisLauinger77/stream-gui-rs`. Check both light and dark appearance and confirm the other standard application menu actions still work.

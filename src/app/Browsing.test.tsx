@@ -664,7 +664,7 @@ test("native acceptance controls require the backend build feature", async () =>
 test("signed-out developer tools send and clear fixed tests and route native actions", async () => {
   vi.mocked(api.authStatus).mockResolvedValue(signedOut);
   vi.mocked(api.diagnostics).mockRejectedValue({ code: "internal" });
-  const enabled = { ...desktopSnapshot, notificationTestAvailable: true };
+  const enabled = { ...desktopSnapshot, notificationTestAvailable: true, notificationPermission: "os_managed" as const };
   vi.mocked(api.desktopStatus).mockResolvedValue(enabled);
   vi.mocked(api.devNotificationTest).mockResolvedValue(null);
   vi.mocked(api.acknowledgeDesktopAction).mockResolvedValue(null);
@@ -686,6 +686,35 @@ test("signed-out developer tools send and clear fixed tests and route native act
   await click("Developer tools"); await click("← Back to browsing");
   expect(text()).not.toContain("TEST notification · Synthetic channel");
   expect(api.acknowledgeDesktopAction).toHaveBeenCalledOnce();
+});
+test.each(["unknown", "not_requested", "denied", "unavailable"] as const)("native acceptance cannot queue a test with %s permission", async notificationPermission => {
+  vi.mocked(api.diagnostics).mockRejectedValue({ code: "internal" });
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, notificationTestAvailable: true, notificationPermission });
+  await render(); await click("Settings"); await click("Developer tools");
+  const send = [...container.querySelectorAll("button")].find(button => button.textContent === "Send test notification")!;
+  expect(send.disabled).toBe(true);
+  await act(async () => send.click());
+  expect(api.devNotificationTest).not.toHaveBeenCalled();
+  expect(text()).not.toContain("Test notification queued");
+});
+test("failed native authorization stays visible and can be retried before a test", async () => {
+  vi.mocked(api.diagnostics).mockRejectedValue({ code: "internal" });
+  const enabled = { ...desktopSnapshot, notificationTestAvailable: true };
+  vi.mocked(api.desktopStatus).mockResolvedValue(enabled);
+  vi.mocked(api.requestNotificationPermission).mockResolvedValue(null);
+  vi.mocked(api.devNotificationTest).mockResolvedValue(null);
+  await render(); await click("Settings"); await click("Developer tools");
+  expect(text()).toContain("Allow desktop notifications before sending a test");
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...enabled, notificationPermission: "unavailable" });
+  await click("Allow desktop notifications");
+  expect(text()).toContain("Native notifications unavailable");
+  expect(text()).toContain("code signature");
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...enabled, notificationPermission: "granted" });
+  await click("Retry desktop notifications");
+  expect(api.requestNotificationPermission).toHaveBeenCalledTimes(2);
+  await click("Send test notification");
+  expect(api.devNotificationTest).toHaveBeenCalledWith("send");
+  expect(text()).toContain("OS delivery is not confirmed");
 });
 test("test activation retries acknowledgement without reopening the dismissed target", async () => {
   vi.mocked(api.authStatus).mockResolvedValue(signedOut);

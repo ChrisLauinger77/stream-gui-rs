@@ -1,3 +1,4 @@
+use super::macos_permission::{Operation, PermissionCheck};
 use super::*;
 use block2::{DynBlock, RcBlock};
 use objc2::{
@@ -7,11 +8,7 @@ use objc2::{
 };
 use objc2_foundation::{NSArray, NSBundle, NSError, NSObject, NSObjectProtocol, NSString};
 use objc2_user_notifications::*;
-use std::{
-    collections::HashMap,
-    ptr::NonNull,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::{collections::HashMap, ptr::NonNull};
 
 type Records = Arc<Mutex<HashMap<String, (LiveNotification, Instant)>>>;
 struct DelegateState {
@@ -88,8 +85,7 @@ pub(super) struct Worker {
     center: Option<Retained<UNUserNotificationCenter>>,
     _delegate: Option<Retained<Delegate>>,
     records: Records,
-    requested: bool,
-    checking: Arc<AtomicBool>,
+    checking: Arc<Mutex<PermissionCheck>>,
 }
 impl Worker {
     pub fn new(shared: Arc<Shared>) -> Self {
@@ -109,43 +105,53 @@ impl Worker {
             center,
             _delegate: delegate,
             records,
-            requested: false,
-            checking: Arc::new(AtomicBool::new(false)),
+            checking: Arc::default(),
         };
         worker.refresh(false);
         worker
     }
     pub fn refresh(&mut self, request: bool) {
+        if self.shared.stop.is_cancelled() {
+            return;
+        }
         let Some(center) = &self.center else {
             self.shared
                 .permission(NotificationPermission::Unavailable, false);
             return;
         };
-        if request && !self.requested {
-            self.requested = true;
+        let Some(operation) = self
+            .checking
+            .lock()
+            .expect("notification permission check poisoned")
+            .begin(request)
+        else {
+            return;
+        };
+        let checking = self.checking.clone();
+        if operation == Operation::Request {
+            self.shared
+                .permission(NotificationPermission::Unknown, true);
             let shared = self.shared.clone();
             center.requestAuthorizationWithOptions_completionHandler(
                 UNAuthorizationOptions::Alert,
                 &RcBlock::new(move |allowed: Bool, error: *mut NSError| {
+                    let mut checking = checking
+                        .lock()
+                        .expect("notification permission check poisoned");
+                    let permission = checking.complete(if !error.is_null() {
+                        NotificationPermission::Unavailable
+                    } else if allowed.as_bool() {
+                        NotificationPermission::Granted
+                    } else {
+                        NotificationPermission::Denied
+                    });
                     if !shared.stop.is_cancelled() {
-                        shared.permission(
-                            if !error.is_null() {
-                                NotificationPermission::Unavailable
-                            } else if allowed.as_bool() {
-                                NotificationPermission::Granted
-                            } else {
-                                NotificationPermission::Denied
-                            },
-                            true,
-                        );
+                        shared.permission(permission, true);
                     }
                 }),
             );
-        }
-        if self.checking.swap(true, Ordering::SeqCst) {
             return;
         }
-        let checking = self.checking.clone();
         let shared = self.shared.clone();
         center.getNotificationSettingsWithCompletionHandler(&RcBlock::new(
             move |settings: NonNull<UNNotificationSettings>| {
@@ -158,10 +164,13 @@ impl Worker {
                     | UNAuthorizationStatus::Ephemeral => NotificationPermission::Granted,
                     _ => NotificationPermission::Unknown,
                 };
+                let mut checking = checking
+                    .lock()
+                    .expect("notification permission check poisoned");
+                let permission = checking.complete(permission);
                 if !shared.stop.is_cancelled() {
                     shared.permission(permission, true);
                 }
-                checking.store(false, Ordering::SeqCst);
             },
         ));
     }
@@ -221,6 +230,14 @@ impl Worker {
         Ok(())
     }
     pub fn tick(&mut self) {
+        let pending = self
+            .checking
+            .lock()
+            .expect("notification permission check poisoned")
+            .request_pending();
+        if pending && !self.shared.stop.is_cancelled() {
+            self.refresh(false);
+        }
         let mut records = self.records.lock().expect("notification registry poisoned");
         let mut expired = Vec::new();
         records.retain(|id, (event, sent)| {

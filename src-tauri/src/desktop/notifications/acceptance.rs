@@ -3,6 +3,16 @@ use crate::{domain::background::DesktopAction, monitor::LiveNotification};
 use std::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
+pub(super) fn check_permission(
+    permission: crate::domain::background::NotificationPermission,
+) -> crate::domain::Result<()> {
+    use crate::domain::background::NotificationPermission;
+    match permission {
+        NotificationPermission::Granted | NotificationPermission::OsManaged => Ok(()),
+        _ => Err(super::delivery_error()),
+    }
+}
+
 const SESSION: &str = "notification-acceptance";
 // Zero is deliberately invalid as a real broadcaster ID.
 const CHANNEL: &str = "0";
@@ -46,6 +56,17 @@ pub(crate) fn is_test_action(action: &DesktopAction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_submission_requires_native_permission() {
+        use crate::domain::background::NotificationPermission::*;
+        for permission in [Unknown, NotRequested, Denied, Unavailable] {
+            assert!(check_permission(permission).is_err());
+        }
+        for permission in [Granted, OsManaged] {
+            assert!(check_permission(permission).is_ok());
+        }
+    }
 
     #[test]
     fn clearing_cancels_all_old_tests_without_poisoning_new_tests() {

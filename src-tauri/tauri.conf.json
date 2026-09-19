@@ -19,6 +19,9 @@
   },
   "bundle": {
     "active": false,
+    "macOS": {
+      "signingIdentity": "-"
+    },
     "publisher": "ChrisLauinger77",
     "license": "GPL-3.0-only",
     "category": "Video",

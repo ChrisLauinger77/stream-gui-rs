@@ -216,8 +216,10 @@ jobs:
           test -n "$executable"
           lipo "$executable" -verify_arch arm64 x86_64
           lipo "$executable" -archs
-      - name: Report application signature status
-        run: codesign --display --verbose=4 'src-tauri/target/universal-apple-darwin/release/bundle/macos/Stream GUI RS.app' 2>&1 || true
+      - name: Verify application bundle signature
+        run: |
+          codesign --verify --deep --strict --verbose=2 'src-tauri/target/universal-apple-darwin/release/bundle/macos/Stream GUI RS.app'
+          codesign --display --verbose=4 'src-tauri/target/universal-apple-darwin/release/bundle/macos/Stream GUI RS.app'
       - name: Stage release files
         shell: bash
         run: |
