@@ -145,7 +145,10 @@ async fn serve(
     if let Some(gate) = reply.gate {
         gate.notified().await;
     }
-    tokio::time::sleep(reply.delay).await;
+    // Undelayed replies must also complete when a test freezes Tokio's clock.
+    if !reply.delay.is_zero() {
+        tokio::time::sleep(reply.delay).await;
+    }
     let mut response = format!(
         "HTTP/1.1 {} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n",
         reply.status,

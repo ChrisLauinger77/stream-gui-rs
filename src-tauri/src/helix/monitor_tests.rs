@@ -275,3 +275,70 @@ async fn sleep_during_inflight_scan_discards_response_and_recovers_quietly() {
     assert_eq!(server.requests().len(), 2);
     monitor.shutdown().await;
 }
+
+#[tokio::test]
+async fn response_before_suspend_heartbeat_is_discarded_before_transition_acceptance() {
+    let gate = Arc::new(tokio::sync::Notify::new());
+    let server = Server::new(vec![
+        Reply::json(200, streams(&[("100", "1")], None)),
+        Reply::json(200, streams(&[("100", "1"), ("200", "2")], None)).gated(gate.clone()),
+        Reply::json(200, streams(&[("300", "3")], None)),
+        Reply::json(200, streams(&[("300", "3"), ("400", "4")], None)),
+    ])
+    .await;
+    let (client, _) = client(&server, None).await;
+    let client = Arc::new(client);
+    let root = tempfile::tempdir().unwrap();
+    let settings = Arc::new(SettingsStore::open(root.path()).unwrap());
+    let mut prefs = settings.snapshot();
+    prefs.background.monitoring_enabled = true;
+    prefs.background.notifications_enabled = true;
+    settings.update(prefs).unwrap();
+    let monitor = Arc::new(Monitor::for_test());
+    let sink = Arc::new(Sink::default());
+    monitor.set_sink(sink.clone());
+    monitor.start(client.auth.clone(), client.clone(), settings);
+    phase(&monitor, MonitorPhase::Running).await;
+    client.clear_cache();
+    let advancing = {
+        let monitor = monitor.clone();
+        tokio::spawn(async move { advance_cycle(&monitor).await })
+    };
+    server.wait_for_requests(2).await;
+    // Freeze uptime but jump wall time, as on a machine whose monotonic timer
+    // pauses during suspend. Keep yielding a ready task so Tokio cannot auto-
+    // advance its frozen clock while the loopback response completes.
+    tokio::time::pause();
+    let uptime = tokio::time::Instant::now();
+    monitor.test_elapse(3600);
+    gate.notify_one();
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while !advancing.is_finished() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "response did not finish"
+        );
+        tokio::task::yield_now().await;
+    }
+    advancing.await.unwrap();
+    assert_eq!(tokio::time::Instant::now(), uptime);
+    assert_eq!(monitor.snapshot().phase, MonitorPhase::Recovering);
+    assert_eq!(monitor.snapshot().error, Some(ErrorCode::Timeout));
+    assert!(sink.0.lock().unwrap().is_empty());
+    tokio::time::resume();
+    advance_cycle(&monitor).await;
+    assert_eq!(monitor.snapshot().live_count, Some(1));
+    assert!(sink.0.lock().unwrap().is_empty());
+    client.clear_cache();
+    advance_cycle(&monitor).await;
+    assert_eq!(sink.0.lock().unwrap().len(), 1);
+    assert_eq!(sink.0.lock().unwrap()[0].broadcaster_id, "4");
+    monitor.shutdown().await;
+}
+
+async fn advance_cycle(monitor: &Monitor) {
+    let seconds = monitor.snapshot().retry_in_seconds + 2;
+    for _ in 0..seconds {
+        monitor.test_advance(1).await;
+    }
+}

@@ -130,12 +130,16 @@ impl Monitor {
     #[cfg(test)]
     pub(crate) async fn test_advance(&self, seconds: u64) {
         let mut ticks = self.ticks.subscribe();
-        self.clock.advance_wall(Duration::from_secs(seconds));
+        self.test_elapse(seconds);
         self.changed.notify_one();
         tokio::time::timeout(Duration::from_secs(3), ticks.changed())
             .await
             .unwrap()
             .unwrap();
+    }
+    #[cfg(test)]
+    pub(crate) fn test_elapse(&self, seconds: u64) {
+        self.clock.advance_wall(Duration::from_secs(seconds));
     }
 
     pub fn snapshot(&self) -> MonitorStatus {
@@ -268,12 +272,13 @@ impl Monitor {
                 } else {
                     MonitorPhase::Baseline
                 };
-                let result = tokio::select! {
+                let heartbeat = Mutex::new(self.clock.now());
+                let mut result = tokio::select! {
                     biased;
                     _ = self.stop.cancelled() => break,
                     _ = generation.cancelled() => continue,
                     _ = session_cancel.cancelled() => continue,
-                    _ = suspend_gap(&self.clock) => {
+                    _ = suspend_gap(&self.clock, &heartbeat) => {
                         // A response spanning suspend cannot establish current state.
                         helix.invalidate(crate::helix::cache::CacheClass::Live);
                         Err(crate::twitch_http::error(ErrorCode::Timeout))
@@ -284,7 +289,12 @@ impl Monitor {
                     continue;
                 }
                 let finished = self.clock.now();
-                // Account/suspend checks run again before the next operation.
+                // A response can wake us before the heartbeat timer after suspend.
+                // Reconcile before accepting it or overwriting the elapsed boundary.
+                if suspend_since(finished, &heartbeat) {
+                    helix.invalidate(crate::helix::cache::CacheClass::Live);
+                    result = Err(crate::twitch_http::error(ErrorCode::Timeout));
+                }
                 last_tick = finished;
                 match result {
                     Ok(streams) => {
@@ -354,15 +364,18 @@ impl Monitor {
         }
     }
 }
-async fn suspend_gap(clock: &Clock) {
-    let mut previous = clock.now();
+fn suspend_since(now: Duration, heartbeat: &Mutex<Duration>) -> bool {
+    now.saturating_sub(*heartbeat.lock().expect("monitor heartbeat poisoned"))
+        > Duration::from_secs(10)
+}
+async fn suspend_gap(clock: &Clock, heartbeat: &Mutex<Duration>) {
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let current = clock.now();
-        if current.saturating_sub(previous) > Duration::from_secs(10) {
+        if suspend_since(current, heartbeat) {
             return;
         }
-        previous = current;
+        *heartbeat.lock().expect("monitor heartbeat poisoned") = current;
     }
 }
 fn compact(text: &str, max: usize) -> String {
@@ -377,6 +390,21 @@ fn backoff(failures: u32, interval: u32, jitter: u64) -> Duration {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test(start_paused = true)]
+    async fn ordinary_slow_scan_keeps_a_current_heartbeat() {
+        let clock = Clock::for_test();
+        let heartbeat = Mutex::new(clock.now());
+        let guard = suspend_gap(&clock, &heartbeat);
+        tokio::pin!(guard);
+        for _ in 0..20 {
+            tokio::select! {
+                biased;
+                _ = &mut guard => panic!("ordinary elapsed uptime is not suspend"),
+                _ = tokio::time::sleep(Duration::from_secs(1)) => {},
+            }
+        }
+        assert!(!suspend_since(clock.now(), &heartbeat));
+    }
     #[test]
     fn retry_delays_are_bounded_and_jitter_does_not_accumulate() {
         assert_eq!(backoff(1, 60, 7), Duration::from_secs(67));
