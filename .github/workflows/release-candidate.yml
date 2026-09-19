@@ -198,8 +198,8 @@ jobs:
           test -n "$app"
           executable=$(find "$app/Contents/MacOS" -maxdepth 1 -type f -print -quit)
           test -n "$executable"
-          lipo -verify_arch arm64 x86_64 "$executable"
-          lipo -archs "$executable"
+          lipo "$executable" -verify_arch arm64 x86_64
+          lipo "$executable" -archs
       - name: Report application signature status
         run: codesign --display --verbose=4 'src-tauri/target/universal-apple-darwin/release/bundle/macos/Stream GUI RS.app' 2>&1 || true
       - name: Stage release files
