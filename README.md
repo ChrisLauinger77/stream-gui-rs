@@ -5,7 +5,7 @@
 
 <img src="src/assets/app-icon.svg" alt="Stream GUI RS application icon" width="128">
 
-Stream GUI RS is a native desktop application for browsing Twitch and watching live streams through [Streamlink](https://streamlink.github.io/). It uses a compact Tauri interface and launches video in a separately installed player. Twitch is the only supported streaming service in version 0.1.0.
+Stream GUI RS is a native desktop application for browsing Twitch and watching live streams through [Streamlink](https://streamlink.github.io/). It uses a compact Tauri interface and launches video in a separately installed player. Twitch is currently the only supported streaming service.
 
 This is an independent rewrite inspired by [Streamlink Twitch GUI](https://github.com/streamlink/streamlink-twitch-gui). It is not affiliated with Twitch or the original project.
 
@@ -25,17 +25,17 @@ Stream GUI RS does not bundle Streamlink or a media player. It does not contain 
 
 ## Downloads and platform support
 
-The 0.1.0 release candidate produces these native artifacts:
+Published releases provide these native artifacts:
 
 | Platform | Architecture | Artifact | Status |
 | --- | --- | --- | --- |
-| Windows 11 | x86_64 | NSIS installer and portable/Scoop ZIP | Installer natively tested; exact portable package check required |
-| Linux | x86_64 | AppImage, Debian `amd64` package, and RPM `x86_64` package | AppImage and Debian package natively tested; exact RPM check required |
-| macOS | Universal (arm64 and x86_64) | Disk image (`.dmg`) containing the universal app | Natively tested on Apple Silicon; exact Intel check required |
+| Windows 11 | x86_64 | NSIS installer and portable/Scoop ZIP | Installer and portable package published |
+| Linux | x86_64 | AppImage, Debian `amd64` package, and RPM `x86_64` package | AppImage and Debian package natively tested; RPM installation remains a release check |
+| macOS | Universal (arm64 and x86_64) | Disk image (`.dmg`) containing the universal app | Natively tested on Apple Silicon; native Intel execution remains a release check |
 
-ARM Linux/Windows packages are not part of 0.1.0. The macOS disk image contains both Apple Silicon and Intel executable slices, but each architecture still requires native exact-artifact validation; cross-compilation alone is not treated as runtime proof.
+ARM Linux/Windows packages are not currently published. The macOS disk image contains both Apple Silicon and Intel executable slices, but each architecture still requires native exact-artifact validation; cross-compilation alone is not treated as runtime proof.
 
-The 0.1.0 Windows installer is not code-signed, so Windows may show a SmartScreen warning. The macOS app has no Developer ID signature or notarization; its Apple Silicon bundle may receive only an ad-hoc signature, and Gatekeeper may block its first launch. These are known distribution limitations of the first release; verify every downloaded file against the accompanying SHA-256 checksum.
+The Windows installer is not code-signed, so Windows may show a SmartScreen warning. The macOS app has no Developer ID signature or notarization; its Apple Silicon bundle may receive only an ad-hoc signature, and Gatekeeper may block its first launch. Verify every downloaded file against the accompanying SHA-256 checksum.
 
 ## Runtime requirements
 
@@ -55,7 +55,7 @@ Secure credential storage is mandatory. There is no plaintext fallback. A locked
 
 ## Install and connect
 
-1. Download the artifact for your platform and its checksum file from the release candidate workflow or GitHub Release.
+1. Download the artifact for your platform and its checksum file from [GitHub Releases](https://github.com/ChrisLauinger77/stream-gui-rs/releases).
 2. Verify the SHA-256 checksum, then install or open the package.
 3. Install Streamlink and a player if they are not already present.
 4. Launch Stream GUI RS and select **Connect to Twitch**.
@@ -63,7 +63,7 @@ Secure credential storage is mandatory. There is no plaintext fallback. A locked
 6. Open **Settings → Streamlink** to test discovery, then choose and test the player settings.
 7. Browse a live channel and select **Watch**. Use **Watching** to stop or restart sessions.
 
-After the GitHub Release and package definitions are published, Scoop users can install the portable Windows build from the author's bucket:
+Scoop users can install the portable Windows build from the author's bucket:
 
 ```powershell
 scoop bucket add ChrisLauinger77 https://github.com/ChrisLauinger77/scoop-bucket
@@ -77,7 +77,7 @@ brew tap ChrisLauinger77/cask
 brew install --cask stream-gui-rs
 ```
 
-The Windows release also includes `stream-gui-rs.json` for direct Scoop installation. The bucket and cask definitions are published only after their referenced GitHub Release assets exist.
+The Windows release also includes `stream-gui-rs.json` for direct Scoop installation. The bucket and cask definitions update from published GitHub Release assets.
 
 Official installed builds contain the project's public Twitch application ID. Users do not set environment variables, register an application, or provide a client secret.
 
@@ -91,7 +91,7 @@ The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectiv
 
 ## Current limitations
 
-Version 0.1.0 does not provide background followed-stream monitoring, notifications, tray behavior, embedded video/chat, external chat applications, advanced Streamlink transports or player profiles, an updater, or legacy configuration import. Active sessions and logs are not persisted. See [architecture](docs/architecture.md) for the detailed contracts.
+The current release does not provide background followed-stream monitoring, notifications, tray behavior, embedded video/chat, external chat applications, advanced Streamlink transports or player profiles, an updater, or legacy configuration import. Active sessions and logs are not persisted. See [architecture](docs/architecture.md) for the detailed contracts.
 
 ## Building from source
 

@@ -1,14 +1,14 @@
-# Release candidate smoke test
+# Release artifact smoke test
 
-Use only the files downloaded from a single successful **Release candidate artifacts** workflow run. Record the workflow URL, exact 40-character commit SHA, artifact names, tester, date, OS version, Streamlink version, and player version. Do not rebuild or substitute files after testing.
+Use only the files downloaded from one published tag-driven release. Record the release URL, tag, exact 40-character commit SHA, artifact names, tester, date, OS version, Streamlink version, and player version. Do not rebuild or substitute files after testing.
 
 ## Integrity and common checks
 
-- [ ] The workflow SHA is the intended release candidate commit.
-- [ ] Every downloaded filename identifies version 0.1.0, platform, and architecture.
+- [ ] The release tag points to the intended release commit.
+- [ ] Every downloaded filename identifies the release version, platform, and architecture.
 - [ ] `SHA256SUMS_<platform>_<architecture>.txt` verifies every distributable in its artifact archive.
 - [ ] Install or open the package without setting `TWITCH_CLIENT_ID` or `TWITCH_CLIENT_ID_BUILD`.
-- [ ] The application identifies itself as Stream GUI RS 0.1.0 where version metadata is shown.
+- [ ] The application identifies itself as Stream GUI RS X.Y.Z where version metadata is shown.
 - [ ] Connect to Twitch through the browser Device Code flow.
 - [ ] Quit and relaunch; the authenticated session restores from native secure storage.
 - [ ] Following, Live, Categories, Search, and channel details load real Twitch data.
@@ -26,10 +26,10 @@ Never copy real OAuth tokens, refresh tokens, device codes, or credential-store 
 
 ## Windows 11 x86_64
 
-Artifacts: `Stream-GUI-RS_0.1.0_windows_x86_64-setup.exe`, `Stream-GUI-RS_0.1.0_windows_x86_64.zip`, and `stream-gui-rs.json`
+Artifacts: `Stream-GUI-RS_X.Y.Z_windows_x86_64-setup.exe`, `Stream-GUI-RS_X.Y.Z_windows_x86_64.zip`, and `stream-gui-rs.json`
 
 - [ ] Note the expected unsigned-publisher/SmartScreen warning; no unexpected publisher identity appears.
-- [ ] Programs and Features shows Stream GUI RS, version 0.1.0, and publisher ChrisLauinger77.
+- [ ] Programs and Features shows Stream GUI RS, version X.Y.Z, and publisher ChrisLauinger77.
 - [ ] Normal application startup displays no console window.
 - [ ] Streamlink probes and playback start without helper console flashes.
 - [ ] Uninstall succeeds.
@@ -38,7 +38,7 @@ Artifacts: `Stream-GUI-RS_0.1.0_windows_x86_64-setup.exe`, `Stream-GUI-RS_0.1.0_
 
 ## Linux x86_64
 
-Artifacts: `Stream-GUI-RS_0.1.0_linux_x86_64.AppImage`, `Stream-GUI-RS_0.1.0_linux_amd64.deb`, and `Stream-GUI-RS_0.1.0_linux_x86_64.rpm`
+Artifacts: `Stream-GUI-RS_X.Y.Z_linux_x86_64.AppImage`, `Stream-GUI-RS_X.Y.Z_linux_amd64.deb`, and `Stream-GUI-RS_X.Y.Z_linux_x86_64.rpm`
 
 Test all three formats separately on matching supported desktop sessions.
 
@@ -54,7 +54,7 @@ Test all three formats separately on matching supported desktop sessions.
 
 ## macOS universal
 
-Artifact: `Stream-GUI-RS_0.1.0_macos_universal.dmg`
+Artifact: `Stream-GUI-RS_X.Y.Z_macos_universal.dmg`
 
 - [ ] The disk image mounts and contains `Stream GUI RS.app`.
 - [ ] `lipo -archs` reports both `arm64` and `x86_64` for the executable under `Stream GUI RS.app/Contents/MacOS`.

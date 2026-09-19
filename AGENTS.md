@@ -290,8 +290,8 @@ cross-compilation or process status does not prove native behavior.
 
 The current tree implements the Phase 4 MVP: browsing/playback, persistent global/channel preferences,
 restricted browser chat, themes and focused shortcuts. Background monitoring, notifications/tray, advanced transports/chat
-clients, legacy import and release and updater polish remain deferred. There is no publishing workflow. Do not
-start another phase as incidental cleanup. Keep detailed architecture, user setup and validation history in
+clients, legacy import and updater polish remain deferred. Annotated `vMAJOR.MINOR.PATCH` tags trigger the
+native publishing workflow; version preparation is documented in `docs/releasing.md`. Do not start another phase as incidental cleanup. Keep detailed architecture, user setup and validation history in
 their respective documents rather than expanding this guide.
 
 ## Agent checklist

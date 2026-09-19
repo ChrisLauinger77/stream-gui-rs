@@ -2,13 +2,19 @@
 
 set -euo pipefail
 
-if [[ $# -ne 2 ]]; then
-  echo "usage: $0 INPUT.AppImage OUTPUT.AppImage" >&2
+if [[ $# -ne 3 ]]; then
+  echo "usage: $0 INPUT.AppImage OUTPUT.AppImage VERSION" >&2
   exit 2
 fi
 
 input=$1
 output=$2
+version=$3
+
+if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Version must use numeric major.minor.patch form." >&2
+  exit 1
+fi
 
 if [[ ! -f "$input" ]]; then
   echo "AppImage not found: $input" >&2
@@ -113,7 +119,7 @@ fi
 patched_appimage="$work_dir/patched.AppImage"
 PATH="$mksquashfs_dir:$PATH" \
   ARCH=x86_64 \
-  LINUXDEPLOY_OUTPUT_VERSION=0.1.0 \
+  LINUXDEPLOY_OUTPUT_VERSION="$version" \
   "$appimagetool" \
   --runtime-file "$work_dir/runtime-x86_64" \
   "$app_dir" \
