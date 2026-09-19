@@ -54,6 +54,12 @@ jobs:
         env:
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
         run: npm run tauri build -- --bundles appimage,deb --features custom-protocol --ci
+      - name: Repair AppImage host-library compatibility
+        shell: bash
+        run: |
+          appimage=$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)
+          test -n "$appimage"
+          scripts/patch-appimage.sh "$appimage" "$appimage"
       - name: Stage release files
         shell: bash
         run: |

@@ -36,6 +36,7 @@ Intel macOS and ARM Linux/Windows are deferred until exact native artifacts can 
 - Completed: add license/repository/author metadata and clear install, runtime, issue-reporting, signing, checksum, and artifact guidance.
 - Completed: add explicit package category and descriptions after native package inspection found empty generated values.
 - Completed: replace the explicitly temporary developer icon with a distinctive stream-to-play mark and regenerate matching native formats.
+- Completed: repair the Tauri AppImage's newer-Linux startup failure by resolving Wayland and GLib infrastructure from the host desktop instead of shipping conflicting Ubuntu copies.
 
 ### Post-release
 
@@ -61,6 +62,7 @@ On Debian forky/sid x86_64 with Rust 1.95.0 and Node 24.20.0:
 - Both isolated Linux browser-dispatch/launcher-cleanup tests passed.
 - The feature-enabled native Tauri debug/no-bundle build passed.
 - A native optimized Linux release build produced an executable x86_64 AppImage and Debian package. Inspection confirmed product/version, maintainer, homepage, WebKitGTK dependency, Video desktop category, icon, non-terminal launch, descriptions, and executable mode.
+- The original hosted AppImage reproduced GVFS symbol failures and a fatal `EGL_BAD_PARAMETER` error on Debian forky/Wayland. A repacked artifact without the conflicting bundled Wayland/GLib infrastructure launched cleanly on the same desktop; the exact replacement workflow artifact still requires the Linux checklist above.
 - `git diff --check` passed.
 
 The local packages used the documented synthetic compile-only client ID and are not release candidates. Only the hosted workflow packages built from the final exact commit with the registered public ID qualify for the manual release smoke test.

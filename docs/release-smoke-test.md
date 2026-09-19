@@ -41,6 +41,7 @@ Artifacts: `Stream-GUI-RS_0.1.0_linux_x86_64.AppImage` and `Stream-GUI-RS_0.1.0_
 Test both formats separately on supported desktop sessions.
 
 - [ ] AppImage is executable and starts from the desktop environment.
+- [ ] AppImage startup emits no GVFS `undefined symbol` error and no `EGL_BAD_PARAMETER` abort.
 - [ ] Debian package installs with declared dependencies, creates the expected launcher/icon, and starts from that launcher.
 - [ ] Authentication persists through the session's Secret Service provider.
 - [ ] XDG configuration is written under the current user, with no credentials in settings files.

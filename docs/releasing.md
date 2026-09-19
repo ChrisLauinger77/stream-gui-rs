@@ -23,6 +23,6 @@ The workflow creates these archives for 30 days:
 - `Stream-GUI-RS_0.1.0_linux_x86_64`
 - `Stream-GUI-RS_0.1.0_macos_arm64`
 
-Each archive contains only its native distributable files plus one unambiguous checksum file. Windows uses NSIS, Linux uses AppImage and Debian packages, and macOS uses a disk image containing the `.app`. The public Twitch client ID comes only from the repository secret. There is no synthetic release fallback and no client secret.
+Each archive contains only its native distributable files plus one unambiguous checksum file. Windows uses NSIS, Linux uses AppImage and Debian packages, and macOS uses a disk image containing the `.app`. The workflow removes AppImage copies of Wayland and GLib infrastructure libraries that must match the host desktop before generating its checksum. The public Twitch client ID comes only from the repository secret. There is no synthetic release fallback and no client secret.
 
 Version 0.1.0 is unsigned on Windows and has no Developer ID signature or notarization on macOS. Apple Silicon bundles may carry an ad-hoc signature. Adding trusted signing later requires its own reviewed credential and workflow design; checksums do not replace platform code signing.
