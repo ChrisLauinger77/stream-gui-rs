@@ -17,5 +17,13 @@
       "capabilities": ["main"]
     }
   },
-  "bundle": { "active": false, "publisher": "ChrisLauinger77", "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"] }
+  "bundle": {
+    "active": false,
+    "publisher": "ChrisLauinger77",
+    "license": "GPL-3.0-only",
+    "category": "Video",
+    "shortDescription": "Browse Twitch and watch streams through Streamlink",
+    "longDescription": "Stream GUI RS is a native desktop application for browsing Twitch and watching live streams through an external Streamlink installation and media player.",
+    "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"]
+  }
 }

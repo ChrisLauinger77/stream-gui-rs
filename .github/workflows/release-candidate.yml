@@ -1,0 +1,180 @@
+name: Release candidate artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full 40-character commit SHA to package
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ inputs.commit }}
+  cancel-in-progress: false
+
+env:
+  VERSION: 0.1.0
+
+jobs:
+  linux-x86_64:
+    name: Linux x86_64 packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - name: Verify exact commit
+        shell: bash
+        env:
+          EXPECTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          normalized_commit=$(printf '%s' "$EXPECTED_COMMIT" | tr 'A-F' 'a-f')
+          [[ "$normalized_commit" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full commit SHA is required.' >&2; exit 1; }
+          test "$(git rev-parse HEAD)" = "$normalized_commit"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - name: Install native build requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev libdbus-1-dev libxdo-dev librsvg2-dev patchelf
+      - run: npm ci
+      - name: Require registered Twitch client ID
+        env:
+          TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
+        run: test -n "$TWITCH_CLIENT_ID_BUILD"
+      - name: Build release packages
+        env:
+          TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
+        run: npm run tauri build -- --bundles appimage,deb --features custom-protocol --ci
+      - name: Stage release files
+        shell: bash
+        run: |
+          mkdir release
+          cp "$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)" "release/Stream-GUI-RS_${VERSION}_linux_x86_64.AppImage"
+          cp "$(find src-tauri/target/release/bundle/deb -maxdepth 1 -name '*.deb' -print -quit)" "release/Stream-GUI-RS_${VERSION}_linux_x86_64.deb"
+          cd release
+          sha256sum Stream-GUI-RS_* > SHA256SUMS_linux_x86_64.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Stream-GUI-RS_0.1.0_linux_x86_64
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
+
+  windows-x86_64:
+    name: Windows x86_64 installer
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - name: Verify exact commit
+        shell: bash
+        env:
+          EXPECTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          normalized_commit=$(printf '%s' "$EXPECTED_COMMIT" | tr 'A-F' 'a-f')
+          [[ "$normalized_commit" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full commit SHA is required.' >&2; exit 1; }
+          test "$(git rev-parse HEAD)" = "$normalized_commit"
+          test "$RUNNER_ARCH" = X64
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - run: npm ci
+      - name: Require registered Twitch client ID
+        shell: pwsh
+        env:
+          TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TWITCH_CLIENT_ID_BUILD)) {
+            throw 'Release packaging requires the TWITCH_CLIENT_ID_BUILD repository secret.'
+          }
+      - name: Build release installer
+        env:
+          TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
+        run: npm run tauri build -- --bundles nsis --features custom-protocol --ci
+      - name: Report Authenticode status
+        shell: pwsh
+        run: Get-AuthenticodeSignature 'src-tauri/target/release/stream-gui-rs.exe' | Format-List Status,StatusMessage,SignerCertificate
+      - name: Verify GUI subsystem and stage release files
+        shell: pwsh
+        run: |
+          $app = 'src-tauri/target/release/stream-gui-rs.exe'
+          $binary = [System.IO.File]::ReadAllBytes($app)
+          $pe = [System.BitConverter]::ToInt32($binary, 0x3c)
+          if ([System.BitConverter]::ToUInt16($binary, $pe + 24 + 68) -ne 2) {
+            throw 'The packaged application must use the Windows GUI subsystem.'
+          }
+          New-Item -ItemType Directory -Path release | Out-Null
+          $source = Get-ChildItem 'src-tauri/target/release/bundle/nsis/*_x64-setup.exe' | Select-Object -First 1
+          if (-not $source) { throw 'NSIS installer was not produced.' }
+          $name = "Stream-GUI-RS_$env:VERSION`_windows_x86_64-setup.exe"
+          Copy-Item $source.FullName "release/$name"
+          $hash = (Get-FileHash "release/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name" | Set-Content 'release/SHA256SUMS_windows_x86_64.txt' -Encoding ascii
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Stream-GUI-RS_0.1.0_windows_x86_64
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
+
+  macos-arm64:
+    name: macOS Apple Silicon disk image
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - name: Verify exact commit and architecture
+        shell: bash
+        env:
+          EXPECTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          normalized_commit=$(printf '%s' "$EXPECTED_COMMIT" | tr 'A-F' 'a-f')
+          [[ "$normalized_commit" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full commit SHA is required.' >&2; exit 1; }
+          test "$(git rev-parse HEAD)" = "$normalized_commit"
+          test "$(uname -m)" = arm64
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - run: npm ci
+      - name: Require registered Twitch client ID
+        env:
+          TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
+        run: test -n "$TWITCH_CLIENT_ID_BUILD"
+      - name: Build release disk image
+        env:
+          TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
+        run: npm run tauri build -- --bundles app,dmg --features custom-protocol --ci
+      - name: Report application signature status
+        run: codesign --display --verbose=4 'src-tauri/target/release/bundle/macos/Stream GUI RS.app' 2>&1 || true
+      - name: Stage release files
+        shell: bash
+        run: |
+          mkdir release
+          cp "$(find src-tauri/target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)" "release/Stream-GUI-RS_${VERSION}_macos_arm64.dmg"
+          cd release
+          shasum -a 256 Stream-GUI-RS_* > SHA256SUMS_macos_arm64.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Stream-GUI-RS_0.1.0_macos_arm64
+          path: release/
+          if-no-files-found: error
+          retention-days: 30

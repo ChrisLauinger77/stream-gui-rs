@@ -1,5 +1,13 @@
-<!-- Temporary developer icon; not final product branding. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <rect width="256" height="256" rx="40" fill="#303744" />
-  <path d="M84 60 194 128 84 196Z" fill="#a8bfff" />
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Stream GUI RS</title>
+  <rect x="32" y="32" width="960" height="960" rx="220" fill="#252d3a" />
+  <rect x="39" y="39" width="946" height="946" rx="213" fill="none" stroke="#3c485c" stroke-width="14" />
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M174 345C284 205 492 204 657 306" stroke="#a8bfff" stroke-width="104" />
+    <path d="M154 493C270 626 468 515 608 564C684 591 716 649 664 724" stroke="#55d6ff" stroke-width="112" />
+    <path d="M171 690C302 789 489 666 613 718" stroke="#ff7a78" stroke-width="58" />
+  </g>
+  <path d="M605 275C563 244 510 274 510 328V696C510 750 570 780 612 746L870 552C907 524 907 471 870 443Z" fill="#8da8ff" />
+  <path d="M624 362C600 344 570 360 570 391V635C570 666 605 684 630 665L792 543C814 527 814 495 792 479Z" fill="#29488f" />
+  <path d="M646 417C628 406 606 419 606 441V588C606 610 630 623 648 610L746 536C761 525 761 503 746 492Z" fill="#ffffff" />
 </svg>

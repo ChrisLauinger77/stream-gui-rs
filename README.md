@@ -1,78 +1,106 @@
 # Stream GUI RS
 
-[![Github Latest Releases](https://img.shields.io/github/downloads/ChrisLauinger77/stream-gui-rs/latest/total)](<>)
-[![Version](https://img.shields.io/github/v/release/ChrisLauinger77/stream-gui-rs)](<>)
-[![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/stream-gui-rs/total.svg)](<>)
-[![license](https://img.shields.io/github/license/ChrisLauinger77/stream-gui-rs)](<>)
+[![Desktop checks](https://github.com/ChrisLauinger77/stream-gui-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ChrisLauinger77/stream-gui-rs/actions/workflows/ci.yml)
+[![GPL-3.0](https://img.shields.io/github/license/ChrisLauinger77/stream-gui-rs)](LICENSE)
 
-<img src="https://raw.githubusercontent.com/ChrisLauinger77/stream-gui-rs/main/src/assets/app-icon.svg" alt="App icon" width="128">
+<img src="src/assets/app-icon.svg" alt="Stream GUI RS application icon" width="128">
 
-A modern Rust/Tauri desktop frontend for watching Twitch streams via Streamlink.
+Stream GUI RS is a native desktop application for browsing Twitch and watching live streams through [Streamlink](https://streamlink.github.io/). It uses a compact Tauri interface and launches video in a separately installed player. Twitch is the only supported streaming service in version 0.1.0.
 
-Twitch is currently the supported streaming-service integration. Rust owns native/backend functionality; React and TypeScript provide the frontend. Streamlink remains an external runtime dependency.
+This is an independent rewrite inspired by [Streamlink Twitch GUI](https://github.com/streamlink/streamlink-twitch-gui). It is not affiliated with Twitch or the original project.
 
-An independent rewrite inspired by [Streamlink Twitch GUI](https://github.com/streamlink/streamlink-twitch-gui). It is not affiliated with Twitch or the original project. The project identifier is `stream-gui-rs`.
+## Features
 
-**Phase 4 MVP:** browse Twitch and launch live streams in an external player through Streamlink, with persistent global/channel preferences, browser chat, themes and focused shortcuts. Watch from Following, Live, category streams, live search results, or channel details. Watching shows independent sessions with Stop, explicit quality/restart, and bounded diagnostics. Rust owns Twitch credentials, settings, processes and session state.
+- Twitch Device Code sign-in with credentials stored in Keychain, Credential Manager, or Secret Service
+- Following, popular live streams, categories, search, and channel details
+- Streamlink 8.0+ discovery and external playback
+- Streamlink default player, mpv, VLC, and custom executable modes
+- Source, High, Medium, Low, and Audio quality policies
+- Multiple simultaneous streams with Stop, Restart, Watching, and bounded diagnostics
+- Persistent global playback settings and per-channel overrides
+- Twitch chat in the system browser
+- System, Light, and Dark themes plus focused application shortcuts
 
-## Prerequisites
+Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client, and it does not run background notifications or a tray service.
 
-- Current stable Rust and Node.js 22.12+ (Node 22 LTS is used in CI), with npm.
-- [Tauri 2 development prerequisites](https://v2.tauri.app/start/prerequisites/) for your platform: Xcode command-line tools on macOS; MSVC build tools and WebView2 on Windows; WebKitGTK 4.1 and the documented system packages on Linux.
-- [Streamlink](https://streamlink.github.io/install.html) installed separately, available on the desktop application's `PATH` or selected by an absolute executable path. Windows requires the native `streamlink.exe`, not a `.bat`/`.cmd` wrapper. Playback requires Streamlink 8.0+; verified with 8.5.0 on Linux and 8.6.1 on macOS.
-- A separately installed external player: Streamlink default, mpv, VLC, or a custom executable. No player is bundled or downloaded.
+## Downloads and platform support
 
-Linux, Windows and macOS are development targets and have a CI matrix. A matrix definition is not evidence of a completed run; see [Phase 4 native Linux verification and remaining platform checks](docs/phase-4-validation.md).
+The 0.1.0 release candidate produces these native artifacts:
 
-## Development
+| Platform | Architecture | Artifact | Status |
+| --- | --- | --- | --- |
+| Windows 11 | x86_64 | NSIS installer (`.exe`) | Natively tested, including an Actions-built installer |
+| Linux | x86_64 | AppImage and Debian package (`.deb`) | Natively tested on a Debian desktop |
+| macOS | Apple Silicon arm64 | Disk image (`.dmg`) containing the app | Natively tested on Apple Silicon |
+
+Intel macOS and ARM Linux/Windows packages are not part of 0.1.0 because those exact artifacts have not been natively validated. Source compatibility alone is not treated as release support.
+
+The 0.1.0 Windows installer is not code-signed, so Windows may show a SmartScreen warning. The macOS app has no Developer ID signature or notarization; its Apple Silicon bundle may receive only an ad-hoc signature, and Gatekeeper may block its first launch. These are known distribution limitations of the first release; verify every downloaded file against the accompanying SHA-256 checksum.
+
+## Runtime requirements
+
+All platforms need:
+
+- [Streamlink 8.0 or newer](https://streamlink.github.io/install.html), either on the desktop application's `PATH` or selected by absolute path in Settings
+- a player supported by Streamlink; mpv and VLC have built-in discovery, or you can select another executable
+- network access to Twitch and a Twitch account for browsing and playback launch
+
+Platform requirements:
+
+- **Windows:** Windows 11 x86_64 and the Microsoft Edge WebView2 Runtime. Windows 11 normally includes WebView2. Streamlink must be a native `streamlink.exe`; batch wrappers are rejected.
+- **macOS:** Apple Silicon macOS with the system WebKit view and Keychain available. GUI applications can have a smaller `PATH` than Terminal, so select Streamlink/player paths in Settings when discovery does not find them.
+- **Linux:** an x86_64 desktop with WebKitGTK 4.1 runtime libraries, a user D-Bus session, and an unlocked Secret Service provider such as GNOME Keyring or KWallet. The Debian package declares its native library dependencies. The AppImage still relies on the host desktop, glibc, WebKitGTK, D-Bus, and Secret Service integration.
+
+Secure credential storage is mandatory. There is no plaintext fallback. A locked or unavailable native credential store produces an explicit error.
+
+## Install and connect
+
+1. Download the artifact for your platform and its checksum file from the release candidate workflow or GitHub Release.
+2. Verify the SHA-256 checksum, then install or open the package.
+3. Install Streamlink and a player if they are not already present.
+4. Launch Stream GUI RS and select **Connect to Twitch**.
+5. Open the Twitch verification page, enter the displayed code, and approve `user:read:follows`.
+6. Open **Settings → Streamlink** to test discovery, then choose and test the player settings.
+7. Browse a live channel and select **Watch**. Use **Watching** to stop or restart sessions.
+
+Official installed builds contain the project's public Twitch application ID. Users do not set environment variables, register an application, or provide a client secret.
+
+## Playback and privacy details
+
+Rust owns Twitch credentials, settings, native processes, and session state. OAuth tokens stay outside the web interface, settings, diagnostics, and Streamlink arguments. Twitch browsing uses a bounded cache and explicit pagination. Streamlink configuration files and sideloaded plugins are disabled for launches from this app.
+
+Navigation, interface reload, and Twitch logout leave existing streams running so they remain controllable from **Watching**. Closing the main window or quitting stops owned Streamlink/player process trees. A custom player that deliberately detaches itself is outside that cleanup boundary.
+
+The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectively, with source fallback when Twitch does not offer a matching rendition. They are preferences rather than guaranteed resolution caps.
+
+## Current limitations
+
+Version 0.1.0 does not provide background followed-stream monitoring, notifications, tray behavior, embedded video/chat, external chat applications, advanced Streamlink transports or player profiles, an updater, or legacy configuration import. Active sessions and logs are not persisted. See [architecture](docs/architecture.md) for the detailed contracts.
+
+## Building from source
+
+Build requirements are separate from the runtime requirements above:
+
+- stable Rust 1.85 or newer
+- Node.js 22.12 or newer with npm; CI uses Node 22
+- [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for the target platform
+
+Install locked frontend dependencies and start development with your own registered public Twitch client ID:
 
 ```sh
 npm ci
 TWITCH_CLIENT_ID=yourPublicClientId npm run tauri dev
 ```
 
-Replace `yourPublicClientId` with a registered public Twitch client ID. This runtime override is for development; installed builds include their own public ID. See [authentication and build configuration](docs/authentication.md) for Windows commands and precedence.
-
-`npm run dev` alone opens a frontend preview with backend controls unavailable. No mock backend success is displayed. The desktop application serves its Vite frontend on `127.0.0.1:1420` during development.
-
-Build a local desktop binary without release packaging:
+Build a native release binary with an embedded public ID:
 
 ```sh
-TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --no-bundle
+TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --no-bundle --features custom-protocol
 ```
 
-The result is in `src-tauri/target/release/` and authenticates without any runtime environment configuration. Release builds require a valid `TWITCH_CLIENT_ID_BUILD`; packaged debug builds must additionally enable `custom-protocol`, which applies the same embedded-ID guard and distribution behavior. Setting only `TWITCH_CLIENT_ID` cannot satisfy that build check. The public ID is embedded only in Rust. Windows CI packages debug NSIS installers for manual smoke tests; release signing, publishing and updating workflows remain out of scope.
+No client secret is used. The build fails if a distribution build has no valid embedded public ID. See [authentication](docs/authentication.md) for configuration precedence and PowerShell examples.
 
-## Browsing workflow
-
-1. Open the installed app, connect to Twitch and complete the device code flow in your browser. The build includes the project's public client ID; users do not register an app or set environment variables. Developers building from source follow [authentication setup](docs/authentication.md). No client secret is needed.
-2. **Following** switches between live streams and all followed channels. **Live** shows popular streams. **Categories** opens a category's streams. **Search** has separate channel and category results.
-3. Select a stream/channel to read its details. **Back** restores the previous view, scroll position and focused item where retained. **Load more** fetches one page; **Refresh** checks for current information. Retained results are visibly labeled.
-4. Navigate with Tab and activate items with Enter. **Settings → Appearance** saves System, Light or Dark. **Settings → Shortcuts** lists application-local navigation keys.
-
-Preview/channel buttons open details; the separate **Watch** button starts playback. Offline or unknown channels have no Watch action. Rust rechecks live identity before launching, so an old browsing result cannot supply an arbitrary URL or executable.
-
-### Playback
-
-1. Open **Settings → Streamlink**. Leave Streamlink's path empty for discovery, or enter its absolute executable path. **Test and save Streamlink path** reports the executable and version, with a five-second probe limit.
-2. In **Player**, choose Streamlink default, mpv, VLC, or custom. mpv/VLC support automatic discovery or an explicit override; custom requires a full executable path. **Find installed players** reports discovery results. Save the settings.
-3. In **Playback**, set a default quality: Source, High, Medium, Low, or Audio. High/Medium/Low prefer caps of 720p30/540p30/360p30 and fall back to the unfiltered source when no suitable rendition exists; they are policies, not a rendition menu.
-4. Select **Watch**. Open **Watching** to stop or restart an individual session. Restart uses current saved global/channel preferences unless you explicitly select a restart quality. Saving settings never changes a running process. Repeated Watch actions after the initial launch may create separate sessions; there are up to eight active sessions and sixteen retained snapshots.
-5. Expand a session's **Diagnostics** for bounded stdout/stderr output and exit details. Running reports a live Streamlink process, not confirmed video rendering.
-
-**Channel details → Channel settings** offers independent quality and browser-chat overrides. “Use global default” removes an override; the saved effective values are reported by Rust. Preferences use the stable Twitch broadcaster ID and apply across accounts on this device. Global settings and channel forms each have explicit Save/Cancel behavior; section changes preserve the global draft, while closing Settings discards unsaved edits. Testing a Streamlink path saves that path separately.
-
-**Open chat in browser** opens the selected channel's Twitch popout chat in the system browser, including offline channels. Enable automatic chat in Playback to open it on each launch or explicit restart; a channel can inherit, enable or disable it. Browser chat uses the browser's own Twitch login. No tokens are shared, and a browser-opening failure leaves playback usable.
-
-While the app is focused, use Ctrl+K for Search, Ctrl+1/2/3 for Following/Live/Categories, Ctrl+4 for Watching, Ctrl+, for Settings, Alt+Left for Back, and Ctrl+R to refresh the current browsing view. macOS uses Command in place of Control and Command+[ for Back. Shortcuts pause in inputs, selectors, editable content and modal dialogs. There are no global hotkeys.
-
-Player arguments use one literal argument per row (up to 32 / 4 KiB total). Spaces, quotes, braces, Unicode and empty arguments are preserved; do not add shell quoting around paths. There is no shell expansion or user template substitution. Streamlink configuration files and sideloaded plugins are disabled. The mpv preset suppresses progress-meter spam; VLC requests exit at the end and separate instances where supported.
-
-Navigation, frontend reload and Twitch logout leave existing streams running. After logout, existing sessions can still be stopped or restarted; new launches from browsing require authentication. **Closing the main window or quitting stops owned playback and exits the application**. There is no tray/background mode. Intentionally detached custom players are outside the process-tree cleanup boundary.
-
-Tokens are owned by Rust and persisted in macOS Keychain, Windows Credential Manager, or Linux Secret Service. Startup restores and validates the session. They are never sent to React, written to settings, or passed to Streamlink. Logout deletes local credentials and attempts remote revocation. Unavailable secure storage is an explicit error; there is no plaintext fallback.
-
-## Checks
+Run the project checks from the repository root:
 
 ```sh
 npm run build
@@ -82,18 +110,17 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features -
 cargo check --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support
 cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support -- -D warnings
 TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --debug --no-bundle --features custom-protocol --ci
+git diff --check
 ```
 
-The final build command uses a synthetic public ID for compilation only; replace it with the project's registered public ID when building an app for use or distribution. Configuration tests cover embedded-only startup, developer precedence, missing/invalid values, and execute the actual build script to verify release and packaged-debug guards without contacting Twitch.
+The synthetic ID in the final command is only for local compilation checks and cannot authenticate. Official release artifacts use the registered public ID from GitHub Actions. Tests use synthetic credentials, a native fake Streamlink executable, and loopback HTTP fixtures; they do not access real Twitch credentials.
 
-The tests use a native fake Streamlink executable and local HTTP fixtures; no Twitch credentials or live streams are required. The test-support feature is only for checks and is omitted from app builds. `--no-default-features` exercises the Tauri-independent backend without a WebView toolchain. Vitest tests cover browsing behavior, search races, bounded pagination, navigation focus, authentication, playback/settings behavior, and independent session controls. See [Phase 4 results](docs/phase-4-validation.md) and the preserved [Phase 3 results](docs/phase-3-validation.md). On Linux, also run `cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_browser_open --features test-support` for isolated desktop browser dispatch and launcher cleanup; it never opens the real browser.
+## Reporting issues
 
-After editing Rust DTOs, run `npm run bindings` and commit the generated `src/lib/generated.ts`. A Rust contract test detects drift. Command names and their small TypeScript map live in `src/lib/ipc.ts` and must stay aligned with the Rust commands and capability allowlist.
+[Open a GitHub issue](https://github.com/ChrisLauinger77/stream-gui-rs/issues) with your operating system and version, Stream GUI RS version, Streamlink version, selected player, reproduction steps, and relevant sanitized session diagnostics. Do not paste OAuth tokens, refresh tokens, device codes, credential-store exports, or other secrets.
 
-## Scope
+Release maintainers should use the [release process](docs/releasing.md) and [exact-artifact smoke checklist](docs/release-smoke-test.md). Historical implementation evidence remains in the phase validation documents; it is not proof of a current artifact.
 
-The pre-release identity rename uses new settings and credential namespaces: existing development settings are not imported, and one fresh Twitch login is required.
+## License and acknowledgements
 
-Version 3 settings persist the Streamlink path, player mode/path/literal arguments, default quality, automatic browser chat, theme and sparse channel overrides in Tauri's application configuration directory (XDG configuration on Linux). This app's versions 1 and 2 migrate in memory, preserving their playback preferences; the next successful save writes version 3. Appearance previously stored in the webview starts at System; choose and save a new preference once. No legacy GUI configuration is imported. Active sessions and logs are never persisted. Unsupported or malformed schemas fail without overwriting the file; a missing configured executable produces a diagnostic at use.
-
-The Rust Helix client supports users, channels, follows, streams, games, search, and teams, with shared rate limits, caller-controlled pagination, bounded batching, and a bounded cache. Phase 2 exposes eight restricted browsing queries and safe account information. There is no teams UI, legacy migration, embedded chat/video, external chat-client integration, background followed-stream monitoring, notifications, tray, updater, or advanced player profiles. Phase 5 has not begun. See [architecture](docs/architecture.md), [Helix contracts](docs/helix.md), [Phase 1 verification](docs/phase-1-validation.md), and the historical [Phase 0 verification](docs/phase-0-validation.md).
+Stream GUI RS is licensed under [GNU GPL version 3 only](LICENSE). It relies on open-source Rust and npm dependencies under their respective licenses. Playback is provided by the separately installed [Streamlink](https://streamlink.github.io/) project. No assets from Streamlink Twitch GUI are distributed here.

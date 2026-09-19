@@ -59,7 +59,7 @@ function Application({ developer }: { developer: () => void }) {
     {settings && <section className="settings-panel" aria-label="Settings">
       <div className="settings-header"><h2 tabIndex={-1} ref={settingsHeading}>Settings</h2><button className="quiet" onClick={developer}>Developer tools</button></div>
       <PlaybackSettings saved={playback.settings} onSaved={value => { playback.setSettings(value); setSettingsRevision(revision => revision + 1); }} />
-      {auth.status?.phase === "not_configured" && <p>Set the public <code>TWITCH_CLIENT_ID</code> in the backend environment and restart. No client secret is needed.</p>}
+      {auth.status?.phase === "not_configured" && <p>This build does not include a Twitch application ID. If you built it from source, follow the authentication setup in the project documentation.</p>}
     </section>}
     {(playback.error || playback.message) && <div className={playback.error ? "error playback-feedback" : "notice playback-feedback"} role={playback.error ? "alert" : "status"}>{playback.error ?? playback.message}<button className="quiet" onClick={playback.dismiss}>Dismiss</button></div>}
     {watching && <div className="watching-panel" ref={watchingPanel}><Playback sessions={playback.sessions}

@@ -1,0 +1,12 @@
+# Changelog
+
+## 0.1.0 - Unreleased
+
+First public release.
+
+- Browse followed channels, live streams, categories, search results, and channel details on Twitch.
+- Sign in through Twitch Device Code authorization and store credentials in the native secure store.
+- Launch Streamlink 8.0+ with default, mpv, VLC, or custom players and five quality policies.
+- Control multiple sessions with Stop, Restart, Watching, and bounded diagnostics.
+- Save global playback settings, per-channel overrides, browser chat, appearance, and shortcuts.
+- Provide native packages for Windows x86_64, Linux x86_64, and macOS Apple Silicon.
