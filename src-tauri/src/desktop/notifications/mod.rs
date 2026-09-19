@@ -21,6 +21,8 @@ mod linux;
 use linux::Worker;
 #[cfg(windows)]
 mod windows;
+#[cfg(any(windows, test))]
+mod windows_state;
 #[cfg(windows)]
 use windows::Worker;
 #[cfg(target_os = "macos")]
