@@ -6,7 +6,7 @@ import { CategoryList, ChannelList, Media, PageFrame, StreamList } from "./compo
 import { SearchView, ChannelView } from "./details";
 
 type Section = "following" | "live" | "categories" | "search";
-export type BrowserActions = { navigate: (section: Section) => void; back: () => void; refresh: () => void };
+export type BrowserActions = { channel: (id: string, name: string) => void; navigate: (section: Section) => void; back: () => void; refresh: () => void };
 type Route = { kind: Section } | { kind: "category" | "channel"; id: string; name: string };
 type Visit = { route: Route; section: Section; scroll: number; focus?: string;
   search: string; searchType: "channels" | "categories"; following: "live" | "channels" };
@@ -40,6 +40,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
     setSearch(previous.search); setSearchType(previous.searchType); setFollowing(previous.following);
   };
   useImperativeHandle(actionsRef, () => ({
+    channel: (id, name) => navigate({ kind: "channel", id, name }),
     navigate: next => {
       focusSearch.current = next === "search";
       if (next === "search" && route.kind === "search") { content.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus(); focusSearch.current = false; }

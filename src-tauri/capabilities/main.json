@@ -33,6 +33,12 @@
     "allow-list-category-streams",
     "allow-search-channels",
     "allow-search-categories",
-    "allow-get-channel"
+    "allow-get-channel",
+    "allow-desktop-status",
+    "allow-pause-monitor",
+    "allow-resume-monitor",
+    "allow-request-notification-permission",
+    "allow-acknowledge-desktop-action",
+    "allow-quit-application"
   ]
 }

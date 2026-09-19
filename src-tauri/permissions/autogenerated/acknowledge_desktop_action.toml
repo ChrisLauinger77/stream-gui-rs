@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-acknowledge-desktop-action"
+description = "Enables the acknowledge_desktop_action command without any pre-configured scope."
+commands.allow = ["acknowledge_desktop_action"]
+
+[[permission]]
+identifier = "deny-acknowledge-desktop-action"
+description = "Denies the acknowledge_desktop_action command without any pre-configured scope."
+commands.deny = ["acknowledge_desktop_action"]

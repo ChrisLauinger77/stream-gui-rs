@@ -2552,6 +2552,8 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9df9128cbbfef73cda168416ccf7f837b62737d748333bfe9ab71c245d76613e"
 dependencies = [
+ "bitflags 2.13.2",
+ "block2",
  "objc2",
  "objc2-foundation",
 ]
@@ -3746,10 +3748,14 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 name = "stream-gui-rs"
 version = "0.1.0"
 dependencies = [
+ "block2",
  "fs2",
  "gio",
  "keyring",
  "libc",
+ "objc2",
+ "objc2-foundation",
+ "objc2-user-notifications",
  "reqwest",
  "serde",
  "serde_json",
@@ -3762,6 +3768,7 @@ dependencies = [
  "url",
  "uuid",
  "webbrowser",
+ "windows",
  "windows-sys 0.61.2",
  "zeroize",
 ]

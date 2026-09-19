@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  DesktopStatus, MonitorStatus, AcknowledgeDesktopAction,
   ChatRequest, ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
   BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
   Account, AppError, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
@@ -8,6 +9,12 @@ import type {
 
 // Only these named operations are available. DTOs are generated from Rust.
 type Commands = {
+  desktop_status: [undefined, DesktopStatus];
+  pause_monitor: [undefined, MonitorStatus];
+  resume_monitor: [undefined, MonitorStatus];
+  request_notification_permission: [undefined, null];
+  acknowledge_desktop_action: [AcknowledgeDesktopAction, null];
+  quit_application: [undefined, null];
   list_followed_streams: [BrowseRequest, PagedResult<StreamSummary>];
   list_followed_channels: [BrowseRequest, PagedResult<ChannelSummary>];
   list_streams: [BrowseRequest, PagedResult<StreamSummary>];
@@ -47,6 +54,12 @@ async function call<K extends keyof Commands>(
 }
 
 export const api = {
+  desktopStatus: () => call("desktop_status"),
+  pauseMonitor: () => call("pause_monitor"),
+  resumeMonitor: () => call("resume_monitor"),
+  requestNotificationPermission: () => call("request_notification_permission"),
+  acknowledgeDesktopAction: (id: string) => call("acknowledge_desktop_action", { id }),
+  quit: () => call("quit_application"),
   followedStreams: (request: BrowseRequest) => call("list_followed_streams", request),
   followedChannels: (request: BrowseRequest) => call("list_followed_channels", request),
   streams: (request: BrowseRequest) => call("list_streams", request),

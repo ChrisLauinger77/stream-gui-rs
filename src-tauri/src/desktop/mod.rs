@@ -5,11 +5,14 @@ use std::sync::{
 };
 use tauri::Manager;
 pub(crate) mod browser;
+mod notifications;
+mod tray;
 
 #[derive(Default)]
 struct Lifecycle {
     stopping: AtomicBool,
     finished: AtomicBool,
+    tray_created: AtomicBool,
     auth_stop: Mutex<Option<tokio::sync::watch::Sender<bool>>>,
 }
 
@@ -20,9 +23,15 @@ impl crate::domain::chat::ChatOpener for NativeChatOpener {
     }
 }
 
-pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let app = tauri::Builder::default()
+fn build_app() -> tauri::Result<tauri::App> {
+    tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            commands::desktop_status,
+            commands::pause_monitor,
+            commands::resume_monitor,
+            commands::request_notification_permission,
+            commands::acknowledge_desktop_action,
+            commands::quit_application,
             commands::backend_diagnostics,
             commands::streamlink_probe,
             commands::open_channel_chat,
@@ -52,8 +61,11 @@ pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
             commands::search_categories,
             commands::get_channel,
         ])
-        .build(tauri::generate_context!())?;
+        .build(tauri::generate_context!())
+}
 
+pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let app = build_app()?;
     // Tauri panics when a setup hook returns an error. Validate and install our
     // services before entering its event loop so malformed settings fail cleanly.
     let directory = app.path().app_config_dir()?;
@@ -61,10 +73,28 @@ pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let services = Arc::new(
         Services::new(&directory, Some(client_id))?.with_chat_opener(Arc::new(NativeChatOpener)),
     );
+    install_services(&app, services);
+    app.run(handle_event);
+    Ok(())
+}
+
+fn install_services(app: &tauri::App, services: Arc<Services>) {
     let lifecycle = Arc::new(Lifecycle::default());
     app.manage(services.clone());
     app.manage(lifecycle.clone());
+    let notifications = notifications::Notifications::new(app.handle().clone());
+    services.monitor.set_sink(notifications.clone());
+    app.manage(notifications);
+    lifecycle.tray_created.store(
+        tray::install(app.handle()).unwrap_or(false),
+        Ordering::SeqCst,
+    );
     tauri::async_runtime::spawn(async move {
+        services.monitor.start(
+            services.auth.clone(),
+            services.helix.clone(),
+            services.settings.clone(),
+        );
         let stop = services.auth.start();
         let mut stored = lifecycle
             .auth_stop
@@ -75,8 +105,10 @@ pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
         }
         *stored = Some(stop);
     });
+}
 
-    app.run(|app, event| match event {
+fn handle_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
+    match event {
         tauri::RunEvent::ExitRequested { api, .. } => {
             if app
                 .state::<Arc<Lifecycle>>()
@@ -93,16 +125,24 @@ pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
             ..
         } => {
             api.prevent_close();
-            begin_shutdown(app);
+            if app
+                .state::<Arc<Services>>()
+                .settings
+                .snapshot()
+                .background
+                .close_to_background
+            {
+                hide_window(app);
+            } else {
+                begin_shutdown(app);
+            }
         }
         _ => {}
-    });
-    Ok(())
+    }
 }
 
-// There is no background/tray mode: closing the window and Quit both reap
-// owned playback before exiting. Navigation or webview reload does not enter here.
-fn begin_shutdown(app: &tauri::AppHandle) {
+// Explicit Quit always drains the same service owners, regardless of visibility.
+pub(crate) fn begin_shutdown(app: &tauri::AppHandle) {
     let lifecycle = app.state::<Arc<Lifecycle>>().inner().clone();
     if lifecycle.stopping.swap(true, Ordering::SeqCst) {
         return;
@@ -121,7 +161,99 @@ fn begin_shutdown(app: &tauri::AppHandle) {
         if services.shutdown().await.is_err() {
             eprintln!("Streamlink cleanup did not complete within its deadline.");
         }
+        app.state::<Arc<notifications::Notifications>>()
+            .shutdown()
+            .await;
         lifecycle.finished.store(true, Ordering::SeqCst);
         app.exit(0);
     });
 }
+
+fn show_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        // GTK/Wayland can retain iconified state after deiconify alone. Remap a
+        // minimized surface before presenting it, including notification restores.
+        #[cfg(target_os = "linux")]
+        if window.is_minimized().unwrap_or(false) {
+            let _ = window.hide();
+        }
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+fn hide_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if tray_available(app) {
+            if window.hide().is_err() {
+                let _ = window.minimize();
+            }
+        } else {
+            let _ = window.minimize();
+        }
+    }
+}
+fn tray_available(app: &tauri::AppHandle) -> bool {
+    app.state::<Arc<Lifecycle>>()
+        .tray_created
+        .load(Ordering::SeqCst)
+        && app
+            .state::<Arc<notifications::Notifications>>()
+            .shared
+            .state
+            .lock()
+            .expect("native notification state poisoned")
+            .tray_host
+}
+pub(crate) fn status(app: &tauri::AppHandle) -> crate::domain::background::DesktopStatus {
+    let services = app.state::<Arc<Services>>();
+    let notifications = app.state::<Arc<notifications::Notifications>>();
+    let mut state = notifications
+        .shared
+        .state
+        .lock()
+        .expect("native notification state poisoned");
+    let expired = state.action.as_ref().is_some_and(|action| match action {
+        crate::domain::background::DesktopAction::Channel {
+            auth_session_id, ..
+        } => services
+            .auth
+            .monitor_session()
+            .is_none_or(|(id, _)| id.to_string() != *auth_session_id),
+        _ => false,
+    });
+    if expired {
+        state.action = None;
+    }
+    crate::domain::background::DesktopStatus {
+        monitor: services.monitor.snapshot(),
+        notification_permission: state.permission,
+        notification_click_supported: state.clicks,
+        tray_available: app
+            .state::<Arc<Lifecycle>>()
+            .tray_created
+            .load(Ordering::SeqCst)
+            && state.tray_host,
+        action: state.action.clone(),
+    }
+}
+pub(crate) fn acknowledge_action(app: &tauri::AppHandle, id: &str) {
+    let notifications = app.state::<Arc<notifications::Notifications>>();
+    let mut state = notifications
+        .shared
+        .state
+        .lock()
+        .expect("native notification state poisoned");
+    if state.action.as_ref().is_some_and(|a| a.id() == id) {
+        state.action = None;
+    }
+}
+pub(crate) fn request_permission(app: &tauri::AppHandle) -> crate::domain::Result<()> {
+    app.state::<Arc<notifications::Notifications>>()
+        .request_permission()
+}
+
+#[cfg(all(feature = "test-support", target_os = "linux"))]
+mod smoke;
+#[cfg(all(feature = "test-support", target_os = "linux"))]
+pub use smoke::run as run_background_smoke;

@@ -10,6 +10,7 @@ import { usePlayback } from "../playback/usePlayback";
 import { Playback } from "../features/Playback";
 import { PlaybackSettings } from "../features/PlaybackSettings";
 import { api } from "../lib/ipc";
+import { useDesktop } from "./useDesktop";
 import { useAppearance } from "./useAppearance";
 import { useShortcuts, shortcutLabels } from "./shortcuts";
 
@@ -20,6 +21,10 @@ export function App() {
 }
 function Application({ developer }: { developer: () => void }) {
   const auth = useAuthentication();
+  const desktop = useDesktop();
+  const handledAction = useRef<string | null>(null);
+  const acknowledgedAction = useRef<string | null>(null);
+  const acknowledgingAction = useRef(false);
   const [settings, setSettings] = useState(false);
   const [watching, setWatching] = useState(false);
   const playback = usePlayback();
@@ -30,6 +35,23 @@ function Application({ developer }: { developer: () => void }) {
   const watchingPanel = useRef<HTMLDivElement>(null);
   const [settingsRevision, setSettingsRevision] = useState(0);
   const shortcuts = shortcutLabels();
+  useEffect(() => {
+    const action = desktop.status?.action;
+    if (!action) return;
+    if (handledAction.current !== action.id) {
+      if (action.kind === "channel") {
+        if (action.authSessionId !== auth.sessionId || !workspace.current) return;
+        setSettings(false); setWatching(false); workspace.current.channel(action.broadcasterId, action.displayName);
+      } else { setSettings(false); setWatching(true); }
+      handledAction.current = action.id;
+    }
+    if (acknowledgedAction.current === action.id || acknowledgingAction.current) return;
+    acknowledgingAction.current = true;
+    void api.acknowledgeDesktopAction(action.id)
+      .then(() => { acknowledgedAction.current = action.id; })
+      .catch(() => { /* Retry acknowledgement on the next snapshot without navigating again. */ })
+      .finally(() => { acknowledgingAction.current = false; });
+  }, [desktop.status?.action, auth.sessionId]);
   useEffect(() => { if (settings) settingsHeading.current?.focus(); }, [settings]);
   useEffect(() => { if (watching) watchingPanel.current?.querySelector<HTMLElement>("h2")?.focus(); }, [watching]);
   const navigate = (section: "search" | "following" | "live" | "categories") => {
@@ -57,8 +79,8 @@ function Application({ developer }: { developer: () => void }) {
   return <div className="application">
     <header className="app-bar"><div className="brand"><span aria-hidden="true">▶</span> Stream GUI RS</div>{controls}</header>
     {settings && <section className="settings-panel" aria-label="Settings">
-      <div className="settings-header"><h2 tabIndex={-1} ref={settingsHeading}>Settings</h2><button className="quiet" onClick={developer}>Developer tools</button></div>
-      <PlaybackSettings saved={playback.settings} onSaved={value => { playback.setSettings(value); setSettingsRevision(revision => revision + 1); }} />
+      <div className="settings-header"><h2 tabIndex={-1} ref={settingsHeading}>Settings</h2><button className="quiet" onClick={developer}>Developer tools</button><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.quit); }}>{activeCount ? `Quit (stops ${activeCount} streams)` : "Quit"}</button></div>
+      <PlaybackSettings desktop={desktop} saved={playback.settings} onSaved={value => { playback.setSettings(value); setSettingsRevision(revision => revision + 1); }} />
       {auth.status?.phase === "not_configured" && <p>This build does not include a Twitch application ID. If you built it from source, follow the authentication setup in the project documentation.</p>}
     </section>}
     {(playback.error || playback.message) && <div className={playback.error ? "error playback-feedback" : "notice playback-feedback"} role={playback.error ? "alert" : "status"}>{playback.error ?? playback.message}<button className="quiet" onClick={playback.dismiss}>Dismiss</button></div>}

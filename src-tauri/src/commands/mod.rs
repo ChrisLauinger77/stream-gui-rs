@@ -253,3 +253,31 @@ pub async fn open_channel_chat(
 ) -> Result<()> {
     services.open_chat(request).await
 }
+
+#[tauri::command]
+pub fn desktop_status(app: tauri::AppHandle) -> crate::domain::background::DesktopStatus {
+    crate::desktop::status(&app)
+}
+#[tauri::command]
+pub fn pause_monitor(services: State<'_, Arc<Services>>) -> crate::monitor::MonitorStatus {
+    services.monitor.pause(true)
+}
+#[tauri::command]
+pub fn resume_monitor(services: State<'_, Arc<Services>>) -> crate::monitor::MonitorStatus {
+    services.monitor.pause(false)
+}
+#[tauri::command]
+pub fn request_notification_permission(app: tauri::AppHandle) -> Result<()> {
+    crate::desktop::request_permission(&app)
+}
+#[tauri::command]
+pub fn acknowledge_desktop_action(
+    app: tauri::AppHandle,
+    request: crate::domain::background::AcknowledgeDesktopAction,
+) {
+    crate::desktop::acknowledge_action(&app, &request.id);
+}
+#[tauri::command]
+pub fn quit_application(app: tauri::AppHandle) {
+    crate::desktop::begin_shutdown(&app);
+}

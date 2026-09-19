@@ -5,13 +5,16 @@ import { QualitySelect } from "../playback/QualitySelect";
 import { playbackError } from "../playback/usePlayback";
 import { shortcutLabels } from "../app/shortcuts";
 
-const sections = ["Playback", "Streamlink", "Player", "Appearance", "Shortcuts"] as const;
+import { BackgroundSettings } from "./BackgroundSettings";
+import type { useDesktop } from "../app/useDesktop";
+
+const sections = ["Playback", "Streamlink", "Player", "Appearance", "Background", "Shortcuts"] as const;
 type Section = typeof sections[number];
-export function PlaybackSettings({ saved, onSaved }: { saved: Settings | null; onSaved: (value: Settings) => void }) {
+export function PlaybackSettings({ saved, onSaved, desktop }: { desktop: ReturnType<typeof useDesktop>; saved: Settings | null; onSaved: (value: Settings) => void }) {
   if (!saved) return <p role="status">Loading settings…</p>;
-  return <SettingsForm initial={saved} saved={saved} onSaved={onSaved} />;
+  return <SettingsForm initial={saved} saved={saved} onSaved={onSaved} desktop={desktop} />;
 }
-function SettingsForm({ initial, saved, onSaved }: { initial: Settings; saved: Settings; onSaved: (value: Settings) => void }) {
+function SettingsForm({ initial, saved, onSaved, desktop }: { desktop: ReturnType<typeof useDesktop>; initial: Settings; saved: Settings; onSaved: (value: Settings) => void }) {
   const [section, setSection] = useState<Section>("Playback");
   const [draft, setDraft] = useState(initial);
   const [probe, setProbe] = useState<ProbeResult | null>(null);
@@ -34,7 +37,7 @@ function SettingsForm({ initial, saved, onSaved }: { initial: Settings; saved: S
       event.preventDefault();
       void run("save", async () => {
         const value = await api.savePlaybackSettings(draft);
-        setDraft(value); onSaved(value); setMessage("Settings saved. New launches and restarts use these preferences.");
+        setDraft(value); onSaved(value); setMessage("Settings saved. Background preferences apply now; playback preferences apply to new launches and restarts.");
       });
     }}>
       <fieldset disabled={!!busy}>
@@ -44,7 +47,7 @@ function SettingsForm({ initial, saved, onSaved }: { initial: Settings; saved: S
           <p className="muted">High, Medium and Low prefer their indicated resolution and fall back to Source when needed.</p>
           <label className="checkbox-label"><input type="checkbox" checked={draft.automaticChat} onChange={event => setDraft({ ...draft, automaticChat: event.target.checked })} />Open browser chat when playback starts</label>
           <p className="muted">Opens Twitch chat in your default browser for each launch or explicit restart. Channel details can override quality and chat independently.</p>
-          <p className="muted">Changing preferences leaves running streams unchanged. Closing the app stops playback.</p>
+          <p className="muted">Changing preferences leaves running streams unchanged. Explicit Quit stops playback.</p>
         </div>
         <div hidden={section !== "Streamlink"} className="setting-group">
           <label>Streamlink executable<input value={draft.streamlinkPath ?? ""} placeholder="Automatic discovery" maxLength={4096} onChange={event => { setDraft({ ...draft, streamlinkPath: event.target.value || null }); setProbe(null); }} /></label>
@@ -76,6 +79,9 @@ function SettingsForm({ initial, saved, onSaved }: { initial: Settings; saved: S
         <div hidden={section !== "Appearance"} className="setting-group">
           <label>Appearance<select value={draft.theme} onChange={event => setDraft({ ...draft, theme: event.target.value as Theme })}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
           <p className="muted">System follows the color preference provided by your desktop. Save to apply your selection.</p>
+        </div>
+        <div hidden={section !== "Background"} className="setting-group">
+          <BackgroundSettings value={draft.background} change={background => setDraft({ ...draft, background })} desktop={desktop} />
         </div>
         <div hidden={section !== "Shortcuts"}>
           <p className="muted">Available while this app is focused. Shortcuts pause while typing, choosing an input value, or using a modal dialog.</p>

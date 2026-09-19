@@ -34,6 +34,12 @@ fn main() {
     #[cfg(feature = "desktop")]
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
+            "desktop_status",
+            "pause_monitor",
+            "resume_monitor",
+            "request_notification_permission",
+            "acknowledge_desktop_action",
+            "quit_application",
             "backend_diagnostics",
             "streamlink_probe",
             "streamlink_launch",

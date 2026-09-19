@@ -643,6 +643,77 @@ test("saved theme follows System changes and persists explicit Light and Dark th
   vi.unstubAllGlobals();
 });
 
+async function toggleControl(label: string) {
+  const input = [...container.querySelectorAll("label")].find(node => node.textContent?.startsWith(label))!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  await act(async () => input.click());
+}
+const desktopSnapshot: import("../lib/generated").DesktopStatus = {
+  monitor: { phase: "running", paused: false, liveCount: 3, stale: false, error: null, retryInSeconds: 60, notificationError: false },
+  notificationPermission: "not_requested", notificationClickSupported: true, trayAvailable: true, action: null,
+};
+test("Background settings persist intent and pause independently of browsing", async () => {
+  vi.mocked(api.desktopStatus).mockResolvedValue(desktopSnapshot);
+  vi.mocked(api.savePlaybackSettings).mockImplementation(async value => value);
+  await render(); await click("Settings"); await click("Background", ".settings-nav");
+  expect(text()).toContain("Monitoring followed streams"); expect(text()).toContain("3 followed live");
+  await toggleControl("Monitor followed live streams");
+  await toggleControl("Notify when followed channels go live");
+  await editControl("Check for live streams", "120", "select");
+  await toggleControl("Keep Stream GUI RS running");
+  await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenCalledWith(expect.objectContaining({ background: {
+    monitoringEnabled: true, notificationsEnabled: true, closeToBackground: true, intervalSeconds: 120,
+  } }));
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, monitor: { ...desktopSnapshot.monitor, phase: "paused", paused: true } });
+  await click("Pause monitoring"); expect(api.pauseMonitor).toHaveBeenCalledOnce();
+  await click("Resume monitoring"); expect(api.resumeMonitor).toHaveBeenCalledOnce();
+  await click("Allow desktop notifications"); expect(api.requestNotificationPermission).toHaveBeenCalledOnce();
+  expect(api.logout).not.toHaveBeenCalled(); expect(api.followedStreams).toHaveBeenCalledOnce();
+});
+test("notification actions survive reconstruction, navigate once and never launch playback", async () => {
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action: {
+    kind: "channel", id: "action-1", authSessionId: "1", broadcasterId: "channel-one", displayName: "Example Channel",
+  } });
+  vi.mocked(api.acknowledgeDesktopAction).mockResolvedValue(null);
+  await render();
+  expect(api.channel).toHaveBeenCalledWith({ id: "channel-one", page: { sessionId: "1", cursor: null, refresh: false } });
+  expect(api.acknowledgeDesktopAction).toHaveBeenCalledWith("action-1");
+  await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+  expect(api.acknowledgeDesktopAction).toHaveBeenCalledOnce();
+  expect(api.launch).not.toHaveBeenCalled();
+});
+test("a late desktop poll cannot replace the accepted Pause snapshot", async () => {
+  vi.mocked(api.desktopStatus).mockResolvedValue(desktopSnapshot);
+  await render(); await click("Settings"); await click("Background", ".settings-nav");
+  const old = deferred<import("../lib/generated").DesktopStatus>();
+  vi.mocked(api.desktopStatus).mockReturnValueOnce(old.promise);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, monitor: { ...desktopSnapshot.monitor, phase: "paused", paused: true } });
+  await click("Pause monitoring");
+  await act(async () => { old.resolve(desktopSnapshot); });
+  expect(text()).toContain("Monitoring is paused");
+  expect(text()).toContain("Resume monitoring");
+});
+test("retrying a notification acknowledgement does not steal navigation again", async () => {
+  vi.mocked(api.desktopStatus).mockImplementation(async () => ({ ...desktopSnapshot, action: {
+    kind: "channel", id: "retry-action", authSessionId: "1", broadcasterId: "channel-one", displayName: "Example Channel",
+  } }));
+  vi.mocked(api.acknowledgeDesktopAction).mockRejectedValueOnce({ code: "internal" }).mockResolvedValue(null);
+  await render();
+  expect(api.channel).toHaveBeenCalledOnce();
+  await click("Live");
+  await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+  expect(api.acknowledgeDesktopAction).toHaveBeenCalledTimes(2);
+  expect(api.channel).toHaveBeenCalledOnce();
+  expect(api.launch).not.toHaveBeenCalled();
+});
+test("old account notification cannot navigate the replacement workspace", async () => {
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action: {
+    kind: "channel", id: "old-action", authSessionId: "previous", broadcasterId: "channel-one", displayName: "Old channel",
+  } });
+  await render(); expect(api.channel).not.toHaveBeenCalled(); expect(api.launch).not.toHaveBeenCalled();
+  expect(api.acknowledgeDesktopAction).not.toHaveBeenCalled();
+});
 test("channel notification suppression uses a nullable stable-ID override", async () => {
   await render(); await click("Live"); await click("Open channel Example Channel");
   await editControl("Channel notifications", "off", "select");
