@@ -64,6 +64,55 @@
       "groupName": "Node.js test runtime"
     },
     {
+      "description": "Windows API crates move together; migrations require full CI, a packaged Windows artifact and notification/tray/Notification Center/activation smoke tests",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchDatasources": [
+        "crate"
+      ],
+      "matchPackageNames": [
+        "windows",
+        "windows-core"
+      ],
+      "groupName": "Windows API crates"
+    },
+    {
+      "description": "Defer Windows API generation changes (breaking 0.x minor and major updates) until deliberately re-enabled after v0.2.0; allow compatible patches",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchDatasources": [
+        "crate"
+      ],
+      "matchPackageNames": [
+        "windows",
+        "windows-core"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "major"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Keep GTK aligned with Tauri/Wry gtk-rs; defer breaking 0.x minor and major updates until stack-compatible, then require a Linux native build and graphical notification/tray/browser/lifecycle smoke tests",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchDatasources": [
+        "crate"
+      ],
+      "matchPackageNames": [
+        "gtk"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "major"
+      ],
+      "enabled": false
+    },
+    {
       "description": "GIO generation changes follow Tauri/Wry gtk-rs compatibility",
       "matchManagers": [
         "cargo"
