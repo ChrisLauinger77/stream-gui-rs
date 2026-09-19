@@ -26,35 +26,41 @@ Never copy real OAuth tokens, refresh tokens, device codes, or credential-store 
 
 ## Windows 11 x86_64
 
-Artifact: `Stream-GUI-RS_0.1.0_windows_x86_64-setup.exe`
+Artifacts: `Stream-GUI-RS_0.1.0_windows_x86_64-setup.exe`, `Stream-GUI-RS_0.1.0_windows_x86_64.zip`, and `stream-gui-rs.json`
 
 - [ ] Note the expected unsigned-publisher/SmartScreen warning; no unexpected publisher identity appears.
 - [ ] Programs and Features shows Stream GUI RS, version 0.1.0, and publisher ChrisLauinger77.
 - [ ] Normal application startup displays no console window.
 - [ ] Streamlink probes and playback start without helper console flashes.
 - [ ] Uninstall succeeds.
+- [ ] The portable ZIP contains `stream-gui-rs.exe`, `LICENSE`, and `README.md` at its root and launches without an installer or console window.
+- [ ] After publication, `scoop install https://github.com/ChrisLauinger77/stream-gui-rs/releases/download/v0.1.0/stream-gui-rs.json` installs the ZIP, creates the Stream GUI RS shortcut, launches, and uninstalls successfully.
 
 ## Linux x86_64
 
-Artifacts: `Stream-GUI-RS_0.1.0_linux_x86_64.AppImage` and `Stream-GUI-RS_0.1.0_linux_x86_64.deb`
+Artifacts: `Stream-GUI-RS_0.1.0_linux_x86_64.AppImage`, `Stream-GUI-RS_0.1.0_linux_amd64.deb`, and `Stream-GUI-RS_0.1.0_linux_x86_64.rpm`
 
-Test both formats separately on supported desktop sessions.
+Test all three formats separately on matching supported desktop sessions.
 
 - [ ] AppImage is executable and starts from the desktop environment.
 - [ ] AppImage startup emits no GVFS `undefined symbol` error and no `EGL_BAD_PARAMETER` abort.
 - [ ] Debian package installs with declared dependencies, creates the expected launcher/icon, and starts from that launcher.
+- [ ] RPM installs with declared dependencies on an RPM-based x86_64 distribution, creates the expected launcher/icon, and starts from that launcher.
 - [ ] Authentication persists through the session's Secret Service provider.
 - [ ] XDG configuration is written under the current user, with no credentials in settings files.
 - [ ] Browser sign-in and chat opening do not show a remote-screen permission prompt caused by the application itself.
 - [ ] Debian package uninstall succeeds.
+- [ ] RPM uninstall succeeds.
 
-## macOS Apple Silicon arm64
+## macOS universal
 
-Artifact: `Stream-GUI-RS_0.1.0_macos_arm64.dmg`
+Artifact: `Stream-GUI-RS_0.1.0_macos_universal.dmg`
 
 - [ ] The disk image mounts and contains `Stream GUI RS.app`.
+- [ ] `lipo -archs` reports both `arm64` and `x86_64` for the executable under `Stream GUI RS.app/Contents/MacOS`.
 - [ ] Record the expected Gatekeeper/quarantine behavior for the app without Developer ID signing or notarization.
 - [ ] After the tester explicitly allows it, the app starts without terminal environment variables.
-- [ ] Finder reports version 0.1.0 and the app runs natively as arm64.
+- [ ] Finder reports version 0.1.0 and the same exact disk image runs natively on Apple Silicon.
+- [ ] The same exact disk image runs natively on an Intel Mac.
 - [ ] Keychain persistence, browser sign-in, chat opening, Streamlink discovery, playback, and cleanup pass.
 - [ ] Dragging the app to Applications and removing it both work as expected.

@@ -14,11 +14,11 @@ First public release.
 
 ## Platforms
 
-- Windows 11 x86_64: NSIS installer
-- Linux x86_64: AppImage and Debian package
-- macOS Apple Silicon arm64: disk image containing the app
+- Windows 11 x86_64: NSIS installer and portable ZIP with Scoop manifest
+- Linux x86_64: AppImage, Debian `amd64` package, and RPM `x86_64` package
+- macOS arm64 and x86_64: universal disk image containing the app
 
-Intel macOS and ARM Linux/Windows packages are deferred until their exact artifacts can be natively tested. The Windows installer is unsigned and may trigger SmartScreen. The macOS app has no Developer ID signature or notarization and may be blocked by Gatekeeper on first launch.
+ARM Linux/Windows packages are deferred. The Windows packages are unsigned and may trigger SmartScreen. The macOS app has no Developer ID signature or notarization and may be blocked by Gatekeeper on first launch. Apple Silicon has been natively validated; the exact universal artifact still requires native Intel validation.
 
 ## Requirements
 

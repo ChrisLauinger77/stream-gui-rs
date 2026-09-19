@@ -29,11 +29,11 @@ The 0.1.0 release candidate produces these native artifacts:
 
 | Platform | Architecture | Artifact | Status |
 | --- | --- | --- | --- |
-| Windows 11 | x86_64 | NSIS installer (`.exe`) | Natively tested, including an Actions-built installer |
-| Linux | x86_64 | AppImage and Debian package (`.deb`) | Natively tested on a Debian desktop |
-| macOS | Apple Silicon arm64 | Disk image (`.dmg`) containing the app | Natively tested on Apple Silicon |
+| Windows 11 | x86_64 | NSIS installer and portable/Scoop ZIP | Installer natively tested; exact portable package check required |
+| Linux | x86_64 | AppImage, Debian `amd64` package, and RPM `x86_64` package | AppImage and Debian package natively tested; exact RPM check required |
+| macOS | Universal (arm64 and x86_64) | Disk image (`.dmg`) containing the universal app | Natively tested on Apple Silicon; exact Intel check required |
 
-Intel macOS and ARM Linux/Windows packages are not part of 0.1.0 because those exact artifacts have not been natively validated. Source compatibility alone is not treated as release support.
+ARM Linux/Windows packages are not part of 0.1.0. The macOS disk image contains both Apple Silicon and Intel executable slices, but each architecture still requires native exact-artifact validation; cross-compilation alone is not treated as runtime proof.
 
 The 0.1.0 Windows installer is not code-signed, so Windows may show a SmartScreen warning. The macOS app has no Developer ID signature or notarization; its Apple Silicon bundle may receive only an ad-hoc signature, and Gatekeeper may block its first launch. These are known distribution limitations of the first release; verify every downloaded file against the accompanying SHA-256 checksum.
 
@@ -48,8 +48,8 @@ All platforms need:
 Platform requirements:
 
 - **Windows:** Windows 11 x86_64 and the Microsoft Edge WebView2 Runtime. Windows 11 normally includes WebView2. Streamlink must be a native `streamlink.exe`; batch wrappers are rejected.
-- **macOS:** Apple Silicon macOS with the system WebKit view and Keychain available. GUI applications can have a smaller `PATH` than Terminal, so select Streamlink/player paths in Settings when discovery does not find them.
-- **Linux:** an x86_64 desktop, a user D-Bus session, and an unlocked Secret Service provider such as GNOME Keyring or KWallet. The Debian package declares its native WebKitGTK and GTK dependencies. The AppImage bundles its application-side GTK/WebKit libraries but intentionally uses the host GLib, Wayland/Mesa, D-Bus, and Secret Service integration.
+- **macOS:** Apple Silicon or Intel macOS with the system WebKit view and Keychain available. GUI applications can have a smaller `PATH` than Terminal, so select Streamlink/player paths in Settings when discovery does not find them.
+- **Linux:** an x86_64 desktop, a user D-Bus session, and an unlocked Secret Service provider such as GNOME Keyring or KWallet. The Debian and RPM packages declare their native WebKitGTK and GTK dependencies. The AppImage bundles its application-side GTK/WebKit libraries but intentionally uses the host GLib, Wayland/Mesa, D-Bus, and Secret Service integration.
 
 Secure credential storage is mandatory. There is no plaintext fallback. A locked or unavailable native credential store produces an explicit error.
 
@@ -62,6 +62,12 @@ Secure credential storage is mandatory. There is no plaintext fallback. A locked
 5. Open the Twitch verification page, enter the displayed code, and approve `user:read:follows`.
 6. Open **Settings → Streamlink** to test discovery, then choose and test the player settings.
 7. Browse a live channel and select **Watch**. Use **Watching** to stop or restart sessions.
+
+The Windows release also includes `stream-gui-rs.json` and a portable ZIP. After the GitHub Release is published, Scoop users can install it directly:
+
+```powershell
+scoop install https://github.com/ChrisLauinger77/stream-gui-rs/releases/download/v0.1.0/stream-gui-rs.json
+```
 
 Official installed builds contain the project's public Twitch application ID. Users do not set environment variables, register an application, or provide a client secret.
 

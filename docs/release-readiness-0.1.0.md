@@ -17,11 +17,11 @@ Audit date: 2026-09-19. Candidate source before hardening: `685250ad9816bc19b3af
 
 | Platform | Architecture | Package | Signing status |
 | --- | --- | --- | --- |
-| Windows 11 | x86_64 | NSIS installer | Unsigned |
-| Linux | x86_64 | AppImage and Debian package | SHA-256 only |
-| macOS | Apple Silicon arm64 | DMG containing `.app` | No Developer ID signature or notarization; may be ad-hoc signed |
+| Windows 11 | x86_64 | NSIS installer and portable/Scoop ZIP | Unsigned |
+| Linux | x86_64 | AppImage, `amd64.deb`, and `x86_64.rpm` | SHA-256 only |
+| macOS | Universal arm64/x86_64 | DMG containing universal `.app` | No Developer ID signature or notarization; may be ad-hoc signed |
 
-Intel macOS and ARM Linux/Windows are deferred until exact native artifacts can be validated. Flatpak, Snap, RPM, updater, and sandboxed packaging are outside version 0.1.0.
+ARM Linux/Windows are deferred. The universal macOS workflow proves that both executable slices exist, while native Intel execution remains an exact-artifact release check. Flatpak, Snap, updater, and sandboxed packaging are outside version 0.1.0.
 
 ## Adversarial release review
 
@@ -37,11 +37,12 @@ Intel macOS and ARM Linux/Windows are deferred until exact native artifacts can 
 - Completed: add explicit package category and descriptions after native package inspection found empty generated values.
 - Completed: replace the explicitly temporary developer icon with a distinctive stream-to-play mark and regenerate matching native formats.
 - Completed: repair the Tauri AppImage's newer-Linux startup failure by resolving Wayland and GLib infrastructure from the host desktop instead of shipping conflicting Ubuntu copies.
+- Completed: add conventional Debian/RPM names, an RPM, a portable Windows ZIP with Scoop manifest, and a universal macOS disk image to the candidate workflow.
 
 ### Post-release
 
 - Add Windows code signing and macOS signing/notarization after a dedicated credential/workflow design.
-- Evaluate Intel macOS and other architectures only with native artifact testing.
+- Evaluate other Linux and Windows architectures only with native artifact testing.
 - Consider additional Linux package formats only when their host integration and external-process model are intentionally validated.
 
 ## Automated and manual evidence
@@ -61,7 +62,7 @@ On Debian forky/sid x86_64 with Rust 1.95.0 and Node 24.20.0:
 - The Rust suite passed 119 unit/HTTP tests, one build-script guard, and 28 native process-lifecycle tests. HTTP fixtures used loopback access only.
 - Both isolated Linux browser-dispatch/launcher-cleanup tests passed.
 - The feature-enabled native Tauri debug/no-bundle build passed.
-- A native optimized Linux release build produced an executable x86_64 AppImage and Debian package. Inspection confirmed product/version, maintainer, homepage, WebKitGTK dependency, Video desktop category, icon, non-terminal launch, descriptions, and executable mode.
+- A native optimized Linux release build produced an executable x86_64 AppImage, Debian package, and RPM. Inspection confirmed product/version, maintainer, homepage, WebKitGTK dependency, Video desktop category, icon, non-terminal launch, descriptions, and executable mode.
 - The original hosted AppImage reproduced GVFS symbol failures and a fatal `EGL_BAD_PARAMETER` error on Debian forky/Wayland. A repacked artifact without the conflicting bundled Wayland/GLib infrastructure launched cleanly on the same desktop; the exact replacement workflow artifact still requires the Linux checklist above.
 - `git diff --check` passed.
 
