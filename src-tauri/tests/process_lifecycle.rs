@@ -979,6 +979,7 @@ async fn settings_changes_preserve_runs_and_restart_resolves_channel_then_reques
         .save_channel_settings(SaveChannelSettingsRequest {
             broadcaster_id: "123".into(),
             overrides: ChannelOverrides {
+                notifications: None,
                 quality: Some(QualityPolicy::Low),
                 automatic_chat: None,
             },
@@ -1117,6 +1118,7 @@ async fn automatic_chat_uses_effective_preferences_once_per_successful_run() {
             .save_channel_settings(SaveChannelSettingsRequest {
                 broadcaster_id: "123".into(),
                 overrides: ChannelOverrides {
+                    notifications: None,
                     automatic_chat: override_value,
                     quality: None,
                 },

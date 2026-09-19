@@ -30,7 +30,8 @@ pub struct Services {
     pub settings: Arc<SettingsStore>,
     pub sessions: Supervisor,
     pub auth: Arc<AuthService>,
-    pub helix: HelixClient,
+    pub helix: Arc<HelixClient>,
+    pub monitor: Arc<crate::monitor::Monitor>,
     chat: super::chat::BrowserChat,
     streamlink_operation: Mutex<()>,
     closing: AtomicBool,
@@ -78,7 +79,8 @@ impl Services {
         Ok(Self {
             settings: Arc::new(SettingsStore::open(settings_directory)?),
             sessions: Supervisor::default(),
-            helix: HelixClient::new(http, auth.clone()),
+            helix: Arc::new(HelixClient::new(http, auth.clone())),
+            monitor: Arc::default(),
             auth,
             chat: super::chat::BrowserChat::default(),
             streamlink_operation: Mutex::new(()),
@@ -192,9 +194,14 @@ impl Services {
         resolve_player(&settings.player, &SearchLocations::system())?;
         self.ensure_open()?;
         let store = self.settings.clone();
-        tokio::task::spawn_blocking(move || store.update(settings))
+        let background_changed = store.snapshot().background != settings.background;
+        let result = tokio::task::spawn_blocking(move || store.update(settings))
             .await
-            .map_err(|_| AppError::new(ErrorCode::Settings, "Settings operation failed."))?
+            .map_err(|_| AppError::new(ErrorCode::Settings, "Settings operation failed."))??;
+        if background_changed {
+            self.monitor.reconfigure();
+        }
+        Ok(result)
     }
 
     pub async fn save_channel_settings(
@@ -335,11 +342,12 @@ impl Services {
         // Probe owns its child until it exits or its five-second timeout kills
         // and reaps it. Wait for that ownership to end before Tauri exits, while
         // stopping playback immediately. Queued operations recheck closing.
-        let (_, sessions, (), ()) = tokio::join!(
+        let (_, sessions, (), (), ()) = tokio::join!(
             self.streamlink_operation.lock(),
             self.sessions.shutdown(),
             self.auth.shutdown(),
             self.chat.shutdown(),
+            self.monitor.shutdown(),
         );
         sessions
     }

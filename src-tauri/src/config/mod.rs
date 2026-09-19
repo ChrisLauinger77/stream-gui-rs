@@ -17,7 +17,7 @@ use std::{
 };
 use ts_rs::TS;
 
-pub const SETTINGS_VERSION: u32 = 3;
+pub const SETTINGS_VERSION: u32 = 4;
 const MAX_SETTINGS_BYTES: u64 = 256 * 1024;
 const MAX_CHANNEL_OVERRIDES: usize = 1000;
 
@@ -30,6 +30,26 @@ pub enum Theme {
     Dark,
 }
 
+/// Deliberately small supported polling policy; pause is operational, not persisted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BackgroundSettings {
+    pub monitoring_enabled: bool,
+    pub notifications_enabled: bool,
+    pub close_to_background: bool,
+    pub interval_seconds: u32,
+}
+impl Default for BackgroundSettings {
+    fn default() -> Self {
+        Self {
+            monitoring_enabled: false,
+            notifications_enabled: false,
+            close_to_background: false,
+            interval_seconds: 60,
+        }
+    }
+}
+
 /// Global preferences only. Channel records have their own narrow update operation.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -39,6 +59,7 @@ pub struct Settings {
     pub default_quality: QualityPolicy,
     pub automatic_chat: bool,
     pub theme: Theme,
+    pub background: BackgroundSettings,
 }
 impl Settings {
     pub fn validate(&self) -> Result<()> {
@@ -47,6 +68,11 @@ impl Settings {
         }) {
             return Err(settings_error(
                 "Streamlink path must be an absolute executable path.",
+            ));
+        }
+        if !matches!(self.background.interval_seconds, 60 | 120 | 300) {
+            return Err(settings_error(
+                "Choose a monitoring interval of 60, 120 or 300 seconds.",
             ));
         }
         self.player.validate()
@@ -58,6 +84,7 @@ impl Settings {
 pub struct ChannelOverrides {
     pub quality: Option<QualityPolicy>,
     pub automatic_chat: Option<bool>,
+    pub notifications: Option<bool>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -85,6 +112,8 @@ pub struct ChannelSettings {
     pub overrides: ChannelOverrides,
     pub default_quality: QualityPolicy,
     pub default_automatic_chat: bool,
+    pub default_notifications: bool,
+    pub effective_notifications: bool,
     pub effective: EffectivePlaybackSettings,
 }
 pub fn validate_broadcaster_id(id: &str) -> Result<()> {
@@ -180,7 +209,59 @@ impl SettingsDocument {
                     ..Self::default()
                 }
             }
-            Some(3) => serde_json::from_value(value).map_err(|_| {
+            Some(3) => {
+                #[derive(Deserialize)]
+                #[serde(rename_all = "camelCase", deny_unknown_fields)]
+                struct OldSettings {
+                    streamlink_path: Option<String>,
+                    player: PlayerSettings,
+                    default_quality: QualityPolicy,
+                    automatic_chat: bool,
+                    theme: Theme,
+                }
+                #[derive(Deserialize)]
+                #[serde(rename_all = "camelCase", deny_unknown_fields)]
+                struct OldOverrides {
+                    quality: Option<QualityPolicy>,
+                    automatic_chat: Option<bool>,
+                }
+                #[derive(Deserialize)]
+                #[serde(rename_all = "camelCase", deny_unknown_fields)]
+                struct Legacy {
+                    version: u32,
+                    settings: OldSettings,
+                    channel_overrides: BTreeMap<String, OldOverrides>,
+                }
+                let old: Legacy = serde_json::from_value(value)
+                    .map_err(|_| settings_error("Invalid version 3 settings."))?;
+                debug_assert_eq!(old.version, 3);
+                Self {
+                    version: SETTINGS_VERSION,
+                    settings: Settings {
+                        streamlink_path: old.settings.streamlink_path,
+                        player: old.settings.player,
+                        default_quality: old.settings.default_quality,
+                        automatic_chat: old.settings.automatic_chat,
+                        theme: old.settings.theme,
+                        background: BackgroundSettings::default(),
+                    },
+                    channel_overrides: old
+                        .channel_overrides
+                        .into_iter()
+                        .map(|(id, value)| {
+                            (
+                                id,
+                                ChannelOverrides {
+                                    quality: value.quality,
+                                    automatic_chat: value.automatic_chat,
+                                    notifications: None,
+                                },
+                            )
+                        })
+                        .collect(),
+                }
+            }
+            Some(4) => serde_json::from_value(value).map_err(|_| {
                 settings_error("Settings schema is invalid; the file was not changed.")
             })?,
             _ => {
@@ -206,12 +287,20 @@ impl SettingsDocument {
                 .unwrap_or(self.settings.automatic_chat),
         }
     }
+    fn notifications(&self, id: &str) -> bool {
+        self.channel_overrides
+            .get(id)
+            .and_then(|v| v.notifications)
+            .unwrap_or(self.settings.background.notifications_enabled)
+    }
     fn channel(&self, id: &str) -> ChannelSettings {
         ChannelSettings {
             broadcaster_id: id.into(),
             overrides: self.channel_overrides.get(id).cloned().unwrap_or_default(),
             default_quality: self.settings.default_quality,
             default_automatic_chat: self.settings.automatic_chat,
+            default_notifications: self.settings.background.notifications_enabled,
+            effective_notifications: self.notifications(id),
             effective: self.effective(id, None),
         }
     }
@@ -251,6 +340,12 @@ impl SettingsStore {
             .expect("settings mutex poisoned")
             .settings
             .clone()
+    }
+    pub fn notifications(&self, id: &str) -> bool {
+        self.value
+            .lock()
+            .expect("settings mutex poisoned")
+            .notifications(id)
     }
     pub fn path(&self) -> &Path {
         &self.path

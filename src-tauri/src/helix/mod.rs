@@ -1,6 +1,7 @@
 pub mod browse;
 pub mod cache;
 pub mod models;
+mod monitoring;
 pub mod pagination;
 
 use crate::{

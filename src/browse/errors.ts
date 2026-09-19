@@ -1,5 +1,7 @@
 import type { ErrorCode } from "../lib/generated";
 const messages: Record<ErrorCode, string> = {
+  incomplete: "Monitoring could not complete all followed-stream pages. Retrying automatically.",
+  notification: "Desktop notifications are unavailable. Check your system notification settings.",
   browser_open: "Twitch chat could not be opened in your default browser. Playback is unaffected.",
   streamlink_not_found: "Streamlink was not found. Install it separately or set its path in Settings.",
   unsupported_streamlink: "Playback requires Streamlink 8 or newer. Update Streamlink and test it in Settings.",

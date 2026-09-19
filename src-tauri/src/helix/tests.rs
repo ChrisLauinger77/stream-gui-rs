@@ -497,3 +497,6 @@ async fn delayed_401_retry_after_logout(relogin: bool) {
     assert!(helix[0].contains("user_id=account-a"));
     assert!(client.cache.lock().unwrap().is_empty());
 }
+
+#[path = "monitor_tests.rs"]
+mod monitor_tests;

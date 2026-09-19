@@ -7,7 +7,7 @@ import { friendlyError } from "../browse/errors";
 
 export function ChannelPreferences({ broadcasterId, sessionId, settingsRevision }: { broadcasterId: string; sessionId: string; settingsRevision: number }) {
   const [saved, setSaved] = useState<ChannelSettings | null>(null);
-  const [draft, setDraft] = useState<ChannelOverrides>({ quality: null, automaticChat: null });
+  const [draft, setDraft] = useState<ChannelOverrides>({ quality: null, automaticChat: null, notifications: null });
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,6 +55,10 @@ export function ChannelPreferences({ broadcasterId, sessionId, settingsRevision 
           <label>Channel browser chat<select value={draft.automaticChat === null ? "inherit" : draft.automaticChat ? "on" : "off"} onChange={event => setDraft({ ...draft, automaticChat: event.target.value === "inherit" ? null : event.target.value === "on" })}>
             <option value="inherit">Use global default ({saved.defaultAutomaticChat ? "Open chat" : "Keep chat closed"})</option><option value="on">Open chat with playback</option><option value="off">Keep chat closed</option>
           </select></label>
+          <label>Channel notifications<select value={draft.notifications === null ? "inherit" : draft.notifications ? "on" : "off"} onChange={event => setDraft({ ...draft, notifications: event.target.value === "inherit" ? null : event.target.value === "on" })}>
+            <option value="inherit">Use global default ({saved.defaultNotifications ? "On" : "Off"})</option><option value="on">Notify when live</option><option value="off">Do not notify</option>
+          </select></label>
+          <p className="muted">Saved notifications: {saved.effectiveNotifications ? "On" : "Off"}. Requires monitoring and system permission.</p>
           <p className="muted">Saved effective quality: {qualityLabels[saved.effective.quality]} · Browser chat: {saved.effective.automaticChat ? "On" : "Off"}</p>
           <div className="settings-save"><button type="submit">Save channel settings</button><button type="button" onClick={() => setDraft(saved.overrides)}>Cancel changes</button></div>
           <p className="muted">These preferences follow this broadcaster across name changes and apply to this app on this device. Choose the global default to remove an override.</p>

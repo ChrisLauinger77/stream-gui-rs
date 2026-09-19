@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::{Config, TS};
 
+pub mod background;
 pub mod chat;
 pub mod services;
 
@@ -8,6 +9,8 @@ pub mod services;
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
     InvalidInput,
+    Incomplete,
+    Notification,
     BrowserOpen,
     StreamlinkNotFound,
     UnsupportedStreamlink,
@@ -97,6 +100,10 @@ pub fn typescript_bindings() -> String {
     let config = Config::default();
     let declarations = [
         ErrorCode::decl(&config),
+        background::NotificationPermission::decl(&config),
+        background::DesktopAction::decl(&config),
+        background::DesktopStatus::decl(&config),
+        background::AcknowledgeDesktopAction::decl(&config),
         chat::ChatRequest::decl(&config),
         QualityPolicy::decl(&config),
         PlayerMode::decl(&config),
@@ -120,6 +127,9 @@ pub fn typescript_bindings() -> String {
         ProbeRequest::decl(&config),
         StopRequest::decl(&config),
         Settings::decl(&config),
+        BackgroundSettings::decl(&config),
+        crate::monitor::MonitorPhase::decl(&config),
+        crate::monitor::MonitorStatus::decl(&config),
         Theme::decl(&config),
         ChannelOverrides::decl(&config),
         ChannelSettingsRequest::decl(&config),

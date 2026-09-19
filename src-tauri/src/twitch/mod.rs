@@ -88,6 +88,7 @@ struct State {
 }
 #[derive(Clone)]
 struct Snapshot {
+    session_cancel: CancellationToken,
     status: AuthStatus,
     expires: Option<Duration>,
     grant_expires: Option<Duration>,
@@ -95,6 +96,7 @@ struct Snapshot {
 impl Snapshot {
     fn from_state(state: &State) -> Self {
         Self {
+            session_cancel: state.session_cancel.clone(),
             status: state.status.clone(),
             expires: state.expires,
             grant_expires: state.pending.as_ref().map(|p| p.expires),
@@ -294,6 +296,19 @@ impl<A: TwitchApi + 'static> AuthService<A> {
     }
     fn publish(&self, state: &State) {
         self.snapshot.send_replace(Snapshot::from_state(state));
+    }
+    // Public identity and cancellation only; no credential lease or async lock.
+    pub(crate) fn monitor_session(&self) -> Option<(u64, CancellationToken)> {
+        let snapshot = self.snapshot.borrow();
+        if snapshot.status.phase != AuthPhase::Authenticated
+            || snapshot.session_cancel.is_cancelled()
+        {
+            return None;
+        }
+        Some((
+            snapshot.status.session_id.as_ref()?.parse().ok()?,
+            snapshot.session_cancel.clone(),
+        ))
     }
     pub async fn status(&self) -> AuthStatus {
         let snapshot = self.snapshot.borrow().clone();
