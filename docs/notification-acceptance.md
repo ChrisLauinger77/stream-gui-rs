@@ -1,8 +1,14 @@
 # Development-only native notification acceptance
 
-The `notification-acceptance` Cargo feature exposes **Settings → Developer tools → Native notification acceptance**. It is off by default and rejected by the build script in release/non-debug profiles, even if debug assertions are enabled. Published builds do not expose its command, permission or UI controls. No version change or release is needed.
+The `notification-acceptance` Cargo feature exposes **Settings → Developer tools → Native notification acceptance**. It is off by default and rejected by the build script in release/non-debug profiles, even if debug assertions are enabled. Release builds do not expose its command, permission or UI controls. No version change or release is needed.
 
 Each **Send test notification** queues fixed, clearly labeled test content through the same production adapter as followed-live notifications. Clicking uses the real OS callback, opaque activation lookup, window restore/focus and acknowledged desktop action. The destination is **TEST notification · Synthetic channel**, a local view with no channel request, playback or chat action. Twitch sign-in, HTTP and monitoring are not required. Sending or clearing does not change settings, monitor baselines or deduplication.
+
+## CI acceptance packages
+
+After a successful **Desktop checks** run for a push to `main`, download the matching `stream-gui-rs-notification-acceptance-<OS>-<architecture>-<commit>` artifact: Linux `.deb`, Windows NSIS installer, or macOS `.dmg`. These debug packages include the test action and require the repository's registered public client ID during packaging. Pull requests run checks without uploading packages; the normal packaged-mode build is still checked without the acceptance feature.
+
+The macOS CI artifact targets the runner's native architecture, recorded in its name; it is not the universal release image. Install the matching package and use the manual checks below. CI creation does not prove notification behavior on the target desktop. Artifacts request 14-day retention, but the repository's weekly cleanup can remove them once they are more than 24 hours old; download the intended build promptly. These artifacts are development builds, not GitHub Releases.
 
 ## Build and run
 

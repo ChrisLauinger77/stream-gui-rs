@@ -19,10 +19,20 @@ env:
 
 jobs:
   check:
+    name: check (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-24.04
+            bundles: deb
+            artifact-path: src-tauri/target/debug/bundle/deb/*.deb
+          - os: windows-latest
+            bundles: nsis
+            artifact-path: src-tauri/target/debug/bundle/nsis/*_x64-setup.exe
+          - os: macos-latest
+            bundles: app,dmg
+            artifact-path: src-tauri/target/debug/bundle/dmg/*.dmg
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -50,9 +60,10 @@ jobs:
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features test-support
       - name: Desktop Rust checks
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support
-      - name: Native macOS About metadata
-        if: runner.os == 'macOS'
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --features test-support desktop::about::tests
+      - name: Native desktop and notification acceptance contracts
+        run: |
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --features test-support desktop::
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --features test-support,notification-acceptance desktop::
       - name: Linux browser dispatch and launcher cleanup
         if: runner.os == 'Linux'
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_browser_open --features test-support
@@ -64,6 +75,27 @@ jobs:
           # Synthetic fallback is only for these non-publishing checks, never releases.
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD || 'ciCompileOnlyPublicClient123' }}
         run: npm run tauri build -- --debug --no-bundle --features custom-protocol --ci
+      - name: Require registered ID for acceptance packages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
+        run: |
+          if [[ -z "$TWITCH_CLIENT_ID_BUILD" ]]; then
+            echo 'Acceptance packaging requires the TWITCH_CLIENT_ID_BUILD repository secret.' >&2
+            exit 1
+          fi
+          if [[ "$RUNNER_OS" != macOS && "$RUNNER_ARCH" != X64 ]]; then
+            echo 'Linux and Windows acceptance packages require x86_64 runners.' >&2
+            exit 1
+          fi
+      - name: Build native notification acceptance package
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
+        # Rebuild with the opt-in feature; the normal build above must omit it.
+        # --bundles selects packaging even with bundle.active=false.
+        run: npm run tauri build -- --debug --bundles ${{ matrix.bundles }} --features custom-protocol,notification-acceptance --ci
       - name: Verify packaged Windows GUI subsystem
         if: runner.os == 'Windows'
         shell: pwsh
@@ -78,26 +110,11 @@ jobs:
           if ([System.BitConverter]::ToUInt16($binary, $pe + 24 + 68) -ne 2) {
             throw 'The packaged application must use the Windows GUI subsystem.'
           }
-      - name: Package Windows smoke-test installer
-        if: runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: pwsh
-        env:
-          TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:TWITCH_CLIENT_ID_BUILD)) {
-            throw 'Windows smoke-test packaging requires the TWITCH_CLIENT_ID_BUILD repository secret.'
-          }
-          if ($env:RUNNER_ARCH -ne 'X64') {
-            throw 'The Windows smoke-test artifact requires an x86_64 runner.'
-          }
-          # Reuse the build above, which embeds this same registered public ID.
-          # Explicit --bundles selects Tauri's NSIS installer even with bundle.active=false.
-          npm run tauri bundle -- --debug --bundles nsis --features custom-protocol --ci
-      - name: Upload Windows smoke-test installer
-        if: runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Upload native notification acceptance package
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: stream-gui-rs-windows-x86_64
-          path: src-tauri/target/debug/bundle/nsis/*_x64-setup.exe
+          name: stream-gui-rs-notification-acceptance-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          path: ${{ matrix.artifact-path }}
           if-no-files-found: error
           retention-days: 14
