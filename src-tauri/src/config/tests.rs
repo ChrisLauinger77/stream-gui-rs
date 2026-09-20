@@ -19,11 +19,11 @@ fn settings_version_and_round_trip() {
         SettingsDocument::from_json(&serde_json::to_string(&value).unwrap()).unwrap(),
         value
     );
-    assert_eq!(value.version, 4);
+    assert_eq!(value.version, 5);
     assert_eq!(value.settings.theme, Theme::System);
     assert!(!value.settings.automatic_chat);
     assert_eq!(value.settings.default_quality, QualityPolicy::Source);
-    for text in ["{}", r#"{"version":5}"#, r#"{"version":0}"#] {
+    for text in ["{}", r#"{"version":6}"#, r#"{"version":0}"#] {
         assert_eq!(
             SettingsDocument::from_json(text).unwrap_err().code,
             ErrorCode::SettingsVersion
@@ -107,7 +107,7 @@ fn version_two_migration_preserves_every_playback_preference_without_rewriting()
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 4);
+    assert_eq!(persisted["version"], 5);
     assert_eq!(persisted["channelOverrides"], serde_json::json!({}));
 }
 
@@ -136,6 +136,7 @@ fn quality_and_chat_precedence_keep_false_distinct_from_inherit() {
             .set_channel(SaveChannelSettingsRequest {
                 broadcaster_id: "123".into(),
                 overrides: ChannelOverrides {
+                    low_latency: None,
                     notifications: None,
                     quality: Some(policy),
                     automatic_chat: Some(false),
@@ -180,6 +181,7 @@ fn global_saves_preserve_channel_records_and_resolved_snapshots_are_immutable() 
     let mut global = store.snapshot();
     let old = store.effective("123", None).unwrap();
     let overrides = ChannelOverrides {
+        low_latency: None,
         notifications: None,
         quality: Some(QualityPolicy::Low),
         automatic_chat: Some(true),
@@ -304,6 +306,7 @@ fn bounded_file_and_channel_count_fail_without_overwriting() {
         document.channel_overrides.insert(
             id.to_string(),
             ChannelOverrides {
+                low_latency: None,
                 notifications: None,
                 quality: Some(QualityPolicy::Low),
                 automatic_chat: None,
@@ -318,6 +321,7 @@ fn bounded_file_and_channel_count_fail_without_overwriting() {
             .set_channel(SaveChannelSettingsRequest {
                 broadcaster_id: "9999".into(),
                 overrides: ChannelOverrides {
+                    low_latency: None,
                     notifications: None,
                     quality: Some(QualityPolicy::Low),
                     automatic_chat: None
@@ -352,7 +356,7 @@ fn phase_five_migration_is_strict_preserves_channel_preferences_and_defaults_off
         default_quality: QualityPolicy::High,
         automatic_chat: true,
         theme: Theme::Dark,
-        background: BackgroundSettings::default(),
+        ..Settings::default()
     };
     assert_eq!(store.snapshot(), expected);
     assert_eq!(store.snapshot().background, BackgroundSettings::default());
@@ -366,7 +370,7 @@ fn phase_five_migration_is_strict_preserves_channel_preferences_and_defaults_off
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 4);
+    assert_eq!(persisted["version"], 5);
     let reopened = SettingsStore::open(root.path()).unwrap();
     assert_eq!(reopened.snapshot(), expected);
     for id in ["123", "456"] {
@@ -433,4 +437,124 @@ fn notification_overrides_inherit_enable_disable_and_remain_sparse() {
         .unwrap();
     assert!(restored.notifications("123"));
     assert!(restored.value.lock().unwrap().channel_overrides.is_empty());
+}
+
+#[test]
+fn version_four_migration_preserves_released_preferences_and_defaults_phase_six() {
+    let root = tempfile::tempdir().unwrap();
+    let old = serde_json::json!({"version":4,"settings":{
+        "streamlinkPath":null,"player":{"mode":"mpv","executable":null,"arguments":["literal","{braces}",""]},
+        "defaultQuality":"audio","automaticChat":true,"theme":"dark",
+        "background":{"monitoringEnabled":true,"notificationsEnabled":true,"closeToBackground":true,"intervalSeconds":300}
+    },"channelOverrides":{"123":{"quality":"low","automaticChat":false,"notifications":false},"456":{"quality":null,"automaticChat":null,"notifications":null}}});
+    let original = old.to_string();
+    fs::write(root.path().join("settings.json"), &original).unwrap();
+    let store = SettingsStore::open(root.path()).unwrap();
+    let settings = store.snapshot();
+    assert_eq!(settings.discovery_language, None);
+    assert_eq!(settings.text_scale, TextScale::Normal);
+    assert!(!settings.low_latency);
+    assert_eq!(settings.player.arguments, ["literal", "{braces}", ""]);
+    assert_eq!(settings.default_quality, QualityPolicy::Audio);
+    assert!(settings.automatic_chat && settings.background.close_to_background);
+    assert!(settings.background.monitoring_enabled && settings.background.notifications_enabled);
+    assert_eq!(settings.background.interval_seconds, 300);
+    assert_eq!(settings.theme, Theme::Dark);
+    assert_eq!(store.channel("123").unwrap().overrides.low_latency, None);
+    assert!(!store.notifications("123"));
+    assert!(
+        !store
+            .value
+            .lock()
+            .unwrap()
+            .channel_overrides
+            .contains_key("456")
+    );
+    assert_eq!(fs::read_to_string(store.path()).unwrap(), original);
+    store.update(settings.clone()).unwrap();
+    assert_eq!(
+        SettingsStore::open(root.path()).unwrap().snapshot(),
+        settings
+    );
+    for key in ["lowLatency", "textScale", "discoveryLanguage"] {
+        let mut invalid = old.clone();
+        invalid["settings"][key] = serde_json::json!(false);
+        assert!(SettingsDocument::from_json(&invalid.to_string()).is_err());
+    }
+}
+
+#[test]
+fn phase_six_values_are_closed_and_invalid_values_do_not_overwrite() {
+    let root = tempfile::tempdir().unwrap();
+    let good = serde_json::to_value(SettingsDocument::default()).unwrap();
+    for (key, bad) in [
+        ("discoveryLanguage", serde_json::json!("en&first=100")),
+        ("discoveryLanguage", serde_json::json!("xx")),
+        ("textScale", serde_json::json!("200")),
+        ("textScale", serde_json::json!(125)),
+        ("lowLatency", serde_json::json!("on")),
+    ] {
+        let mut value = good.clone();
+        value["settings"][key] = bad;
+        let original = value.to_string();
+        fs::write(root.path().join("settings.json"), &original).unwrap();
+        assert!(SettingsStore::open(root.path()).is_err());
+        assert_eq!(
+            fs::read_to_string(root.path().join("settings.json")).unwrap(),
+            original
+        );
+    }
+    for language in [None, Some(StreamLanguage::En), Some(StreamLanguage::Other)] {
+        for text_scale in [TextScale::Normal, TextScale::Large, TextScale::Largest] {
+            let mut value = SettingsDocument::default();
+            value.settings.discovery_language = language;
+            value.settings.text_scale = text_scale;
+            assert_eq!(
+                SettingsDocument::from_json(&serde_json::to_string(&value).unwrap()).unwrap(),
+                value
+            );
+        }
+    }
+}
+
+#[test]
+fn low_latency_precedence_is_sparse_and_snapshots_are_immutable() {
+    let root = tempfile::tempdir().unwrap();
+    let store = SettingsStore::open(root.path()).unwrap();
+    let original = store.effective("123", None).unwrap();
+    assert!(!original.low_latency);
+    store
+        .update(Settings {
+            low_latency: true,
+            ..Settings::default()
+        })
+        .unwrap();
+    for (choice, expected) in [(None, true), (Some(true), true), (Some(false), false)] {
+        let saved = store
+            .set_channel(SaveChannelSettingsRequest {
+                broadcaster_id: "123".into(),
+                overrides: ChannelOverrides {
+                    low_latency: choice,
+                    ..Default::default()
+                },
+            })
+            .unwrap();
+        assert_eq!(saved.effective.low_latency, expected);
+        assert!(saved.default_low_latency);
+        assert!(!original.low_latency);
+    }
+    store
+        .set_channel(SaveChannelSettingsRequest {
+            broadcaster_id: "123".into(),
+            overrides: ChannelOverrides::default(),
+        })
+        .unwrap();
+    assert!(store.value.lock().unwrap().channel_overrides.is_empty());
+    assert!(
+        SettingsStore::open(root.path())
+            .unwrap()
+            .effective("123", None)
+            .unwrap()
+            .low_latency
+    );
 }

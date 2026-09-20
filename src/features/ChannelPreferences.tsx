@@ -7,7 +7,7 @@ import { friendlyError } from "../browse/errors";
 
 export function ChannelPreferences({ broadcasterId, sessionId, settingsRevision }: { broadcasterId: string; sessionId: string; settingsRevision: number }) {
   const [saved, setSaved] = useState<ChannelSettings | null>(null);
-  const [draft, setDraft] = useState<ChannelOverrides>({ quality: null, automaticChat: null, notifications: null });
+  const [draft, setDraft] = useState<ChannelOverrides>({ quality: null, automaticChat: null, notifications: null, lowLatency: null });
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

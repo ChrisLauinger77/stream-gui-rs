@@ -17,7 +17,7 @@ use std::{
 };
 use ts_rs::TS;
 
-pub const SETTINGS_VERSION: u32 = 4;
+pub const SETTINGS_VERSION: u32 = 5;
 const MAX_SETTINGS_BYTES: u64 = 256 * 1024;
 const MAX_CHANNEL_OVERRIDES: usize = 1000;
 
@@ -28,6 +28,64 @@ pub enum Theme {
     System,
     Light,
     Dark,
+}
+
+/// Curated Twitch discovery languages (ISO 639-1) plus Helix's `other` value.
+/// None means Any language; these values are query data, never arbitrary parameters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum StreamLanguage {
+    Ar,
+    Bg,
+    Cs,
+    Da,
+    De,
+    El,
+    En,
+    Es,
+    Fi,
+    Fr,
+    Hi,
+    Hu,
+    Id,
+    It,
+    Ja,
+    Ko,
+    Ms,
+    Nl,
+    No,
+    Pl,
+    Pt,
+    Ro,
+    Ru,
+    Sk,
+    Sv,
+    Th,
+    Tr,
+    Uk,
+    Vi,
+    Zh,
+    Other,
+}
+impl StreamLanguage {
+    pub fn code(self) -> String {
+        // Serialization is closed over the enum, never frontend-supplied text.
+        serde_json::to_value(self)
+            .expect("language enum")
+            .as_str()
+            .expect("language code")
+            .into()
+    }
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub enum TextScale {
+    #[default]
+    #[serde(rename = "100")]
+    Normal,
+    #[serde(rename = "125")]
+    Large,
+    #[serde(rename = "150")]
+    Largest,
 }
 
 /// Deliberately small supported polling policy; pause is operational, not persisted.
@@ -60,6 +118,9 @@ pub struct Settings {
     pub automatic_chat: bool,
     pub theme: Theme,
     pub background: BackgroundSettings,
+    pub discovery_language: Option<StreamLanguage>,
+    pub low_latency: bool,
+    pub text_scale: TextScale,
 }
 impl Settings {
     pub fn validate(&self) -> Result<()> {
@@ -85,6 +146,7 @@ pub struct ChannelOverrides {
     pub quality: Option<QualityPolicy>,
     pub automatic_chat: Option<bool>,
     pub notifications: Option<bool>,
+    pub low_latency: Option<bool>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -104,6 +166,7 @@ pub struct EffectivePlaybackSettings {
     pub player: PlayerSettings,
     pub quality: QualityPolicy,
     pub automatic_chat: bool,
+    pub low_latency: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -112,6 +175,7 @@ pub struct ChannelSettings {
     pub overrides: ChannelOverrides,
     pub default_quality: QualityPolicy,
     pub default_automatic_chat: bool,
+    pub default_low_latency: bool,
     pub default_notifications: bool,
     pub effective_notifications: bool,
     pub effective: EffectivePlaybackSettings,
@@ -168,7 +232,7 @@ impl SettingsDocument {
             settings_error("Settings contain invalid JSON; the file was not changed.")
         })?;
         // Migrate only this application's schemas, in memory until the next save.
-        let result = match value.get("version").and_then(|v| v.as_u64()) {
+        let mut result = match value.get("version").and_then(|v| v.as_u64()) {
             Some(1) => {
                 #[derive(Deserialize)]
                 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -243,7 +307,7 @@ impl SettingsDocument {
                         default_quality: old.settings.default_quality,
                         automatic_chat: old.settings.automatic_chat,
                         theme: old.settings.theme,
-                        background: BackgroundSettings::default(),
+                        ..Settings::default()
                     },
                     channel_overrides: old
                         .channel_overrides
@@ -254,14 +318,68 @@ impl SettingsDocument {
                                 ChannelOverrides {
                                     quality: value.quality,
                                     automatic_chat: value.automatic_chat,
-                                    notifications: None,
+                                    ..ChannelOverrides::default()
                                 },
                             )
                         })
                         .collect(),
                 }
             }
-            Some(4) => serde_json::from_value(value).map_err(|_| {
+            Some(4) => {
+                #[derive(Deserialize)]
+                #[serde(rename_all = "camelCase", deny_unknown_fields)]
+                struct OldSettings {
+                    streamlink_path: Option<String>,
+                    player: PlayerSettings,
+                    default_quality: QualityPolicy,
+                    automatic_chat: bool,
+                    theme: Theme,
+                    background: BackgroundSettings,
+                }
+                #[derive(Deserialize)]
+                #[serde(rename_all = "camelCase", deny_unknown_fields)]
+                struct OldOverrides {
+                    quality: Option<QualityPolicy>,
+                    automatic_chat: Option<bool>,
+                    notifications: Option<bool>,
+                }
+                #[derive(Deserialize)]
+                #[serde(rename_all = "camelCase", deny_unknown_fields)]
+                struct Legacy {
+                    version: u32,
+                    settings: OldSettings,
+                    channel_overrides: BTreeMap<String, OldOverrides>,
+                }
+                let old: Legacy = serde_json::from_value(value)
+                    .map_err(|_| settings_error("Invalid version 4 settings."))?;
+                debug_assert_eq!(old.version, 4);
+                Self {
+                    version: SETTINGS_VERSION,
+                    settings: Settings {
+                        streamlink_path: old.settings.streamlink_path,
+                        player: old.settings.player,
+                        default_quality: old.settings.default_quality,
+                        automatic_chat: old.settings.automatic_chat,
+                        theme: old.settings.theme,
+                        background: old.settings.background,
+                        ..Settings::default()
+                    },
+                    channel_overrides: old
+                        .channel_overrides
+                        .into_iter()
+                        .map(|(id, old)| {
+                            let value = ChannelOverrides {
+                                quality: old.quality,
+                                automatic_chat: old.automatic_chat,
+                                notifications: old.notifications,
+                                ..ChannelOverrides::default()
+                            };
+                            (id, value)
+                        })
+                        .collect(),
+                }
+            }
+            Some(5) => serde_json::from_value(value).map_err(|_| {
                 settings_error("Settings schema is invalid; the file was not changed.")
             })?,
             _ => {
@@ -272,6 +390,9 @@ impl SettingsDocument {
             }
         };
         result.validate()?;
+        result
+            .channel_overrides
+            .retain(|_, value| *value != ChannelOverrides::default());
         Ok(result)
     }
     fn effective(&self, id: &str, quality: Option<QualityPolicy>) -> EffectivePlaybackSettings {
@@ -282,6 +403,7 @@ impl SettingsDocument {
             quality: quality
                 .or(overrides.quality)
                 .unwrap_or(self.settings.default_quality),
+            low_latency: overrides.low_latency.unwrap_or(self.settings.low_latency),
             automatic_chat: overrides
                 .automatic_chat
                 .unwrap_or(self.settings.automatic_chat),
@@ -299,6 +421,7 @@ impl SettingsDocument {
             overrides: self.channel_overrides.get(id).cloned().unwrap_or_default(),
             default_quality: self.settings.default_quality,
             default_automatic_chat: self.settings.automatic_chat,
+            default_low_latency: self.settings.low_latency,
             default_notifications: self.settings.background.notifications_enabled,
             effective_notifications: self.notifications(id),
             effective: self.effective(id, None),

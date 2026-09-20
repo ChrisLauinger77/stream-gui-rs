@@ -233,6 +233,7 @@ mod tests {
             player: (mode != PlayerMode::Default)
                 .then(|| PathBuf::from("/播放器 with spaces/player")),
             settings: crate::config::EffectivePlaybackSettings {
+                low_latency: false,
                 streamlink_path: None,
                 automatic_chat: false,
                 quality,

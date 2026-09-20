@@ -36,8 +36,8 @@ beforeEach(() => {
   Object.defineProperty(navigator, "platform", { configurable: true, value: "Linux x86_64" });
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
   vi.mocked(api.sessions).mockResolvedValue([]);
-  vi.mocked(api.playbackSettings).mockResolvedValue({ background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
-  vi.mocked(api.channelSettings).mockImplementation(async broadcasterId => ({ broadcasterId, overrides: { notifications: null, quality: null, automaticChat: null }, defaultQuality: "source", defaultAutomaticChat: false, defaultNotifications: false, effectiveNotifications: false, effective: { streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, quality: "source", automaticChat: false } }));
+  vi.mocked(api.playbackSettings).mockResolvedValue({ discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
+  vi.mocked(api.channelSettings).mockImplementation(async broadcasterId => ({ broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: "source", defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false, effective: { lowLatency: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, quality: "source", automaticChat: false } }));
   vi.mocked(api.authStatus).mockResolvedValue(signedIn);
   vi.mocked(api.account).mockResolvedValue({ id: "viewer", login: "viewer", displayName: "Viewer", profileImageUrl: null });
   vi.mocked(api.followedStreams).mockResolvedValue(page([])); vi.mocked(api.streams).mockResolvedValue(page([stream]));
@@ -333,7 +333,7 @@ const playing = (id = "play-one", broadcasterId = "channel-one"): import("../lib
   url: "https://www.twitch.tv/example", quality: "best", exitCode: null, stopRequested: false,
   logs: [{ sequence: 1, source: "stderr", text: "Synthetic diagnostic warning" }], droppedLogEntries: 5,
 });
-const playbackSettings: import("../lib/generated").Settings = { background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
+const playbackSettings: import("../lib/generated").Settings = { discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
 async function editControl(label: string, value: string, kind: "input" | "select" = "input") {
   const control = [...container.querySelectorAll<HTMLInputElement | HTMLSelectElement>(kind)].find(el => el.labels?.[0]?.textContent?.startsWith(label));
   if (!control) throw new Error(`Missing control: ${label}`);
@@ -505,8 +505,8 @@ test("settings loading waits for the backend and duplicate saves are guarded", a
 });
 
 function channelPreferences(broadcasterId = "channel-one", quality: "source" | "high" | "low" = "source") {
-  return { broadcasterId, overrides: { notifications: null, quality: null, automaticChat: null }, defaultQuality: quality, defaultAutomaticChat: false, defaultNotifications: false, effectiveNotifications: false,
-    effective: { streamlinkPath: null, player: playbackSettings.player, quality, automaticChat: false } };
+  return { broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: quality, defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false,
+    effective: { lowLatency: false, streamlinkPath: null, player: playbackSettings.player, quality, automaticChat: false } };
 }
 
 test("channel preferences display Rust defaults, save overrides, and return to inheritance", async () => {
@@ -514,15 +514,15 @@ test("channel preferences display Rust defaults, save overrides, and return to i
   await render(); await click("Live"); await click("Open channel Example Channel");
   expect(text()).toContain("Use global default (High");
   await editControl("Channel quality", "low", "select"); await editControl("Channel browser chat", "on", "select");
-  const saved = { ...channelPreferences("channel-one", "high"), overrides: { notifications: null, quality: "low" as const, automaticChat: true }, effective: { ...channelPreferences().effective, quality: "low" as const, automaticChat: true } };
+  const saved = { ...channelPreferences("channel-one", "high"), overrides: { lowLatency: null, notifications: null, quality: "low" as const, automaticChat: true }, effective: { ...channelPreferences().effective, quality: "low" as const, automaticChat: true } };
   vi.mocked(api.saveChannelSettings).mockResolvedValue(saved);
   await click("Save channel settings");
-  expect(api.saveChannelSettings).toHaveBeenCalledWith({ broadcasterId: "channel-one", overrides: { notifications: null, quality: "low", automaticChat: true } });
+  expect(api.saveChannelSettings).toHaveBeenCalledWith({ broadcasterId: "channel-one", overrides: { lowLatency: null, notifications: null, quality: "low", automaticChat: true } });
   expect(text()).toContain("Saved effective quality: Low");
   await editControl("Channel quality", "inherit", "select"); await editControl("Channel browser chat", "inherit", "select");
   vi.mocked(api.saveChannelSettings).mockResolvedValue(channelPreferences("channel-one", "high"));
   await click("Save channel settings");
-  expect(api.saveChannelSettings).toHaveBeenLastCalledWith({ broadcasterId: "channel-one", overrides: { notifications: null, quality: null, automaticChat: null } });
+  expect(api.saveChannelSettings).toHaveBeenLastCalledWith({ broadcasterId: "channel-one", overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null } });
   expect(text()).toContain("Saved effective quality: High");
   expect(api.launch).not.toHaveBeenCalled(); expect(api.restart).not.toHaveBeenCalled();
 });
@@ -803,9 +803,9 @@ test("old account notification cannot navigate the replacement workspace", async
 test("channel notification suppression uses a nullable stable-ID override", async () => {
   await render(); await click("Live"); await click("Open channel Example Channel");
   await editControl("Channel notifications", "off", "select");
-  vi.mocked(api.saveChannelSettings).mockResolvedValue({ ...channelPreferences(), overrides: { quality: null, automaticChat: null, notifications: false } });
+  vi.mocked(api.saveChannelSettings).mockResolvedValue({ ...channelPreferences(), overrides: { lowLatency: null, quality: null, automaticChat: null, notifications: false } });
   await click("Save channel settings");
-  expect(api.saveChannelSettings).toHaveBeenCalledWith({ broadcasterId: "channel-one", overrides: { quality: null, automaticChat: null, notifications: false } });
+  expect(api.saveChannelSettings).toHaveBeenCalledWith({ broadcasterId: "channel-one", overrides: { lowLatency: null, quality: null, automaticChat: null, notifications: false } });
   await editControl("Channel notifications", "inherit", "select"); await click("Save channel settings");
-  expect(api.saveChannelSettings).toHaveBeenLastCalledWith({ broadcasterId: "channel-one", overrides: { quality: null, automaticChat: null, notifications: null } });
+  expect(api.saveChannelSettings).toHaveBeenLastCalledWith({ broadcasterId: "channel-one", overrides: { lowLatency: null, quality: null, automaticChat: null, notifications: null } });
 });
