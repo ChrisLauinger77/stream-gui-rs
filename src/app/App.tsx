@@ -103,7 +103,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       <p>The native notification activated this local target. No Twitch channel data or playback is involved.</p>
       <button onClick={() => setNotificationTest(false)}>Back to browsing</button>
       <button onClick={developer}>Developer tools</button>
-    </main> : auth.sessionId ? <BrowserWorkspace actionsRef={workspace} settingsRevision={settingsRevision} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} pending={playback.pending} /> :
+    </main> : auth.sessionId ? <BrowserWorkspace preferences={playback.settings} saveLanguage={playback.saveLanguage} actionsRef={workspace} settingsRevision={settingsRevision} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} pending={playback.pending} /> :
       <SignIn status={auth.status} account={auth.account} busy={auth.busy} run={auth.run} />}
     <footer className="app-footer"><span>Twitch browsing · Streamlink desktop</span><span>{auth.sessionId ? "Connected to Twitch" : "Connect your Twitch account"}</span></footer>
   </div>;

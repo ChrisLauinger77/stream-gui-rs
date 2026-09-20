@@ -161,7 +161,7 @@ pub async fn list_followed_channels(
 #[tauri::command]
 pub async fn list_streams(
     services: State<'_, Arc<Services>>,
-    request: BrowseRequest,
+    request: StreamBrowseRequest,
 ) -> Result<PagedResult<StreamSummary>> {
     let _permit = services.browse_permit()?;
     services
@@ -185,7 +185,7 @@ pub async fn list_categories(
 #[tauri::command]
 pub async fn list_category_streams(
     services: State<'_, Arc<Services>>,
-    request: EntityRequest,
+    request: CategoryStreamsRequest,
 ) -> Result<CategoryDetails> {
     let _permit = services.browse_permit()?;
     services
@@ -288,4 +288,12 @@ pub fn acknowledge_desktop_action(
 #[tauri::command]
 pub fn quit_application(app: tauri::AppHandle) {
     crate::desktop::begin_shutdown(&app);
+}
+
+#[tauri::command]
+pub async fn save_discovery_language(
+    services: State<'_, Arc<Services>>,
+    request: Option<crate::config::StreamLanguage>,
+) -> Result<Settings> {
+    services.save_discovery_language(request).await
 }

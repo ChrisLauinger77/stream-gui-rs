@@ -153,8 +153,11 @@ async fn category_metadata_and_cursor_are_bound_to_the_selected_category() {
     let (server, client, page) = client(vec![Reply::json(200, GAME), Reply::json(200, body)]).await;
     let details = client
         .browse_category(
-            EntityRequest {
-                page,
+            CategoryStreamsRequest {
+                page: StreamBrowseRequest {
+                    page,
+                    language: None,
+                },
                 id: "game-1".into(),
             },
             &CancellationToken::new(),
@@ -162,7 +165,10 @@ async fn category_metadata_and_cursor_are_bound_to_the_selected_category() {
         .await
         .unwrap();
     assert_eq!(details.category.id, "game-1");
-    assert_eq!(details.streams.cursor.as_deref(), Some("more"));
+    let cursor: DiscoveryCursor =
+        serde_json::from_str(details.streams.cursor.as_deref().unwrap()).unwrap();
+    assert_eq!(cursor.provider, "more");
+    assert_eq!(cursor.category.as_deref(), Some("game-1"));
     assert!(server.requests()[1].contains("game_id=game-1"));
     assert!(details.category.image_url.unwrap().ends_with("144x192.jpg"));
 }
@@ -255,7 +261,17 @@ async fn logout_during_enrichment_prevents_further_dispatch_and_old_session_quer
     let (result, ()) = tokio::join!(pending, logout);
     assert_eq!(result.unwrap_err().code, ErrorCode::Unauthenticated);
     assert_eq!(
-        client.browse_streams(page, &cancel).await.unwrap_err().code,
+        client
+            .browse_streams(
+                StreamBrowseRequest {
+                    page,
+                    language: None
+                },
+                &cancel
+            )
+            .await
+            .unwrap_err()
+            .code,
         ErrorCode::Unauthenticated
     );
     assert_eq!(server.requests().len(), 2);
@@ -503,6 +519,138 @@ async fn chat_identity_rejects_url_metadata_and_logout_during_lookup() {
     assert_eq!(
         client
             .chat_login(page.session_id, "123".into(), &cancel)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::Unauthenticated
+    );
+    assert_eq!(server.requests().len(), 1);
+}
+
+#[tokio::test]
+async fn discovery_language_queries_cache_refresh_and_cursors_are_isolated() {
+    use crate::config::StreamLanguage::{En, Other};
+    let body = STREAM.replace(
+        "\"pagination\": {}",
+        "\"pagination\": {\"cursor\":\"next+/=\"}",
+    );
+    let (server, client, page) = client(vec![
+        Reply::json(200, &body),
+        Reply::json(200, &body),
+        Reply::json(200, STREAM),
+        Reply::json(200, STREAM),
+        Reply::json(200, "{\"data\":[]}"),
+    ])
+    .await;
+    let cancel = CancellationToken::new();
+    let mut request = StreamBrowseRequest {
+        page,
+        language: None,
+    };
+    let any = client
+        .browse_streams(request.clone(), &cancel)
+        .await
+        .unwrap();
+    request.language = Some(En);
+    let english = client
+        .browse_streams(request.clone(), &cancel)
+        .await
+        .unwrap();
+    assert_ne!(any.cursor, english.cursor);
+    assert_eq!(
+        client
+            .browse_streams(request.clone(), &cancel)
+            .await
+            .unwrap()
+            .freshness,
+        DataFreshness::Cached
+    );
+    assert_eq!(server.requests().len(), 2);
+    request.page.cursor = any.cursor;
+    assert_eq!(
+        client
+            .browse_streams(request.clone(), &cancel)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::InvalidInput
+    );
+    assert_eq!(server.requests().len(), 2);
+    request.page.cursor = english.cursor;
+    client
+        .browse_streams(request.clone(), &cancel)
+        .await
+        .unwrap();
+    request.page.cursor = None;
+    request.page.refresh = true;
+    client
+        .browse_streams(request.clone(), &cancel)
+        .await
+        .unwrap();
+    request.language = Some(Other);
+    let empty = client.browse_streams(request, &cancel).await.unwrap();
+    assert!(empty.items.is_empty() && empty.warnings.is_empty());
+    let requests = server.requests();
+    assert!(!requests[0].contains("language="));
+    assert!(requests[1].contains("language=en"));
+    assert!(requests[2].contains("after=next%2B%2F%3D") && requests[2].contains("language=en"));
+    assert!(requests[3].contains("language=en"));
+    assert!(requests[4].contains("language=other"));
+}
+
+#[tokio::test]
+async fn category_language_and_cross_scope_cursor_do_not_mix() {
+    let body = STREAM.replace(
+        "\"pagination\": {}",
+        "\"pagination\": {\"cursor\":\"more\"}",
+    );
+    let (server, client, page) = client(vec![Reply::json(200, GAME), Reply::json(200, body)]).await;
+    let cancel = CancellationToken::new();
+    let request = StreamBrowseRequest {
+        page,
+        language: Some(crate::config::StreamLanguage::De),
+    };
+    let result = client
+        .browse_category(
+            CategoryStreamsRequest {
+                id: "game-1".into(),
+                page: request.clone(),
+            },
+            &cancel,
+        )
+        .await
+        .unwrap();
+    assert!(server.requests()[1].contains("game_id=game-1&language=de"));
+    let mut live = request;
+    live.page.cursor = result.streams.cursor;
+    assert_eq!(
+        client.browse_streams(live, &cancel).await.unwrap_err().code,
+        ErrorCode::InvalidInput
+    );
+    assert_eq!(server.requests().len(), 2);
+}
+
+#[tokio::test]
+async fn filtered_lookup_is_cancelled_when_its_original_session_ends() {
+    let gate = Arc::new(tokio::sync::Notify::new());
+    let (server, client, page) = client(vec![Reply::json(200, STREAM).gated(gate.clone())]).await;
+    let cancel = CancellationToken::new();
+    let request = StreamBrowseRequest {
+        page,
+        language: Some(crate::config::StreamLanguage::En),
+    };
+    let pending = client.browse_streams(request.clone(), &cancel);
+    tokio::pin!(pending);
+    tokio::select! { _ = &mut pending => panic!("response should wait"), _ = server.wait_for_requests(1) => {} }
+    client.auth.logout().await.unwrap();
+    gate.notify_one();
+    assert!(matches!(
+        pending.await.unwrap_err().code,
+        ErrorCode::Unauthenticated | ErrorCode::Cancelled
+    ));
+    assert_eq!(
+        client
+            .browse_streams(request, &cancel)
             .await
             .unwrap_err()
             .code,

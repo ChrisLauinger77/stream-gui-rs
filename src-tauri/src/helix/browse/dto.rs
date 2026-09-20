@@ -94,3 +94,16 @@ pub struct CategoryDetails {
     pub category: CategorySummary,
     pub streams: PagedResult<StreamSummary>,
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StreamBrowseRequest {
+    pub page: BrowseRequest,
+    pub language: Option<crate::config::StreamLanguage>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CategoryStreamsRequest {
+    pub page: StreamBrowseRequest,
+    pub id: String,
+}

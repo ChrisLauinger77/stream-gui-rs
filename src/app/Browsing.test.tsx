@@ -83,13 +83,13 @@ test("Live has loading, success and server-error retry states", async () => {
 });
 test("categories open their streams and Back restores the category focus", async () => {
   await render(); await click("Categories"); button("Open category Example Game").focus(); await click("Open category Example Game");
-  expect(api.category).toHaveBeenCalledWith({ id: "game-one", page: { sessionId: "1", cursor: null, refresh: false } }); expect(text()).toContain("A live broadcast");
+  expect(api.category).toHaveBeenCalledWith({ id: "game-one", page: { page: { sessionId: "1", cursor: null, refresh: false }, language: null } }); expect(text()).toContain("A live broadcast");
   await click("Go back"); expect(document.activeElement).toBe(button("Open category Example Game")); expect(api.categories).toHaveBeenCalledOnce(); expect(text()).toContain("Previous results");
 });
 test("load more propagates cursors, deduplicates stream IDs and prevents double dispatch", async () => {
   vi.mocked(api.streams).mockResolvedValueOnce(page([stream], "next")); const pending = deferred<PagedResult<StreamSummary>>(); vi.mocked(api.streams).mockReturnValueOnce(pending.promise);
   await render(); await click("Live"); await act(async () => { button("Load more").click(); button("Load more").click(); });
-  expect(api.streams).toHaveBeenCalledTimes(2); expect(api.streams).toHaveBeenLastCalledWith({ sessionId: "1", cursor: "next", refresh: false });
+  expect(api.streams).toHaveBeenCalledTimes(2); expect(api.streams).toHaveBeenLastCalledWith({ page: { sessionId: "1", cursor: "next", refresh: false }, language: null });
   await act(async () => pending.resolve(page([stream, { ...stream, streamId: "stream-two", broadcasterId: "channel-two" }])));
   expect(container.querySelectorAll(".stream-card")).toHaveLength(2);
 });
@@ -244,7 +244,7 @@ test("a pending pagination error preserves control focus, results and retry curs
   await render(); await click("Live"); const more = button("Load more"); more.focus(); await click("Load more");
   expect(text()).toContain("Loading more information"); await act(async () => reject({ code: "network" }));
   expect(document.activeElement).toBe(more); expect(container.querySelectorAll(".stream-card")).toHaveLength(1); expect(text()).toContain("Check your connection");
-  button("Retry").focus(); await click("Retry"); expect(api.streams).toHaveBeenLastCalledWith({ sessionId: "1", cursor: "next", refresh: false });
+  button("Retry").focus(); await click("Retry"); expect(api.streams).toHaveBeenLastCalledWith({ page: { sessionId: "1", cursor: "next", refresh: false }, language: null });
 });
 
 test.each(["another control", "the document body"])("final pagination does not steal focus after moving to %s", async destination => {
@@ -808,4 +808,46 @@ test("channel notification suppression uses a nullable stable-ID override", asyn
   expect(api.saveChannelSettings).toHaveBeenCalledWith({ broadcasterId: "channel-one", overrides: { lowLatency: null, quality: null, automaticChat: null, notifications: false } });
   await editControl("Channel notifications", "inherit", "select"); await click("Save channel settings");
   expect(api.saveChannelSettings).toHaveBeenLastCalledWith({ broadcasterId: "channel-one", overrides: { lowLatency: null, quality: null, automaticChat: null, notifications: null } });
+});
+
+async function selectLanguage(value: string) {
+  const select = container.querySelector<HTMLSelectElement>(".language-filter select")!;
+  await act(async () => { select.value = value; select.dispatchEvent(new Event("change", { bubbles: true })); });
+}
+test("language filter persists, isolates pending results and resets paging without filtering Following", async () => {
+  vi.mocked(api.saveDiscoveryLanguage).mockImplementation(async discoveryLanguage => ({ ...playbackSettings, discoveryLanguage }));
+  const old = deferred<PagedResult<StreamSummary>>();
+  vi.mocked(api.streams).mockReturnValueOnce(old.promise).mockResolvedValueOnce(page([], "en-next")).mockResolvedValueOnce(page([stream]));
+  await render(); await click("Live"); await selectLanguage("en");
+  expect(api.saveDiscoveryLanguage).toHaveBeenCalledWith("en");
+  expect(api.streams).toHaveBeenLastCalledWith({ page: { sessionId: "1", cursor: null, refresh: false }, language: "en" });
+  expect(text()).toContain("No streams in this language");
+  await act(async () => old.resolve(page([{ ...stream, displayName: "Old language result" }], "old-cursor")));
+  expect(text()).not.toContain("Old language result");
+  await click("Load more"); expect(api.streams).toHaveBeenLastCalledWith({ page: { sessionId: "1", cursor: "en-next", refresh: false }, language: "en" });
+  await click("Following"); expect(container.querySelector(".language-filter")).toBeNull();
+  expect(api.followedStreams).toHaveBeenCalledWith({ sessionId: "1", cursor: null, refresh: false });
+  await click("Live"); await click("Reset language");
+  expect(api.saveDiscoveryLanguage).toHaveBeenLastCalledWith(null);
+  expect(api.streams).toHaveBeenLastCalledWith({ page: { sessionId: "1", cursor: null, refresh: false }, language: null });
+});
+test("Back restores a discovery visit's language and focus while new visits use saved preference", async () => {
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, discoveryLanguage: "en" });
+  vi.mocked(api.saveDiscoveryLanguage).mockImplementation(async discoveryLanguage => ({ ...playbackSettings, discoveryLanguage }));
+  await render(); await click("Live");
+  button("Example Game").focus(); await click("Example Game"); await selectLanguage("other");
+  expect(api.category).toHaveBeenLastCalledWith({ id: "game-one", page: { page: { sessionId: "1", cursor: null, refresh: false }, language: "other" } });
+  await click("Go back");
+  expect(container.querySelector<HTMLSelectElement>(".language-filter select")!.value).toBe("en");
+  expect(document.activeElement).toBe(button("Example Game"));
+  await click("Refresh"); expect(api.streams).toHaveBeenLastCalledWith({ page: { sessionId: "1", cursor: null, refresh: true }, language: "en" });
+});
+test("language save errors preserve accepted preference and filtered network errors are not empty", async () => {
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, discoveryLanguage: "de" });
+  vi.mocked(api.saveDiscoveryLanguage).mockRejectedValue({ code: "settings" });
+  vi.mocked(api.streams).mockRejectedValue({ code: "network" });
+  await render(); await click("Live"); await selectLanguage("en");
+  expect(container.querySelector<HTMLSelectElement>(".language-filter select")!.value).toBe("de");
+  expect(text()).not.toContain("No streams in this language");
+  expect(text()).toContain("Check your connection");
 });

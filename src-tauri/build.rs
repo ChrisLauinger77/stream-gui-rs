@@ -131,6 +131,7 @@ fn main() {
             "list_followed_streams",
             "list_followed_channels",
             "list_streams",
+            "save_discovery_language",
             "list_categories",
             "list_category_streams",
             "search_channels",

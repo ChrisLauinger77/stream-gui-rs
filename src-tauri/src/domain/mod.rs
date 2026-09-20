@@ -114,6 +114,8 @@ pub fn typescript_bindings() -> String {
         PlaybackStream::decl(&config),
         PlayerDiscovery::decl(&config),
         BrowseRequest::decl(&config),
+        StreamBrowseRequest::decl(&config),
+        CategoryStreamsRequest::decl(&config),
         EntityRequest::decl(&config),
         SearchRequest::decl(&config),
         DataFreshness::decl(&config),

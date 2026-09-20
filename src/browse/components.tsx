@@ -30,7 +30,7 @@ export function StreamCard({ stream, channel, category, retryGeneration, ...watc
       <StreamPreview retryGeneration={retryGeneration} stream={stream} />
       <h3>{stream.displayName}</h3><p className="stream-title" title={stream.title}>{stream.title || "Untitled stream"}</p>
     </button>
-    <div className="stream-meta">{stream.categoryId ? <button className="text-button" onClick={() => category(stream.categoryId!, stream.categoryName ?? "Category")}>{stream.categoryName ?? "Category"}</button> : <span>Uncategorized</span>}{stream.language && <span>{stream.language.toUpperCase()}</span>}</div>
+    <div className="stream-meta">{stream.categoryId ? <button className="text-button" data-focus={`category:${stream.categoryId}:stream:${stream.streamId}`} onClick={() => category(stream.categoryId!, stream.categoryName ?? "Category")}>{stream.categoryName ?? "Category"}</button> : <span>Uncategorized</span>}{stream.language && <span>{stream.language.toUpperCase()}</span>}</div>
     <WatchButton id={stream.broadcasterId} name={stream.displayName} {...watch} />
   </article>;
 }

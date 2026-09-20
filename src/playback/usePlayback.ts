@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { api } from "../lib/ipc";
 import { errorCode, friendlyError } from "../browse/errors";
-import type { SessionSnapshot, Settings } from "../lib/generated";
+import type { SessionSnapshot, Settings, StreamLanguage } from "../lib/generated";
 
 export function playbackError(error: unknown) {
   const code = errorCode(error);
@@ -18,10 +18,20 @@ export function playbackError(error: unknown) {
 // a competing process state. One poll at a time; old polls cannot undo actions.
 export function usePlayback() {
   const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [settings, updateSettings] = useState<Settings | null>(null);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const languageRevision = useRef(0);
+  const setSettings = useCallback((value: Settings) => updateSettings(current => ({ ...value,
+    discoveryLanguage: current ? current.discoveryLanguage : value.discoveryLanguage })), []);
+  const saveLanguage = useCallback(async (language: StreamLanguage | null) => {
+    const version = ++languageRevision.current;
+    const value = await api.saveDiscoveryLanguage(language);
+    if (mounted.current && version === languageRevision.current) updateSettings(current => current
+      ? { ...current, discoveryLanguage: value.discoveryLanguage } : value);
+    return value;
+  }, []);
   const revision = useRef(0);
   const inFlight = useRef(new Set<string>());
   const mounted = useRef(false);
@@ -30,7 +40,7 @@ export function usePlayback() {
     if (!isTauri()) return () => { mounted.current = false; };
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
-    void api.playbackSettings().then(value => { if (!cancelled) setSettings(value); })
+    void api.playbackSettings().then(value => { if (!cancelled && languageRevision.current === 0) updateSettings(value); })
       .catch(error => { if (!cancelled) setError(playbackError(error)); });
     const poll = async () => {
       const version = revision.current;
@@ -63,5 +73,5 @@ export function usePlayback() {
       if (mounted.current) setPending(new Set(inFlight.current));
     }
   }, []);
-  return { sessions, settings, setSettings, pending, run, error, message, dismiss: () => { setError(null); setMessage(null); } };
+  return { sessions, settings, setSettings, saveLanguage, pending, run, error, message, dismiss: () => { setError(null); setMessage(null); } };
 }

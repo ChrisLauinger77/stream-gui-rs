@@ -29,6 +29,7 @@
     "allow-list-followed-streams",
     "allow-list-followed-channels",
     "allow-list-streams",
+    "allow-save-discovery-language",
     "allow-list-categories",
     "allow-list-category-streams",
     "allow-search-channels",

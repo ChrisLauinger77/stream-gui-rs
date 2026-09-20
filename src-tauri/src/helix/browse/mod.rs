@@ -260,12 +260,60 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
     }
     pub async fn browse_streams(
         &self,
-        request: BrowseRequest,
+        request: StreamBrowseRequest,
         cancel: &CancellationToken,
     ) -> Result<PagedResult<StreamSummary>> {
-        let mut session = self.browse_session(&request).await?;
-        self.browse_stream_page(&request, "streams", vec![], false, cancel, &mut session)
+        let mut session = self.browse_session(&request.page).await?;
+        self.discovery_stream_page(&request, None, cancel, &mut session)
             .await
+    }
+    async fn discovery_stream_page(
+        &self,
+        request: &StreamBrowseRequest,
+        category: Option<&str>,
+        cancel: &CancellationToken,
+        session: &mut Option<RequestSession>,
+    ) -> Result<PagedResult<StreamSummary>> {
+        let mut page = request.page.clone();
+        if let Some(cursor) = &page.cursor {
+            if cursor.len() > 16384 {
+                return Err(error(ErrorCode::InvalidInput));
+            }
+            let cursor: DiscoveryCursor =
+                serde_json::from_str(cursor).map_err(|_| error(ErrorCode::InvalidInput))?;
+            if cursor.session_id != page.session_id
+                || cursor.language != request.language
+                || cursor.category.as_deref() != category
+            {
+                return Err(error(ErrorCode::InvalidInput));
+            }
+            page.cursor = Some(cursor.provider);
+        }
+        let mut extra = vec![];
+        if let Some(id) = category {
+            extra.extend(params("game_id", &[id.to_owned()])?);
+        }
+        if let Some(language) = request.language {
+            extra.push(("language".into(), language.code()));
+        }
+        let mut result = self
+            .browse_stream_page(&page, "streams", extra, false, cancel, session)
+            .await?;
+        if let Some(provider) = result.cursor.take() {
+            // Keep Twitch's cursor opaque, but bind its application envelope to the
+            // exact discovery query and original auth session. No extra cursor cache.
+            PageRequest::after(PAGE_SIZE, &provider)?;
+            result.cursor = Some(
+                serde_json::to_string(&DiscoveryCursor {
+                    session_id: page.session_id,
+                    language: request.language,
+                    category: category.map(str::to_owned),
+                    provider,
+                })
+                .map_err(|_| error(ErrorCode::Internal))?,
+            );
+        }
+        Ok(result)
     }
     pub async fn browse_categories(
         &self,
@@ -289,10 +337,10 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
     }
     pub async fn browse_category(
         &self,
-        request: EntityRequest,
+        request: CategoryStreamsRequest,
         cancel: &CancellationToken,
     ) -> Result<CategoryDetails> {
-        let mut session = self.browse_session(&request.page).await?;
+        let mut session = self.browse_session(&request.page.page).await?;
         let game = self
             .get_bound::<Game>(
                 "games",
@@ -312,14 +360,7 @@ impl<A: TwitchApi + 'static> HelixClient<A> {
             .ok_or_else(|| error(ErrorCode::NotFound))?
             .into();
         let streams = self
-            .browse_stream_page(
-                &request.page,
-                "streams",
-                params("game_id", &[request.id])?,
-                false,
-                cancel,
-                &mut session,
-            )
+            .discovery_stream_page(&request.page, Some(&request.id), cancel, &mut session)
             .await?;
         Ok(CategoryDetails { category, streams })
     }
@@ -676,3 +717,12 @@ fn search_query(request: &SearchRequest) -> Result<Vec<(String, String)>> {
 }
 #[cfg(test)]
 mod tests;
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DiscoveryCursor {
+    session_id: String,
+    language: Option<crate::config::StreamLanguage>,
+    category: Option<String>,
+    provider: String,
+}

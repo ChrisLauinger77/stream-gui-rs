@@ -9,6 +9,7 @@ type Snapshot<T> = { page: ViewPage<T>; cursors: string[]; pages: number; limite
 export class ViewMemory {
   private entries = new Map<string, unknown>();
   read<T>(key: string) { return this.entries.get(key) as Snapshot<T> | undefined; }
+  forget(key: string) { this.entries.delete(key); }
   write<T>(key: string, value: Snapshot<T>) {
     this.entries.delete(key); this.entries.set(key, value);
     while (this.entries.size > 12) this.entries.delete(this.entries.keys().next().value!);

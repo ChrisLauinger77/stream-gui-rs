@@ -507,6 +507,14 @@ impl SettingsStore {
         *value = next;
         Ok(value.channel(&request.broadcaster_id))
     }
+    pub fn set_discovery_language(&self, language: Option<StreamLanguage>) -> Result<Settings> {
+        let mut value = self.value.lock().expect("settings mutex poisoned");
+        let mut next = value.clone();
+        next.settings.discovery_language = language;
+        self.persist(&next)?;
+        *value = next;
+        Ok(value.settings.clone())
+    }
     pub fn set_streamlink_path(&self, path: Option<String>) -> Result<()> {
         let mut value = self.value.lock().expect("settings mutex poisoned");
         let mut next = value.clone();

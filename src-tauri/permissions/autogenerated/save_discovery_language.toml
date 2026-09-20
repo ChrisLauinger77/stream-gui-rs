@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-discovery-language"
+description = "Enables the save_discovery_language command without any pre-configured scope."
+commands.allow = ["save_discovery_language"]
+
+[[permission]]
+identifier = "deny-save-discovery-language"
+description = "Denies the save_discovery_language command without any pre-configured scope."
+commands.deny = ["save_discovery_language"]

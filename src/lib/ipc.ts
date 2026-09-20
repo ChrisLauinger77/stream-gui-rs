@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   DesktopStatus, MonitorStatus, AcknowledgeDesktopAction, NotificationTestAction,
   ChatRequest, ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
-  BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
+  StreamLanguage, StreamBrowseRequest, CategoryStreamsRequest, BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
   Account, AppError, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
   ProbeResult, SessionSnapshot, StopRequest,
 } from "./generated";
@@ -18,9 +18,10 @@ type Commands = {
   quit_application: [undefined, null];
   list_followed_streams: [BrowseRequest, PagedResult<StreamSummary>];
   list_followed_channels: [BrowseRequest, PagedResult<ChannelSummary>];
-  list_streams: [BrowseRequest, PagedResult<StreamSummary>];
+  save_discovery_language: [StreamLanguage | null, Settings];
+  list_streams: [StreamBrowseRequest, PagedResult<StreamSummary>];
   list_categories: [BrowseRequest, PagedResult<CategorySummary>];
-  list_category_streams: [EntityRequest, CategoryDetails];
+  list_category_streams: [CategoryStreamsRequest, CategoryDetails];
   search_channels: [SearchRequest, PagedResult<ChannelSummary>];
   search_categories: [SearchRequest, PagedResult<CategorySummary>];
   get_channel: [EntityRequest, ChannelDetails];
@@ -64,9 +65,10 @@ export const api = {
   quit: () => call("quit_application"),
   followedStreams: (request: BrowseRequest) => call("list_followed_streams", request),
   followedChannels: (request: BrowseRequest) => call("list_followed_channels", request),
-  streams: (request: BrowseRequest) => call("list_streams", request),
+  saveDiscoveryLanguage: (language: StreamLanguage | null) => call("save_discovery_language", language),
+  streams: (request: StreamBrowseRequest) => call("list_streams", request),
   categories: (request: BrowseRequest) => call("list_categories", request),
-  category: (request: EntityRequest) => call("list_category_streams", request),
+  category: (request: CategoryStreamsRequest) => call("list_category_streams", request),
   searchChannels: (request: SearchRequest) => call("search_channels", request),
   searchCategories: (request: SearchRequest) => call("search_categories", request),
   channel: (request: EntityRequest) => call("get_channel", request),

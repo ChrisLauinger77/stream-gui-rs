@@ -84,6 +84,7 @@ fn build_app() -> tauri::Result<tauri::App> {
             commands::list_followed_streams,
             commands::list_followed_channels,
             commands::list_streams,
+            commands::save_discovery_language,
             commands::list_categories,
             commands::list_category_streams,
             commands::search_channels,

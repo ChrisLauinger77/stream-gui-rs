@@ -183,11 +183,13 @@ impl Services {
         discover_players(&SearchLocations::system())
     }
 
-    pub async fn save_settings(&self, settings: Settings) -> Result<Settings> {
+    pub async fn save_settings(&self, mut settings: Settings) -> Result<Settings> {
         settings.validate()?;
         self.ensure_open()?;
         let _operation = self.streamlink_operation.lock().await;
         self.ensure_open()?;
+        // Discovery has its own narrow update; a stale playback draft cannot undo it.
+        settings.discovery_language = self.settings.snapshot().discovery_language;
         if let Some(path) = &settings.streamlink_path {
             let probe = streamlink::probe(Some(path), Duration::from_secs(5)).await?;
             check_version(&probe.version)?;
@@ -203,6 +205,19 @@ impl Services {
             self.monitor.reconfigure();
         }
         Ok(result)
+    }
+
+    pub async fn save_discovery_language(
+        &self,
+        language: Option<crate::config::StreamLanguage>,
+    ) -> Result<Settings> {
+        self.ensure_open()?;
+        let _operation = self.streamlink_operation.lock().await;
+        self.ensure_open()?;
+        let store = self.settings.clone();
+        tokio::task::spawn_blocking(move || store.set_discovery_language(language))
+            .await
+            .map_err(|_| AppError::new(ErrorCode::Settings, "Settings operation failed."))?
     }
 
     pub async fn save_channel_settings(

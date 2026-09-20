@@ -166,3 +166,5 @@ kbd { font:12px ui-monospace,monospace; background:var(--raised); border:1px sol
 .channel-preferences fieldset { padding:12px 0 0; margin:0; border:0; display:grid; gap:12px; min-width:0; }
 .channel-preferences select { max-width:380px; }
 @media(max-width:760px) { .settings-content { grid-template-columns:110px minmax(0,1fr); gap:12px; } }
+
+.language-filter { display:flex; align-items:end; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
