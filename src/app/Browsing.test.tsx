@@ -954,14 +954,15 @@ test("accepted launch announces the returned process state rather than claiming 
   await click("Live"); await click("Watch Example Channel");
   expect(status?.textContent).toContain("already stopped"); expect(status?.textContent).not.toContain("process started");
 });
-test("stream and followed-channel actions expose category, title and live state without image duplication", async () => {
+test.each(["offline", "live", "unknown"] as const)("stream and %s channel actions expose category, title and live state without image duplication", async state => {
+  vi.mocked(api.followedChannels).mockResolvedValue(page([{ ...channel, liveState: state }]));
   await render(); await click("Live");
   const action = button("Open channel Example Channel");
   expect(document.getElementById(action.getAttribute("aria-describedby")!)?.textContent).toContain("A live broadcast");
   expect(document.getElementById(action.getAttribute("aria-describedby")!)?.textContent).toContain("Example Game");
   await click("Following"); await click("All channels");
   const followed = button("Open channel Example Channel");
-  expect(document.getElementById(followed.getAttribute("aria-describedby")!)?.textContent).toContain("Offline");
+  expect(document.getElementById(followed.getAttribute("aria-describedby")!)?.textContent).toContain(state === "unknown" ? "Live status unavailable" : state === "live" ? "Live" : "Offline");
 });
 
 test("support report previews only its safe DTO, permits selection and restores focus", async () => {
