@@ -27,7 +27,7 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Opt-in followed-stream monitoring, desktop notifications, and per-channel notification preferences
 - Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
 
-Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. Background features are included in the upcoming 0.2.0 release; published v0.1.0 packages retain their original close-to-exit behavior.
+Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. Background features are available in 0.2.0 and later; v0.1.0 packages retain their original close-to-exit behavior.
 
 ## Downloads and platform support
 
