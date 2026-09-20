@@ -8,7 +8,7 @@ import { LanguageFilter } from "./LanguageFilter";
 import { SearchView, ChannelView } from "./details";
 
 type Section = "following" | "live" | "categories" | "search" | "lookup";
-export type BrowserActions = { channel: (id: string, name: string) => void; navigate: (section: Section) => void; back: () => void; refresh: () => void };
+export type BrowserActions = { channel: (id: string, name: string) => void; navigate: (section: Section) => void; back: () => void; refresh: () => void; focus: () => void };
 type Route = ({ kind: Section } | { kind: "category" | "channel"; id: string; name: string }) & { language?: StreamLanguage | null };
 type Visit = { route: Route; section: Section; scroll: number; focus?: string;
   lookup: string; search: string; searchType: "channels" | "categories"; following: "live" | "channels" };
@@ -53,6 +53,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
     },
     back,
     refresh: () => content.current?.querySelector<HTMLButtonElement>("[data-browse-refresh]")?.click(),
+    focus: () => content.current?.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true }),
   }));
   useLayoutEffect(() => {
     if (filterChange.current) { filterChange.current = false; if (content.current) content.current.scrollTop = 0; return; }

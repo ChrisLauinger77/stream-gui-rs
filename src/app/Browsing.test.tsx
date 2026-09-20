@@ -1226,3 +1226,62 @@ test("repeated language filter remounts retain bounded pending mutations", async
   expect(api.saveDiscoveryLanguage).toHaveBeenCalledTimes(8);
   await click("Live"); expect(api.streams).toHaveBeenLastCalledWith(expect.objectContaining({ language: "en" }));
 });
+
+async function openNavigationModal(modal: "about" | "support") {
+  if (modal === "about") {
+    button("About Stream GUI RS").focus();
+    vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action: { kind: "about", id: "about-open" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  } else { await click("Settings"); button("Prepare support report").focus(); await click("Prepare support report"); }
+  expect(container.querySelector("dialog[open]")).not.toBeNull();
+}
+function mockNavigationModals() {
+  vi.mocked(api.desktopStatus).mockResolvedValue(desktopSnapshot);
+  vi.mocked(api.appInfo).mockResolvedValue({ name: "Stream GUI RS", version: "0.2.0", commit: "abcdef1", repository: "https://github.com/ChrisLauinger77/stream-gui-rs" });
+  vi.mocked(api.supportReport).mockResolvedValue({ text: "Safe report" });
+  // Simulate native dialog close restoring its opener after route layout effects.
+  const openers = new WeakMap<HTMLDialogElement, HTMLElement>();
+  HTMLDialogElement.prototype.showModal = function () { openers.set(this, document.activeElement as HTMLElement); this.open = true; };
+  HTMLDialogElement.prototype.close = function () { this.open = false; openers.get(this)?.focus(); };
+}
+test.each([
+  ["about", "channel"], ["support", "channel"], ["about", "watching"], ["support", "watching"],
+] as const)("native %s dismissal reveals and focuses %s with one acknowledgement", async (modal, destination) => {
+  mockNavigationModals(); await render(); await openNavigationModal(modal);
+  const action = destination === "channel"
+    ? { kind: "channel" as const, id: "navigate", broadcasterId: "channel-one", authSessionId: "1", displayName: "Example Channel" }
+    : { kind: "watching" as const, id: "navigate" };
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action });
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(container.querySelector("dialog")).toBeNull();
+  const heading = container.querySelector(destination === "channel" ? ".browse-content h1" : ".watching-panel h2");
+  expect(heading?.textContent).toBe(destination === "channel" ? "Example Channel" : "Watching");
+  expect(document.activeElement).toBe(heading);
+  if (destination === "channel") expect(api.channel).toHaveBeenCalledOnce();
+  expect(vi.mocked(api.acknowledgeDesktopAction).mock.calls.filter(([id]) => id === "navigate")).toHaveLength(1);
+  button("Settings").focus();
+  await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+  expect(document.activeElement).toBe(button("Settings"));
+  expect(vi.mocked(api.acknowledgeDesktopAction).mock.calls.filter(([id]) => id === "navigate")).toHaveLength(1);
+  expect(api.launch).not.toHaveBeenCalled(); expect(api.quit).not.toHaveBeenCalled(); expect(api.pauseMonitor).not.toHaveBeenCalled();
+});
+test.each(["about", "support"] as const)("stale native channel action leaves %s open and is not acknowledged", async modal => {
+  mockNavigationModals(); await render(); await openNavigationModal(modal);
+  const dialog = container.querySelector("dialog"); const focus = document.activeElement;
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action: { kind: "channel", id: "stale", broadcasterId: "channel-one", authSessionId: "old-session", displayName: "Old channel" } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+  expect(container.querySelector("dialog[open]")).toBe(dialog); expect(document.activeElement).toBe(focus);
+  expect(api.channel).not.toHaveBeenCalled(); expect(api.acknowledgeDesktopAction).not.toHaveBeenCalledWith("stale");
+});
+test.each(["channel", "watching"] as const)("native navigation refocuses an already selected %s after About closes", async destination => {
+  mockNavigationModals(); await render();
+  if (destination === "channel") { await click("Live"); await click("Open channel Example Channel"); }
+  else await click("Watching");
+  await openNavigationModal("about");
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action: destination === "channel"
+    ? { kind: "channel", id: "same-target", broadcasterId: "channel-one", authSessionId: "1", displayName: "Example Channel" }
+    : { kind: "watching", id: "same-target" } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(container.querySelector("dialog")).toBeNull();
+  expect(document.activeElement).toBe(container.querySelector(destination === "channel" ? ".browse-content h1" : ".watching-panel h2"));
+});

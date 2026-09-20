@@ -31,6 +31,30 @@ async fn click(app: &tauri::AppHandle, text: &str) {
     assert_eq!(evaluate(app, &script).await, true);
 }
 
+async fn navigate_to_watching(app: &tauri::AppHandle) {
+    // Same native action slot as the tray; no Twitch identity or production bus.
+    app.state::<Arc<notifications::Notifications>>()
+        .shared
+        .state
+        .lock()
+        .unwrap()
+        .action = Some(crate::domain::background::DesktopAction::Watching {
+        id: uuid::Uuid::new_v4().to_string(),
+    });
+    show_window(app);
+    until(app, "!document.querySelector('dialog') && !!document.querySelector('.watching-panel h2') && document.activeElement === document.querySelector('.watching-panel h2')").await;
+    wait_until(|| {
+        app.state::<Arc<notifications::Notifications>>()
+            .shared
+            .state
+            .lock()
+            .unwrap()
+            .action
+            .is_none()
+    })
+    .await;
+}
+
 pub(super) async fn check(app: &tauri::AppHandle) {
     let window = app.get_webview_window("main").unwrap();
     let services = app.state::<Arc<Services>>();
@@ -79,6 +103,9 @@ pub(super) async fn check(app: &tauri::AppHandle) {
     assert_eq!(app.webview_windows().len(), 1);
     click(app, "Close").await;
     until(app, "!document.querySelector('dialog')").await;
+    show_about(app);
+    until(app, "!!document.querySelector('.about-dialog[open] a')").await;
+    navigate_to_watching(app).await;
     click(app, "Settings").await;
     click(app, "Appearance").await;
     window.set_size(tauri::LogicalSize::new(620, 600)).unwrap();
@@ -139,7 +166,7 @@ pub(super) async fn check(app: &tauri::AppHandle) {
         true
     );
     assert_eq!(evaluate(app, "document.querySelector('.support-report').scrollWidth <= document.querySelector('.support-report').clientWidth + 1").await, true);
-    click(app, "Close").await;
+    navigate_to_watching(app).await;
     // Reopen from the actual frontend/native intent, then Quit with the modal open.
     click(app, "About Stream GUI RS").await;
     until(app, "!!document.querySelector('.about-dialog[open] a')").await;

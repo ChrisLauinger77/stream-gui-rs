@@ -34,6 +34,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const [support, setSupport] = useState(false);
   const [settings, setSettings] = useState(false);
   const [watching, setWatching] = useState(false);
+  const [navigationFocus, setNavigationFocus] = useState<{ id: string; target: "channel" | "watching" | "test" } | null>(null);
   const playback = usePlayback();
   const { run } = playback;
   useAppearance(playback.settings?.theme ?? "system", playback.settings?.textScale ?? "100");
@@ -55,14 +56,20 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       if (action.kind === "channel") {
         if (isNotificationTest(desktop.status)) {
           setNotificationTest(true); setSettings(false); setWatching(false);
+          setNavigationFocus({ id: action.id, target: "test" });
         } else {
           if (action.authSessionId !== auth.sessionId) return;
-          setNotificationTest(false);
           if (!workspace.current) return;
+          setNotificationTest(false);
           setSettings(false); setWatching(false); workspace.current.channel(action.broadcasterId, action.displayName);
+          setNavigationFocus({ id: action.id, target: "channel" });
         }
       } else if (action.kind === "about") { setSupport(false); setAbout(action.id); }
-      else { setNotificationTest(false); setSettings(false); setWatching(true); }
+      else {
+        setNotificationTest(false); setSettings(false); setWatching(true);
+        setNavigationFocus({ id: action.id, target: "watching" });
+      }
+      if (action.kind !== "about") { setAbout(null); setSupport(false); }
       actionState.handled = action.id;
     }
     if (actionState.acknowledged === action.id || actionState.acknowledging) return;
@@ -72,6 +79,13 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       .catch(() => { /* Retry acknowledgement on the next snapshot without navigating again. */ })
       .finally(() => { actionState.acknowledging = false; });
   }, [desktop.status, auth.sessionId, notificationTest, actionState]);
+  useEffect(() => {
+    // Passive unmount cleanup closes the modal (including native opener focus)
+    // before this effect focuses the accepted destination, even on the same route.
+    if (navigationFocus?.target === "channel") workspace.current?.focus();
+    else if (navigationFocus?.target === "watching") watchingPanel.current?.querySelector<HTMLElement>("h2")?.focus();
+    else if (navigationFocus?.target === "test") testHeading.current?.focus();
+  }, [navigationFocus]);
   useEffect(() => { if (notificationTest) testHeading.current?.focus(); }, [notificationTest]);
   useEffect(() => { if (settings) settingsHeading.current?.focus(); }, [settings]);
   useEffect(() => { if (watching) watchingPanel.current?.querySelector<HTMLElement>("h2")?.focus(); }, [watching]);
