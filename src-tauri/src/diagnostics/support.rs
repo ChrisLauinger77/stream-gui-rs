@@ -91,8 +91,10 @@ mod tests {
     };
     const PRIVATE: &str = "oauth:synthetic-token password=synthetic alice ACCOUNT CHANNEL /home/alice /Users/alice C:\\Users\\alice --password=secret\u{1b}[31m arbitrary child output";
     fn hostile() -> SessionSnapshot {
-        let mut settings = Settings::default();
-        settings.streamlink_path = Some(PRIVATE.into());
+        let mut settings = Settings {
+            streamlink_path: Some(PRIVATE.into()),
+            ..Settings::default()
+        };
         settings.player.executable = Some(PRIVATE.into());
         settings.player.arguments = vec![PRIVATE.into()];
         SessionSnapshot {

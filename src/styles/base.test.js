@@ -50,3 +50,12 @@ test("light and dark text and focus tokens remain readable across application su
     }
   }
 });
+
+test("text size percentages preserve the system base and scalable text units", () => {
+  const styles = rules();
+  expect(styles.find(rule => rule.selectorText === ':root[data-text-scale="125"]').style.getPropertyValue("font-size")).toBe("125%");
+  expect(styles.find(rule => rule.selectorText === ':root[data-text-scale="150"]').style.getPropertyValue("font-size")).toBe("150%");
+  for (const rule of styles) {
+    expect(rule.style.getPropertyValue("font-size"), `fixed text size in ${rule.selectorText}`).not.toMatch(/px$/);
+  }
+});

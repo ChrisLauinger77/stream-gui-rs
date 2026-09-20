@@ -99,6 +99,27 @@ pub(super) async fn check(app: &tauri::AppHandle) {
             "horizontal overflow at {scale}%"
         );
     }
+    for theme in ["light", "dark"] {
+        let script = format!(
+            "(() => {{const s=[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Appearance')).querySelector('select'); s.value='{theme}'; s.dispatchEvent(new Event('change',{{bubbles:true}})); return true;}})()"
+        );
+        evaluate(app, &script).await;
+        click(app, "Save settings").await;
+        until(app, &format!("document.documentElement.dataset.theme === '{theme}' && !document.querySelector('.playback-settings fieldset').disabled")).await;
+        window.set_zoom(2.0).unwrap();
+        until(app, "innerWidth < 400").await;
+        assert_eq!(
+            evaluate(
+                app,
+                "document.documentElement.scrollWidth <= innerWidth + 1"
+            )
+            .await,
+            true,
+            "horizontal overflow at 200% zoom, 150% text, {theme}"
+        );
+        window.set_zoom(1.0).unwrap();
+        until(app, "innerWidth >= 600").await;
+    }
     click(app, "Prepare support report").await;
     until(app, "!!document.querySelector('.support-report textarea')").await;
     assert_eq!(
