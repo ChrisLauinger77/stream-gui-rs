@@ -1006,13 +1006,14 @@ async fn settings_changes_preserve_runs_and_restart_resolves_channel_then_reques
     let original = first.effective_settings.clone().unwrap();
     let mut global = services.settings.snapshot();
     global.default_quality = QualityPolicy::High;
+    global.low_latency = true;
     global.player.arguments = vec!["--volume=20".into()];
     services.save_settings(global).await.unwrap();
     services
         .save_channel_settings(SaveChannelSettingsRequest {
             broadcaster_id: "123".into(),
             overrides: ChannelOverrides {
-                low_latency: None,
+                low_latency: Some(false),
                 notifications: None,
                 quality: Some(QualityPolicy::Low),
                 automatic_chat: None,
@@ -1034,6 +1035,8 @@ async fn settings_changes_preserve_runs_and_restart_resolves_channel_then_reques
         .unwrap();
     assert_process_exited(first.pid);
     assert_eq!(restarted.id, first.id);
+    assert!(!restarted.effective_settings.as_ref().unwrap().low_latency);
+    assert!(!original.low_latency);
     assert_eq!(restarted.quality_policy, Some(QualityPolicy::Low));
     assert_eq!(
         restarted
@@ -1061,6 +1064,7 @@ async fn settings_changes_preserve_runs_and_restart_resolves_channel_then_reques
         .await
         .unwrap();
     assert_eq!(inherited.quality_policy, Some(QualityPolicy::High));
+    assert!(inherited.effective_settings.as_ref().unwrap().low_latency);
     let explicit = services
         .restart_playback(RestartRequest {
             session_id: first.id.clone(),
@@ -1070,6 +1074,14 @@ async fn settings_changes_preserve_runs_and_restart_resolves_channel_then_reques
         .await
         .unwrap();
     assert_eq!(explicit.quality_policy, Some(QualityPolicy::Audio));
+    assert!(explicit.effective_settings.as_ref().unwrap().low_latency);
+    assert!(
+        !services.sessions.sessions().await[1]
+            .effective_settings
+            .as_ref()
+            .unwrap()
+            .low_latency
+    );
     assert_eq!(
         services.settings.channel("123").unwrap().overrides,
         ChannelOverrides::default()

@@ -171,6 +171,9 @@ pub fn build_command(spec: LaunchSpec) -> Result<CommandSpec> {
         "info".into(),
         "--player-verbose".into(),
     ];
+    if spec.settings.low_latency {
+        arguments.push("--twitch-low-latency".into());
+    }
     if let Some(player) = spec.player {
         let path = player.to_str().ok_or_else(|| {
             AppError::new(
@@ -452,6 +455,52 @@ mod tests {
         }
         for version in ["8.0.0", "8.6.1", "9.0.0"] {
             assert!(check_version(version).is_ok());
+        }
+    }
+    #[test]
+    fn low_latency_adds_only_one_owned_flag_for_every_quality_and_player() {
+        for quality in [
+            QualityPolicy::Source,
+            QualityPolicy::High,
+            QualityPolicy::Medium,
+            QualityPolicy::Low,
+            QualityPolicy::Audio,
+        ] {
+            for mode in [
+                PlayerMode::Default,
+                PlayerMode::Mpv,
+                PlayerMode::Vlc,
+                PlayerMode::Custom,
+            ] {
+                let normal = build_command(spec(quality, mode)).unwrap();
+                let mut low = spec(quality, mode);
+                low.settings.low_latency = true;
+                let low = build_command(low).unwrap();
+                assert!(low.effective_settings.as_ref().unwrap().low_latency);
+                assert!(!normal.effective_settings.as_ref().unwrap().low_latency);
+                assert_eq!(
+                    low.arguments
+                        .iter()
+                        .filter(|arg| *arg == "--twitch-low-latency")
+                        .count(),
+                    1
+                );
+                assert_eq!(
+                    low.arguments
+                        .iter()
+                        .filter(|arg| *arg != "--twitch-low-latency")
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                    normal.arguments
+                );
+                assert!(
+                    low.arguments
+                        .iter()
+                        .position(|arg| arg == "--twitch-low-latency")
+                        .unwrap()
+                        < low.arguments.iter().position(|arg| arg == "--").unwrap()
+                );
+            }
         }
     }
 }

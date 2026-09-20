@@ -45,8 +45,10 @@ function SettingsForm({ initial, saved, onSaved, desktop }: { desktop: ReturnTyp
         <div hidden={section !== "Playback"} className="setting-group">
           <QualitySelect label="Default quality" value={draft.defaultQuality} change={defaultQuality => setDraft({ ...draft, defaultQuality })} />
           <p className="muted">High, Medium and Low prefer their indicated resolution and fall back to Source when needed.</p>
+          <label className="checkbox-label"><input type="checkbox" checked={draft.lowLatency} onChange={event => setDraft({ ...draft, lowLatency: event.target.checked })} />Prefer low latency</label>
+          <p className="muted">Can reduce stream delay with less buffering resilience. Actual delay depends on the stream, network and player; no specific latency is guaranteed.</p>
           <label className="checkbox-label"><input type="checkbox" checked={draft.automaticChat} onChange={event => setDraft({ ...draft, automaticChat: event.target.checked })} />Open browser chat when playback starts</label>
-          <p className="muted">Opens Twitch chat in your default browser for each launch or explicit restart. Channel details can override quality and chat independently.</p>
+          <p className="muted">Opens Twitch chat in your default browser for each launch or explicit restart. Channel details can override quality, low latency and chat independently.</p>
           <p className="muted">Changing preferences leaves running streams unchanged. Explicit Quit stops playback.</p>
         </div>
         <div hidden={section !== "Streamlink"} className="setting-group">

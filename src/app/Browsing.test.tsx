@@ -897,3 +897,25 @@ test("late lookup results offer navigation without stealing focus from Settings"
   expect(document.activeElement).toBe(focus); expect(api.channel).not.toHaveBeenCalled();
   await click("Open resolved channel"); expect(api.channel).toHaveBeenCalledOnce();
 });
+
+test("global low latency is opt-in and saving never restarts a stream", async () => {
+  vi.mocked(api.savePlaybackSettings).mockImplementation(async value => value);
+  await render(); await click("Settings");
+  const checkbox = [...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(input => input.closest("label")?.textContent?.includes("Prefer low latency"))!;
+  expect(checkbox.checked).toBe(false);
+  await act(async () => checkbox.click()); await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenCalledWith(expect.objectContaining({ lowLatency: true }));
+  expect(api.restart).not.toHaveBeenCalled(); expect(api.launch).not.toHaveBeenCalled();
+});
+test("channel low latency keeps inherit, on and off distinct and displays Rust effective state", async () => {
+  vi.mocked(api.saveChannelSettings).mockImplementation(async request => ({ ...channelPreferences(), defaultLowLatency: true, overrides: request.overrides,
+    effective: { ...channelPreferences().effective, lowLatency: request.overrides.lowLatency ?? true } }));
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  const select = [...container.querySelectorAll<HTMLSelectElement>("select")].find(input => input.closest("label")?.textContent?.startsWith("Channel low latency"))!;
+  for (const [value, expected] of [["on", true], ["off", false], ["inherit", null]] as const) {
+    await act(async () => { select.value = value; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    await click("Save channel settings");
+    expect(api.saveChannelSettings).toHaveBeenLastCalledWith(expect.objectContaining({ overrides: expect.objectContaining({ lowLatency: expected }) }));
+    expect(text()).toContain(`Low latency: ${expected === false ? "Off" : "On"}`);
+  }
+});

@@ -52,6 +52,9 @@ export function ChannelPreferences({ broadcasterId, sessionId, settingsRevision 
             <option value="inherit">Use global default ({qualityLabels[saved.defaultQuality]})</option>
             {Object.entries(qualityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select></label>
+          <label>Channel low latency<select value={draft.lowLatency === null ? "inherit" : draft.lowLatency ? "on" : "off"} onChange={event => setDraft({ ...draft, lowLatency: event.target.value === "inherit" ? null : event.target.value === "on" })}>
+            <option value="inherit">Use default ({saved.defaultLowLatency ? "On" : "Off"})</option><option value="on">On</option><option value="off">Off</option>
+          </select></label>
           <label>Channel browser chat<select value={draft.automaticChat === null ? "inherit" : draft.automaticChat ? "on" : "off"} onChange={event => setDraft({ ...draft, automaticChat: event.target.value === "inherit" ? null : event.target.value === "on" })}>
             <option value="inherit">Use global default ({saved.defaultAutomaticChat ? "Open chat" : "Keep chat closed"})</option><option value="on">Open chat with playback</option><option value="off">Keep chat closed</option>
           </select></label>
@@ -59,7 +62,7 @@ export function ChannelPreferences({ broadcasterId, sessionId, settingsRevision 
             <option value="inherit">Use global default ({saved.defaultNotifications ? "On" : "Off"})</option><option value="on">Notify when live</option><option value="off">Do not notify</option>
           </select></label>
           <p className="muted">Saved notifications: {saved.effectiveNotifications ? "On" : "Off"}. Requires monitoring and system permission.</p>
-          <p className="muted">Saved effective quality: {qualityLabels[saved.effective.quality]} · Browser chat: {saved.effective.automaticChat ? "On" : "Off"}</p>
+          <p className="muted">Saved effective quality: {qualityLabels[saved.effective.quality]} · Low latency: {saved.effective.lowLatency ? "On" : "Off"} · Browser chat: {saved.effective.automaticChat ? "On" : "Off"}</p>
           <div className="settings-save"><button type="submit">Save channel settings</button><button type="button" onClick={() => setDraft(saved.overrides)}>Cancel changes</button></div>
           <p className="muted">These preferences follow this broadcaster across name changes and apply to this app on this device. Choose the global default to remove an override.</p>
         </fieldset>
