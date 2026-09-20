@@ -98,3 +98,79 @@ No accessibility certification or measured latency guarantee is claimed. These g
 | `63f4875` | Live/offline/unknown accessible-description matrix. |
 
 The final documentation commit records this evidence. README, architecture and the durable AGENTS schema/privacy map were updated. See Git history for their final hashes; no unrelated working-tree changes were discarded.
+
+
+## Adversarial-review cleanup — 2026-09-20
+
+Cleanup starts at `e63289f` and adds focused commits without rewriting the original twelve-commit Phase 6 series:
+
+| Commit | Fix |
+| --- | --- |
+| `9ab8c11` | Reconcile reopened Settings with accepted saves. |
+| `e60483a` | Coordinate global/path/language settings mutations and accept successful snapshots in order. |
+| `6641773` | Dismiss transient modals for accepted native navigation and focus the destination. |
+
+The three approved MEDIUM/classification A findings are fixed:
+
+1. **Reopened global draft:** forms now retain explicit field edits over the latest Rust snapshot, rather than copying one initial snapshot into a whole draft. Untouched fields update when an earlier save completes. Explicit nested player/background edits, including a deliberate change back to an original value, remain deliberate edits. A reopened form permits editing while the old save is pending, while Save/probe dispatch remains guarded. Failed saves preserve accepted settings and leave the active draft available for retry.
+2. **Failed language attempts:** the existing application hook serializes global, path and language mutations, bounded to eight pending intents. Only a successful response advances the accepted settings revision and replaces the displayed snapshot. Failed attempts leave initialization and previous accepted values valid. A late initial read/error cannot supersede a newer successful mutation. Filter/panel remounts do not create another queue or settings authority; queued operations not yet dispatched are cancelled if their owning application component unmounts.
+3. **Modal/native navigation:** session/workspace checks precede channel acceptance. Accepted channel/Watching actions dismiss About/support overlays, then focus the destination in an effect after modal unmount cleanup and native opener restoration. Repeated polls do not navigate, acknowledge or refocus again. Explicit navigation to the same destination still focuses it. Back/ordinary browsing shortcuts remain suppressed in modals; delayed exact lookup already defers navigation when modal focus represents newer user intent.
+
+Production Rust, schema v5, IPC, generated DTOs, migration semantics, credentials, monitor and process ownership are unchanged. The only Rust edit extends the existing test-support graphical fixture. No dependency, version, release, push or Phase 7 changes were made.
+
+### Deterministic regressions
+
+The frontend baseline was 126 tests. Cleanup adds **23 cases**, for **149 passing tests**, and strengthens the existing close/reopen guard test by removing its masking Cancel click. The new cases use deferred IPC promises and existing fake timers, not arbitrary sleeps:
+
+- Reopen during a pending save of low latency, then change only text scale and save; the accepted low-latency value survives.
+- The same sequence for the Phase 5 monitoring preference.
+- Reopen and edit background interval plus text scale before the old monitoring save completes; both deliberate edits and the accepted monitoring value survive.
+- Explicitly toggle a reopened value back to its original value before reconciliation; that deliberate choice survives.
+- Failed global save preserves accepted appearance and the editable draft/error, followed by successful retry.
+- Failure after reopening preserves accepted values and new edits.
+- Failed early language save followed by successful initial settings read applies saved appearance and finishes loading.
+- German mutation succeeds after filter remount; the queued English mutation fails; later visits use German.
+- Successful language mutation wins over a late initial read.
+- Failed language mutation retains a previously accepted language.
+- Language/global mutations in both orders preserve accepted appearance and background preferences.
+- Queued language successes converge on the newer successful preference across navigation.
+- A failed mutation releases the queue; subsequent success survives a late initialization error.
+- Repeated filter remounts cannot retain more than eight mutation intents.
+- About/support × channel/Watching matrix: modal dismissed, destination focused after simulated native opener restoration, one acknowledgement, no playback/monitor/Quit side effects, and no repeated focus stealing.
+- Rejected stale-session channel action leaves either modal open without acknowledgement/navigation.
+- About dismissal refocuses an already-selected channel or Watching destination.
+
+The original review's failing sequences were reproduced before their corresponding fixes. Existing tests continue to pass.
+
+### Cleanup validation results
+
+All commands ran on Linux with Node 24.20.0 and Rust 1.95.0, using synthetic credentials, local fixtures and temporary settings:
+
+| Check | Cleanup result |
+| --- | --- |
+| `npm run bindings` plus generated-file diff | Passed; generated file unchanged. |
+| `npm run typecheck`, `npm run build` | Passed. |
+| `npm test` | **149 passed** across three suites. |
+| Candidate promotion guard tests | Passed; one Node test-file result. |
+| Rust formatting | Passed. |
+| Backend tests with `--no-default-features --features test-support` | **155 unit**, **30 process**, **2 build-info**, **1 client-ID build-script** tests passed. |
+| Desktop all-target check | Passed. |
+| Strict Clippy with `-D warnings` | Passed. |
+| Desktop unit subset | **10 passed**; **14 passed** with `notification-acceptance`. |
+| Isolated Linux browser regression | **2 passed**; no real browser opened. |
+| Graphical `linux_background --ignored --test-threads=1` | **3 passed**. |
+| Graphical `linux_startup --ignored` | **1 passed**. |
+| Synthetic-ID Tauri custom-protocol debug/no-bundle build | Passed; synthetic compilation-only public ID, no bundle or publishing. |
+| `git diff --check` | Passed. |
+
+The graphical Phase 6 fixture again exercised hidden/repeated About, compiled metadata/icon, all text sizes at minimum window size, 200% WebKitGTK zoom with 150% text in Light/Dark, support preview, unchanged fake playback/monitor state, and Quit cleanup. It now also delivers native Watching actions while About and support-report dialogs are open, verifies each modal disappears, destination focus wins, and the action is acknowledged. Channel/session rejection and the full channel/Watching matrix are covered deterministically in frontend tests; no real Twitch identity was introduced into the graphical fixture. Synthetic notifications stayed on private D-Bus sessions. The local Vite server was stopped after validation; no repository application, test fixture or server process remained, and the native tests verified owned fake playback was reaped.
+
+Manual/platform gaps remain unchanged: Linux real playback/low latency, physical tray/keyboard acceptance, Orca and actual desktop DPI; macOS native Phase 6/About/tray/link, playback, VoiceOver/scaling/focus and notification/background acceptance; Windows native Phase 6/About/tray/link, playback, Narrator/high DPI, console and Notification Center/background acceptance. Compilation and automated WebKit checks do not complete those gates.
+
+### Additional finding from the required final race review
+
+**MEDIUM — A, confirmed implementation defect; reported without expanding cleanup scope.** In `src/features/ChannelPreferences.tsx`, a global-save `settingsRevision` change invalidates the pending channel mutation's generation, clears its guard and reloads its draft. If that reload returns the old overrides before the channel save succeeds, the successful channel result is subsequently ignored. Saving another channel field then sends the stale overrides and can undo the accepted channel preference.
+
+An isolated deterministic regression demonstrated: start channel low-latency On save → complete a global text-scale save and reload old channel preferences → complete the channel save successfully → change only channel notifications → the second channel request incorrectly submits low latency as inherit. The regression fails on both the original `e63289f` implementation and cleanup code; this is not introduced by the three fixes. The probe and its output were kept outside the repository, so the committed passing test count excludes it.
+
+A focused follow-up should preserve the pending channel mutation/result across a global-default refresh and reconcile the effective preview without weakening account/broadcaster generation checks. Retain this sequence as its regression. This additional finding remains unresolved because the cleanup request explicitly requires reporting newly discovered defects rather than silently expanding the three-fix scope.
