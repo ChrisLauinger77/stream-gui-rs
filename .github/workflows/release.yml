@@ -362,6 +362,8 @@ jobs:
 
   update-package-repositories:
     name: Request package repository updates
+    # Promotion intentionally skips builds; do not inherit their skipped status.
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     needs: publish
     runs-on: ubuntu-26.04
     env:
