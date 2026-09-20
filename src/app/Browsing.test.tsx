@@ -851,3 +851,49 @@ test("language save errors preserve accepted preference and filtered network err
   expect(text()).not.toContain("No streams in this language");
   expect(text()).toContain("Check your connection");
 });
+
+async function lookupLogin(login: string) {
+  const input = container.querySelector<HTMLInputElement>(".exact-lookup input")!;
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, login); input.dispatchEvent(new Event("input", { bubbles: true })); input.focus(); });
+}
+async function submitLookup() {
+  await act(async () => { container.querySelector<HTMLFormElement>(".exact-lookup")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+}
+test("exact lookup uses its own command, opens offline details without autoplay and restores input focus", async () => {
+  vi.mocked(api.lookupChannel).mockResolvedValue({ broadcasterId: "channel-one", displayName: "Example Channel" });
+  await render(); await click("Open channel", ".side-nav"); await lookupLogin("ExAmPlE"); await submitLookup();
+  expect(api.lookupChannel).toHaveBeenCalledWith({ sessionId: "1", login: "ExAmPlE" });
+  expect(api.searchChannels).not.toHaveBeenCalled(); expect(api.launch).not.toHaveBeenCalled();
+  expect(text()).toContain("Offline — no current live stream");
+  await click("Go back"); expect(document.activeElement).toBe(container.querySelector(".exact-lookup input"));
+  expect(container.querySelector<HTMLInputElement>(".exact-lookup input")!.value).toBe("ExAmPlE");
+});
+test("exact lookup distinguishes invalid, missing and network failures", async () => {
+  await render(); await click("Open channel", ".side-nav"); await lookupLogin("example");
+  for (const [code, message] of [["invalid_input", "Do not enter a URL"], ["not_found", "No channel has that Twitch login"], ["network", "Check your connection"]]) {
+    vi.mocked(api.lookupChannel).mockRejectedValueOnce({ code, message: "untrusted" }); await submitLookup();
+    expect(text()).toContain(message); expect(text()).not.toContain("untrusted");
+  }
+  expect(api.channel).not.toHaveBeenCalled(); expect(api.launch).not.toHaveBeenCalled();
+});
+test("lookup blocks duplicate submission and ignores changed login or account responses", async () => {
+  const old = deferred<Awaited<ReturnType<typeof api.lookupChannel>>>();
+  vi.mocked(api.lookupChannel).mockReturnValue(old.promise);
+  await render(); await click("Open channel", ".side-nav"); await lookupLogin("first"); await submitLookup(); await submitLookup();
+  expect(api.lookupChannel).toHaveBeenCalledOnce(); await lookupLogin("second");
+  await act(async () => old.resolve({ broadcasterId: "old", displayName: "Old result" }));
+  expect(api.channel).not.toHaveBeenCalled();
+  const later = deferred<Awaited<ReturnType<typeof api.lookupChannel>>>(); vi.mocked(api.lookupChannel).mockReturnValue(later.promise);
+  await submitLookup(); vi.mocked(api.authStatus).mockResolvedValue({ ...signedIn, sessionId: "2" });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  await act(async () => later.resolve({ broadcasterId: "old", displayName: "Old session" }));
+  expect(api.channel).not.toHaveBeenCalled(); expect(text()).not.toContain("Old session");
+});
+test("late lookup results offer navigation without stealing focus from Settings", async () => {
+  const pending = deferred<Awaited<ReturnType<typeof api.lookupChannel>>>(); vi.mocked(api.lookupChannel).mockReturnValue(pending.promise);
+  await render(); await click("Open channel", ".side-nav"); await lookupLogin("example"); await submitLookup(); await click("Settings");
+  const focus = document.activeElement;
+  await act(async () => pending.resolve({ broadcasterId: "channel-one", displayName: "Example Channel" }));
+  expect(document.activeElement).toBe(focus); expect(api.channel).not.toHaveBeenCalled();
+  await click("Open resolved channel"); expect(api.channel).toHaveBeenCalledOnce();
+});

@@ -117,6 +117,8 @@ pub fn typescript_bindings() -> String {
         StreamBrowseRequest::decl(&config),
         CategoryStreamsRequest::decl(&config),
         EntityRequest::decl(&config),
+        LookupChannelRequest::decl(&config),
+        ChannelIdentity::decl(&config),
         SearchRequest::decl(&config),
         DataFreshness::decl(&config),
         LiveState::decl(&config),

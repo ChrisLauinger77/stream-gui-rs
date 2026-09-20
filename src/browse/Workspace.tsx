@@ -3,14 +3,15 @@ import { api } from "../lib/ipc";
 import type { Settings, StreamLanguage, BrowseRequest, CategorySummary, ChannelSummary, StreamSummary } from "../lib/generated";
 import { ViewMemory, usePage } from "./usePage";
 import { CategoryList, ChannelList, Media, PageFrame, StreamList } from "./components";
+import { ExactChannelLookup } from "./ExactChannelLookup";
 import { LanguageFilter } from "./LanguageFilter";
 import { SearchView, ChannelView } from "./details";
 
-type Section = "following" | "live" | "categories" | "search";
+type Section = "following" | "live" | "categories" | "search" | "lookup";
 export type BrowserActions = { channel: (id: string, name: string) => void; navigate: (section: Section) => void; back: () => void; refresh: () => void };
 type Route = ({ kind: Section } | { kind: "category" | "channel"; id: string; name: string }) & { language?: StreamLanguage | null };
 type Visit = { route: Route; section: Section; scroll: number; focus?: string;
-  search: string; searchType: "channels" | "categories"; following: "live" | "channels" };
+  lookup: string; search: string; searchType: "channels" | "categories"; following: "live" | "channels" };
 const routeKey = (route: Route) => route.kind + ("id" in route ? `:${route.id}` : "") + (route.kind === "live" || route.kind === "category" ? `:${route.language ?? "any"}` : "");
 export type QueryContext = { sessionId: string; memory: ViewMemory; onAuthLost: () => void; settingsRevision: number };
 export type Watch = { watch: (id: string) => void; pending: ReadonlySet<string> };
@@ -22,6 +23,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
   const [section, setSection] = useState<Section>("following");
   const [history, setHistory] = useState<Visit[]>([]);
   const [following, setFollowing] = useState<"live" | "channels">("live");
+  const [lookup, setLookup] = useState("");
   const [search, setSearch] = useState("");
   const [searchType, setSearchType] = useState<"channels" | "categories">("channels");
   const content = useRef<HTMLElement>(null);
@@ -32,7 +34,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
     if (next.kind === "live" || next.kind === "category") next = { ...next, language: preferences?.discoveryLanguage ?? null };
     if (routeKey(next) === routeKey(route)) return;
     const active = document.activeElement as HTMLElement | null;
-    setHistory(items => [...items, { route, section, search, searchType, following, scroll: content.current?.scrollTop ?? 0, focus: active?.dataset.focus }].slice(-12));
+    setHistory(items => [...items, { route, section, lookup, search, searchType, following, scroll: content.current?.scrollTop ?? 0, focus: active?.dataset.focus }].slice(-12));
     if (next.kind !== "category" && next.kind !== "channel") setSection(next.kind);
     restore.current = null; setRoute(next);
   };
@@ -40,7 +42,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
     const previous = history.at(-1);
     if (!previous) return;
     restore.current = previous; setHistory(history.slice(0, -1)); setSection(previous.section); setRoute(previous.route);
-    setSearch(previous.search); setSearchType(previous.searchType); setFollowing(previous.following);
+    setLookup(previous.lookup); setSearch(previous.search); setSearchType(previous.searchType); setFollowing(previous.following);
   };
   useImperativeHandle(actionsRef, () => ({
     channel: (id, name) => navigate({ kind: "channel", id, name }),
@@ -63,10 +65,10 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
   const context = { sessionId, memory, onAuthLost, settingsRevision };
   const language = route.language ?? null;
   const links: Links = { watch, pending, channel: (id, name) => navigate({ kind: "channel", id, name }), category: (id, name) => navigate({ kind: "category", id, name }) };
-  const title = "name" in route ? route.name : ({ following: "Following", live: "Live now", categories: "Categories", search: "Search" }[route.kind]);
-  const subtitle = { following: "The channels you choose to keep up with.", live: "Popular streams, happening right now.", categories: "Find a game. Find your community.", search: "Discover channels and categories on Twitch.", category: "Live streams in this category.", channel: "Channel details" }[route.kind];
+  const title = "name" in route ? route.name : ({ following: "Following", live: "Live now", categories: "Categories", search: "Search", lookup: "Open channel" }[route.kind]);
+  const subtitle = { following: "The channels you choose to keep up with.", live: "Popular streams, happening right now.", categories: "Find a game. Find your community.", search: "Discover channels and categories on Twitch.", category: "Live streams in this category.", lookup: "Go directly to a known Twitch login.", channel: "Channel details" }[route.kind];
   return <div className="workspace">
-    <nav className="side-nav" aria-label="Main navigation"><p className="nav-label">BROWSE</p>{([['following','Following','♡'],['live','Live','◉'],['categories','Categories','▦'],['search','Search','⌕']] as const).map(([kind, label, symbol]) => <button key={kind} aria-label={label} aria-current={section === kind ? "page" : undefined} onClick={() => navigate({ kind })}><span className="nav-symbol" aria-hidden="true">{symbol}</span>{label}</button>)}</nav>
+    <nav className="side-nav" aria-label="Main navigation"><p className="nav-label">BROWSE</p>{([['following','Following','♡'],['live','Live','◉'],['categories','Categories','▦'],['search','Search','⌕'],['lookup','Open channel','→']] as const).map(([kind, label, symbol]) => <button key={kind} aria-label={label} aria-current={section === kind ? "page" : undefined} onClick={() => navigate({ kind })}><span className="nav-symbol" aria-hidden="true">{symbol}</span>{label}</button>)}</nav>
     <main className="browse-content" ref={content}>
       <div className="view-top"><button className="quiet" disabled={!history.length} onClick={back} aria-label="Go back">← Back</button><span className="muted">{section === "following" ? "Your Twitch" : "Explore Twitch"}</span></div>
       <div className="view-heading"><div><h1 tabIndex={-1}>{title}</h1><p>{subtitle}</p></div></div>
@@ -82,6 +84,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
       {route.kind === "live" && <Streams key={`live:${language}`} mode="live" language={language} context={context} links={links} />}
       {route.kind === "categories" && <Categories context={context} links={links} />}
       {route.kind === "category" && <Category key={`${route.id}:${language}`} id={route.id} language={language} context={context} links={links} />}
+      {route.kind === "lookup" && <ExactChannelLookup sessionId={sessionId} login={lookup} change={setLookup} open={links.channel} onAuthLost={onAuthLost} />}
       {route.kind === "search" && <SearchView context={context} links={links} draft={search} setDraft={setSearch} type={searchType} setType={setSearchType} />}
       {route.kind === "channel" && <ChannelView key={route.id} id={route.id} context={context} links={links} />}
     </main>

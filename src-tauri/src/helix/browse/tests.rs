@@ -13,10 +13,19 @@ const GAME: &str = include_str!("../../../tests/fixtures/helix/game.json");
 struct Api;
 impl TwitchApi for Api {
     async fn begin(&self, _: &str) -> Result<DeviceGrant> {
-        Err(error(ErrorCode::Internal))
+        Ok(DeviceGrant {
+            device_code: "synthetic-device".into(),
+            user_code: "SYNTHETIC".into(),
+            verification_uri: "https://www.twitch.tv/activate".into(),
+            expires_in: 1800,
+            interval: 5,
+        })
     }
     async fn poll(&self, _: &str, _: &str) -> Result<PollResult> {
-        Ok(PollResult::Pending)
+        Ok(PollResult::Authorized(Credentials {
+            access_token: Zeroizing::new("synthetic-relogin".into()),
+            refresh_token: Zeroizing::new("synthetic-refresh".into()),
+        }))
     }
     async fn validate(&self, _: &str) -> Result<Validation> {
         Ok(Validation {
@@ -657,4 +666,159 @@ async fn filtered_lookup_is_cancelled_when_its_original_session_ends() {
         ErrorCode::Unauthenticated
     );
     assert_eq!(server.requests().len(), 1);
+}
+
+#[tokio::test]
+async fn exact_lookup_normalizes_login_and_returns_only_exact_identity() {
+    let mut body: serde_json::Value = serde_json::from_str(USER).unwrap();
+    let mut unrelated = body["data"][0].clone();
+    unrelated["login"] = "example_similar".into();
+    unrelated["id"] = "456".into();
+    body["data"].as_array_mut().unwrap().insert(0, unrelated);
+    let (server, client, page) = client(vec![
+        Reply::json(200, body.to_string()),
+        Reply::json(200, "{\"data\":[]}"),
+    ])
+    .await;
+    let cancel = CancellationToken::new();
+    let result = client
+        .lookup_channel(
+            LookupChannelRequest {
+                session_id: page.session_id.clone(),
+                login: "ExAmPlE".into(),
+            },
+            &cancel,
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.broadcaster_id, "123");
+    assert_eq!(result.display_name, "Example");
+    assert!(server.requests()[0].starts_with("GET /helix/users?login=example"));
+    assert_eq!(
+        client
+            .lookup_channel(
+                LookupChannelRequest {
+                    session_id: page.session_id,
+                    login: "nonexistent".into()
+                },
+                &cancel
+            )
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::NotFound
+    );
+    assert!(
+        server
+            .requests()
+            .iter()
+            .all(|request| request.contains("/helix/users?"))
+    );
+}
+
+#[tokio::test]
+async fn exact_lookup_rejects_invalid_login_before_any_dispatch() {
+    let (server, client, page) = client(vec![]).await;
+    for login in [
+        "",
+        "https://twitch.tv/example",
+        "@example",
+        "with space",
+        "name\n",
+        "éxample",
+        "../example",
+        "x?login=other",
+        "abcdefghijklmnopqrstuvwxyz",
+    ] {
+        assert_eq!(
+            client
+                .lookup_channel(
+                    LookupChannelRequest {
+                        session_id: page.session_id.clone(),
+                        login: login.into()
+                    },
+                    &CancellationToken::new()
+                )
+                .await
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidInput
+        );
+    }
+    assert!(server.requests().is_empty());
+}
+
+#[tokio::test]
+async fn exact_and_filtered_requests_cannot_resume_as_same_account_new_session() {
+    for exact in [true, false] {
+        let gate = Arc::new(tokio::sync::Notify::new());
+        let (server, client, page) = client(vec![
+            Reply::json(200, if exact { USER } else { STREAM }).gated(gate.clone()),
+            Reply::json(200, USER),
+        ])
+        .await;
+        let cancel = CancellationToken::new();
+        let request = LookupChannelRequest {
+            session_id: page.session_id.clone(),
+            login: "example".into(),
+        };
+        let pending = async {
+            if exact {
+                client
+                    .lookup_channel(request.clone(), &cancel)
+                    .await
+                    .map(|_| ())
+            } else {
+                client
+                    .browse_streams(
+                        StreamBrowseRequest {
+                            page: page.clone(),
+                            language: Some(crate::config::StreamLanguage::En),
+                        },
+                        &cancel,
+                    )
+                    .await
+                    .map(|_| ())
+            }
+        };
+        tokio::pin!(pending);
+        tokio::select! { _ = &mut pending => panic!("response must wait"), _ = server.wait_for_requests(1) => {} }
+        client.auth.logout().await.unwrap();
+        client.auth.login().await.unwrap();
+        // Observe the real Device Flow polling deadline; the HTTP race itself is gated.
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        client.auth.tick().await.unwrap();
+        let replacement = client.auth.status().await;
+        assert_eq!(replacement.user.unwrap().id, "viewer");
+        let replacement_id = replacement.session_id.unwrap();
+        assert_ne!(replacement_id, page.session_id);
+        gate.notify_one();
+        assert!(matches!(
+            pending.await.unwrap_err().code,
+            ErrorCode::Unauthenticated | ErrorCode::Cancelled
+        ));
+        assert_eq!(
+            client
+                .lookup_channel(request.clone(), &cancel)
+                .await
+                .unwrap_err()
+                .code,
+            ErrorCode::Unauthenticated
+        );
+        assert_eq!(server.requests().len(), 1);
+        assert_eq!(
+            client
+                .lookup_channel(
+                    LookupChannelRequest {
+                        session_id: replacement_id,
+                        login: "example".into()
+                    },
+                    &cancel
+                )
+                .await
+                .unwrap()
+                .broadcaster_id,
+            "123"
+        );
+    }
 }

@@ -107,3 +107,16 @@ pub struct CategoryStreamsRequest {
     pub page: StreamBrowseRequest,
     pub id: String,
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LookupChannelRequest {
+    pub session_id: String,
+    pub login: String,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelIdentity {
+    pub broadcaster_id: String,
+    pub display_name: String,
+}

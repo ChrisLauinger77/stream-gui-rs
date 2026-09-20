@@ -124,7 +124,7 @@ pub struct CommandSpec {
     pub effective_settings: Option<crate::config::EffectivePlaybackSettings>,
 }
 
-pub fn channel_url(login: &str) -> Result<String> {
+pub fn normalize_login(login: &str) -> Result<String> {
     if login.is_empty()
         || login.len() > 25
         || !login
@@ -136,10 +136,11 @@ pub fn channel_url(login: &str) -> Result<String> {
             "Invalid Twitch channel identity.",
         ));
     }
-    Ok(format!(
-        "https://www.twitch.tv/{}",
-        login.to_ascii_lowercase()
-    ))
+    Ok(login.to_ascii_lowercase())
+}
+
+pub fn channel_url(login: &str) -> Result<String> {
+    Ok(format!("https://www.twitch.tv/{}", normalize_login(login)?))
 }
 
 /// Streamlink 8 uses Formatter followed by POSIX shlex.split on every platform.

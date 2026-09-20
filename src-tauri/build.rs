@@ -137,6 +137,7 @@ fn main() {
             "search_channels",
             "search_categories",
             "get_channel",
+            "lookup_channel",
         ]),
     ))
     .expect("Tauri build configuration is invalid");

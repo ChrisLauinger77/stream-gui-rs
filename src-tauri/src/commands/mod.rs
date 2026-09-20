@@ -297,3 +297,15 @@ pub async fn save_discovery_language(
 ) -> Result<Settings> {
     services.save_discovery_language(request).await
 }
+
+#[tauri::command]
+pub async fn lookup_channel(
+    services: State<'_, Arc<Services>>,
+    request: LookupChannelRequest,
+) -> Result<ChannelIdentity> {
+    let _permit = services.browse_permit()?;
+    services
+        .helix
+        .lookup_channel(request, &tokio_util::sync::CancellationToken::new())
+        .await
+}

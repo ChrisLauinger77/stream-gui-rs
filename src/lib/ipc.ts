@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   DesktopStatus, MonitorStatus, AcknowledgeDesktopAction, NotificationTestAction,
   ChatRequest, ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
-  StreamLanguage, StreamBrowseRequest, CategoryStreamsRequest, BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
+  LookupChannelRequest, ChannelIdentity, StreamLanguage, StreamBrowseRequest, CategoryStreamsRequest, BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
   Account, AppError, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
   ProbeResult, SessionSnapshot, StopRequest,
 } from "./generated";
@@ -24,6 +24,7 @@ type Commands = {
   list_category_streams: [CategoryStreamsRequest, CategoryDetails];
   search_channels: [SearchRequest, PagedResult<ChannelSummary>];
   search_categories: [SearchRequest, PagedResult<CategorySummary>];
+  lookup_channel: [LookupChannelRequest, ChannelIdentity];
   get_channel: [EntityRequest, ChannelDetails];
 
   backend_diagnostics: [undefined, BackendDiagnostics];
@@ -71,6 +72,7 @@ export const api = {
   category: (request: CategoryStreamsRequest) => call("list_category_streams", request),
   searchChannels: (request: SearchRequest) => call("search_channels", request),
   searchCategories: (request: SearchRequest) => call("search_categories", request),
+  lookupChannel: (request: LookupChannelRequest) => call("lookup_channel", request),
   channel: (request: EntityRequest) => call("get_channel", request),
 
   diagnostics: () => call("backend_diagnostics"),

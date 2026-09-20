@@ -133,6 +133,43 @@ fn merge_freshness<T>(result: &mut PagedResult<T>, f: Freshness, elapsed: Durati
     }
 }
 impl<A: TwitchApi + 'static> HelixClient<A> {
+    pub async fn lookup_channel(
+        &self,
+        request: LookupChannelRequest,
+        cancel: &CancellationToken,
+    ) -> Result<ChannelIdentity> {
+        let login = crate::streamlink::playback::normalize_login(&request.login)?;
+        let page = BrowseRequest {
+            session_id: request.session_id,
+            cursor: None,
+            refresh: true,
+        };
+        let mut session = self.browse_session(&page).await?;
+        let source = self
+            .get_bound::<User>(
+                "users",
+                params("login", std::slice::from_ref(&login))?,
+                false,
+                CacheClass::Metadata,
+                CachePolicy::Refresh,
+                cancel,
+                &mut session,
+            )
+            .await?;
+        check_session(&session)?;
+        let user = source
+            .value
+            .data
+            .into_iter()
+            .find(|user| user.login.eq_ignore_ascii_case(&login))
+            .ok_or_else(|| error(ErrorCode::NotFound))?;
+        crate::config::validate_broadcaster_id(&user.id)?;
+        Ok(ChannelIdentity {
+            broadcaster_id: user.id,
+            display_name: user.display_name,
+        })
+    }
+
     pub async fn chat_login(
         &self,
         auth_session_id: String,

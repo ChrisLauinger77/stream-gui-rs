@@ -90,6 +90,7 @@ fn build_app() -> tauri::Result<tauri::App> {
             commands::search_channels,
             commands::search_categories,
             commands::get_channel,
+            commands::lookup_channel,
         ])
         .build(app_context())
 }
