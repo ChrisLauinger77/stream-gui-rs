@@ -10,7 +10,7 @@ import type { useDesktop } from "../app/useDesktop";
 
 const sections = ["Playback", "Streamlink", "Player", "Appearance", "Background", "Shortcuts"] as const;
 type Section = typeof sections[number];
-type SettingsProps = { desktop: ReturnType<typeof useDesktop>; saved: Settings | null; onSaved: (value: Settings) => void; saving: boolean; commit: (action: () => Promise<Settings>) => Promise<Settings> };
+type SettingsProps = { desktop: ReturnType<typeof useDesktop>; saved: Settings | null; saving: boolean; commit: (action: () => Promise<Settings>) => Promise<Settings> };
 type DraftEdits = Omit<Partial<Settings>, "player" | "background"> & {
   player?: Partial<Settings["player"]>;
   background?: Partial<Settings["background"]>;
@@ -19,7 +19,7 @@ export function PlaybackSettings(props: SettingsProps) {
   if (!props.saved) return <p role="status">Loading settings…</p>;
   return <SettingsForm {...props} saved={props.saved} />;
 }
-function SettingsForm({ saved, onSaved, desktop, saving, commit }: SettingsProps & { saved: Settings }) {
+function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { saved: Settings }) {
   const [section, setSection] = useState<Section>("Playback");
   // Only deliberate field edits overlay the accepted snapshot. Reopened forms
   // adopt completed saves without discarding edits, even an edit back to default.
@@ -49,8 +49,8 @@ function SettingsForm({ saved, onSaved, desktop, saving, commit }: SettingsProps
     <form noValidate className="playback-settings" aria-label="Application preferences" onSubmit={event => {
       event.preventDefault();
       void run("save", async () => {
-        const value = await commit(() => api.savePlaybackSettings(draft));
-        setEdits({}); onSaved(value); setMessage("Settings saved. Background preferences apply now; playback preferences apply to new launches and restarts.");
+        await commit(() => api.savePlaybackSettings(draft));
+        setEdits({}); setMessage("Settings saved. Background preferences apply now; playback preferences apply to new launches and restarts.");
       });
     }}>
       <fieldset disabled={!!busy}>
@@ -69,11 +69,10 @@ function SettingsForm({ saved, onSaved, desktop, saving, commit }: SettingsProps
           <p className="muted">{draft.streamlinkPath ? "Explicit executable override" : "Automatic discovery from PATH and standard installation locations"}</p>
           <button type="button" disabled={saving} onClick={() => { void run("probe", async () => {
             setProbe(null);
-            const value = await commit(async () => {
+            await commit(async () => {
               const result = await api.probe({ customPath: draft.streamlinkPath });
               setProbe(result); return api.playbackSettings();
             });
-            onSaved(value);
           }); }}>Test and save Streamlink path</button>
           <p className="muted path">Detected: {probe?.executable ?? "Not tested"}<br />Version: {probe?.version ?? "—"}</p>
           <p className="muted">Install Streamlink 8 or newer separately. A failed test preserves the saved path. Streamlink configuration files and sideloaded plugins are disabled.</p>

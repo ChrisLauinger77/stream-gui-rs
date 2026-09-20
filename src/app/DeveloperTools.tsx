@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
+import { useSettings } from "../settings/useSettings";
 import { Panel } from "../components/Panel";
 import { Authentication } from "../features/Authentication";
 import { Playback } from "../features/Playback";
@@ -9,11 +10,13 @@ import { api, errorMessage } from "../lib/ipc";
 type ActionKey = "auth" | "cancel" | "probe" | `restart:${string}` | `stop:${string}`;
 
 export function DeveloperTools() {
+  const { settings, savingSettings, commitSettings } = useSettings();
   const [backend, setBackend] = useState<BackendDiagnostics | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
-  const [customPath, setCustomPath] = useState("");
+  const [pathEdit, setPathEdit] = useState<string | null>(null);
+  const customPath = pathEdit ?? settings?.streamlinkPath ?? "";
   const [probe, setProbe] = useState<ProbeResult | null>(null);
   const [pending, setPending] = useState<ReadonlySet<ActionKey>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +33,7 @@ export function DeveloperTools() {
     let cancelled = false;
     const timers = new Set<ReturnType<typeof setTimeout>>();
     void api.diagnostics().then((diagnostics) => {
-      if (!cancelled) { setBackend(diagnostics); setCustomPath(diagnostics.settings.streamlinkPath ?? ""); }
+      if (!cancelled) setBackend(diagnostics);
     }).catch((error: unknown) => { if (!cancelled) setError(errorMessage(error)); });
     const startPolling = <T,>(read: () => Promise<T>, apply: (value: T) => void) => {
       const poll = async () => {
@@ -105,12 +108,15 @@ export function DeveloperTools() {
         event.preventDefault();
         run("probe", async () => {
           setProbe(null);
-          const result = await api.probe({ customPath: customPath || null });
-          setProbe(result); setBackend(await api.diagnostics());
+          await commitSettings(async () => {
+            const result = await api.probe({ customPath: customPath || null });
+            setProbe(result); return api.playbackSettings();
+          });
+          setBackend(await api.diagnostics());
         });
       }}>
-        <label>Custom executable path<input value={customPath} placeholder="Leave empty to discover on PATH" onChange={(event) => { setCustomPath(event.target.value); setProbe(null); }} /></label>
-        <button type="submit" disabled={pending.has("probe") || !backend}>Probe and save</button>
+        <label>Custom executable path<input value={customPath} placeholder="Leave empty to discover on PATH" onChange={(event) => { setPathEdit(event.target.value); setProbe(null); }} /></label>
+        <button type="submit" disabled={pending.has("probe") || savingSettings || !settings || !backend}>Probe and save</button>
       </form>
       <p>Detected executable: <span className="path">{probe?.executable ?? "Not probed"}</span></p>
       <p>Version: {probe?.version ?? "—"}</p>

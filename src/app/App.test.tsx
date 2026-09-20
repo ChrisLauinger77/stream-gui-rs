@@ -4,13 +4,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { AuthStatus, SessionSnapshot } from "../lib/generated";
 import { api } from "../lib/ipc";
+import { SettingsProvider } from "../settings/useSettings";
 import { DeveloperTools as App } from "./DeveloperTools";
 
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: vi.fn() }));
 vi.mock("../lib/ipc", () => ({
   errorMessage: () => "Request failed",
   api: {
-    diagnostics: vi.fn(), authStatus: vi.fn(), sessions: vi.fn(),
+    playbackSettings: vi.fn(), diagnostics: vi.fn(), authStatus: vi.fn(), sessions: vi.fn(),
     login: vi.fn(), stop: vi.fn(), probe: vi.fn(), launch: vi.fn(),
     account: vi.fn(), cancel: vi.fn(), logout: vi.fn(), validate: vi.fn(), refresh: vi.fn(),
   },
@@ -44,12 +45,13 @@ beforeEach(async () => {
     name: "Stream GUI RS", version: "0.1.0", commit: "a1b2c3d", platform: "test", settingsPath: "settings.json",
     settings: { discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" }, authConfigured: true,
   });
+  vi.mocked(api.playbackSettings).mockImplementation(async () => (await api.diagnostics()).settings);
   vi.mocked(api.authStatus).mockResolvedValue(signedOut);
   vi.mocked(api.sessions).mockResolvedValue([session("one"), session("two")]);
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  await act(async () => { root.render(<App />); });
+  await act(async () => { root.render(<SettingsProvider><App /></SettingsProvider>); });
 });
 
 afterEach(async () => {

@@ -13,11 +13,11 @@ type Route = ({ kind: Section } | { kind: "category" | "channel"; id: string; na
 type Visit = { route: Route; section: Section; scroll: number; focus?: string;
   lookup: string; search: string; searchType: "channels" | "categories"; following: "live" | "channels" };
 const routeKey = (route: Route) => route.kind + ("id" in route ? `:${route.id}` : "") + (route.kind === "live" || route.kind === "category" ? `:${route.language ?? "any"}` : "");
-export type QueryContext = { sessionId: string; memory: ViewMemory; onAuthLost: () => void; settingsRevision: number };
+export type QueryContext = { sessionId: string; memory: ViewMemory; onAuthLost: () => void };
 export type Watch = { watch: (id: string) => void; pending: ReadonlySet<string> };
 export type Links = Watch & { channel: (id: string, name: string) => void; category: (id: string, name: string) => void };
 export const pageRequest = (sessionId: string, cursor: string | null, refresh: boolean): BrowseRequest => ({ sessionId, cursor, refresh });
-export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAuthLost, watch, pending, actionsRef, settingsRevision, preferences, saveLanguage }: { preferences: Settings | null; saveLanguage: (language: StreamLanguage | null) => Promise<Settings>; sessionId: string; onAuthLost: () => void; actionsRef: Ref<BrowserActions>; settingsRevision: number } & Watch) {
+export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAuthLost, watch, pending, actionsRef, preferences, saveLanguage }: { preferences: Settings | null; saveLanguage: (language: StreamLanguage | null) => Promise<Settings>; sessionId: string; onAuthLost: () => void; actionsRef: Ref<BrowserActions> } & Watch) {
   const memory = useRef(new ViewMemory()).current;
   const [route, setRoute] = useState<Route>({ kind: "following" });
   const [section, setSection] = useState<Section>("following");
@@ -63,7 +63,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
     if (content.current) content.current.scrollTop = target?.scroll ?? 0;
     if (focusSearch.current && route.kind === "search") { content.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus(); focusSearch.current = false; }
   }, [route]);
-  const context = { sessionId, memory, onAuthLost, settingsRevision };
+  const context = { sessionId, memory, onAuthLost };
   const language = route.language ?? null;
   const links: Links = { watch, pending, channel: (id, name) => navigate({ kind: "channel", id, name }), category: (id, name) => navigate({ kind: "category", id, name }) };
   const title = "name" in route ? route.name : ({ following: "Following", live: "Live now", categories: "Categories", search: "Search", lookup: "Open channel" }[route.kind]);

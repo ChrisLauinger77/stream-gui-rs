@@ -558,3 +558,87 @@ fn low_latency_precedence_is_sparse_and_snapshots_are_immutable() {
             .low_latency
     );
 }
+
+#[test]
+fn concurrent_global_and_channel_saves_preserve_sparse_precedence_in_both_orders() {
+    use std::sync::Barrier;
+
+    for channel_first in [false, true] {
+        for inherit in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let store = SettingsStore::open(root.path()).unwrap();
+            let explicit = ChannelOverrides {
+                quality: Some(QualityPolicy::Low),
+                automatic_chat: Some(false),
+                notifications: Some(false),
+                low_latency: Some(false),
+            };
+            for id in ["123", "456"] {
+                store
+                    .set_channel(SaveChannelSettingsRequest {
+                        broadcaster_id: id.into(),
+                        overrides: explicit.clone(),
+                    })
+                    .unwrap();
+            }
+            let mut global = store.snapshot();
+            global.default_quality = QualityPolicy::High;
+            global.automatic_chat = true;
+            global.low_latency = true;
+            global.background.notifications_enabled = true;
+            let overrides = if inherit {
+                ChannelOverrides::default()
+            } else {
+                explicit.clone()
+            };
+            let started = Barrier::new(2);
+            let first_done = Barrier::new(2);
+            std::thread::scope(|scope| {
+                scope.spawn(|| {
+                    started.wait();
+                    if channel_first {
+                        first_done.wait();
+                    }
+                    store.update(global.clone()).unwrap();
+                    if !channel_first {
+                        first_done.wait();
+                    }
+                });
+                scope.spawn(|| {
+                    started.wait();
+                    if !channel_first {
+                        first_done.wait();
+                    }
+                    store
+                        .set_channel(SaveChannelSettingsRequest {
+                            broadcaster_id: "123".into(),
+                            overrides: overrides.clone(),
+                        })
+                        .unwrap();
+                    if channel_first {
+                        first_done.wait();
+                    }
+                });
+            });
+            let restored = SettingsStore::open(root.path()).unwrap();
+            assert_eq!(restored.snapshot(), global);
+            assert_eq!(restored.channel("456").unwrap().overrides, explicit);
+            let channel = restored.channel("123").unwrap();
+            assert_eq!(channel.overrides, overrides);
+            assert_eq!(
+                channel.effective.quality,
+                if inherit {
+                    QualityPolicy::High
+                } else {
+                    QualityPolicy::Low
+                }
+            );
+            assert_eq!(channel.effective.automatic_chat, inherit);
+            assert_eq!(channel.effective.low_latency, inherit);
+            assert_eq!(channel.effective_notifications, inherit);
+            let document: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
+            assert_eq!(document["channelOverrides"].get("123").is_none(), inherit);
+        }
+    }
+}

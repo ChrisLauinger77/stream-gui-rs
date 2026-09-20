@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { api } from "../lib/ipc";
 import { errorCode, friendlyError } from "../browse/errors";
-import type { SessionSnapshot, Settings, StreamLanguage } from "../lib/generated";
+import { useSettings } from "../settings/useSettings";
+import type { SessionSnapshot } from "../lib/generated";
 
 export function playbackError(error: unknown) {
   const code = errorCode(error);
@@ -18,41 +19,10 @@ export function playbackError(error: unknown) {
 // a competing process state. One poll at a time; old polls cannot undo actions.
 export function usePlayback() {
   const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
-  const [settings, updateSettings] = useState<Settings | null>(null);
-  const [savingSettings, setSavingSettings] = useState(false);
-  const settingsInFlight = useRef(false);
+  const preferences = useSettings();
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const acceptedSettingsRevision = useRef(0);
-  const settingsTail = useRef(Promise.resolve());
-  const settingsQueued = useRef(0);
-  const mutateSettings = useCallback((action: () => Promise<Settings>) => {
-    // Serialize this window's mutations so complete Rust snapshots can be accepted
-    // in order. Navigation cannot reset the queue; retain at most eight intents.
-    if (settingsQueued.current >= 8) return Promise.reject({ code: "capacity" });
-    settingsQueued.current++;
-    const mutation = settingsTail.current.then(async () => {
-      if (!mounted.current) throw { code: "cancelled" };
-      const value = await action();
-      if (mounted.current) { acceptedSettingsRevision.current++; updateSettings(value); }
-      return value;
-    });
-    settingsTail.current = mutation.then(() => {}, () => {}).finally(() => { settingsQueued.current--; });
-    return mutation;
-  }, []);
-  const commitSettings = useCallback(async (action: () => Promise<Settings>) => {
-    if (settingsInFlight.current) throw { code: "capacity" };
-    settingsInFlight.current = true; setSavingSettings(true);
-    try {
-      return await mutateSettings(action);
-    } finally {
-      settingsInFlight.current = false;
-      if (mounted.current) setSavingSettings(false);
-    }
-  }, [mutateSettings]);
-  const saveLanguage = useCallback((language: StreamLanguage | null) =>
-    mutateSettings(() => api.saveDiscoveryLanguage(language)), [mutateSettings]);
   const revision = useRef(0);
   const inFlight = useRef(new Set<string>());
   const mounted = useRef(false);
@@ -61,12 +31,6 @@ export function usePlayback() {
     if (!isTauri()) return () => { mounted.current = false; };
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
-    const initialRevision = acceptedSettingsRevision.current;
-    void api.playbackSettings().then(value => {
-      if (!cancelled && acceptedSettingsRevision.current === initialRevision) updateSettings(value);
-    }).catch(error => {
-      if (!cancelled && acceptedSettingsRevision.current === initialRevision) setError(playbackError(error));
-    });
     const poll = async () => {
       const version = revision.current;
       try {
@@ -101,5 +65,5 @@ export function usePlayback() {
       if (mounted.current) setPending(new Set(inFlight.current));
     }
   }, []);
-  return { sessions, settings, commitSettings, savingSettings, saveLanguage, pending, run, error, message, dismiss: () => { setError(null); setMessage(null); } };
+  return { ...preferences, sessions, pending, run, error: error ?? (preferences.error ? playbackError(preferences.error) : null), message, dismiss: () => { setError(null); setMessage(null); preferences.dismiss(); } };
 }

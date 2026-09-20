@@ -167,10 +167,58 @@ The graphical Phase 6 fixture again exercised hidden/repeated About, compiled me
 
 Manual/platform gaps remain unchanged: Linux real playback/low latency, physical tray/keyboard acceptance, Orca and actual desktop DPI; macOS native Phase 6/About/tray/link, playback, VoiceOver/scaling/focus and notification/background acceptance; Windows native Phase 6/About/tray/link, playback, Narrator/high DPI, console and Notification Center/background acceptance. Compilation and automated WebKit checks do not complete those gates.
 
-### Additional finding from the required final race review
+### Additional channel-preferences finding — fixed
 
-**MEDIUM — A, confirmed implementation defect; reported without expanding cleanup scope.** In `src/features/ChannelPreferences.tsx`, a global-save `settingsRevision` change invalidates the pending channel mutation's generation, clears its guard and reloads its draft. If that reload returns the old overrides before the channel save succeeds, the successful channel result is subsequently ignored. Saving another channel field then sends the stale overrides and can undo the accepted channel preference.
+**MEDIUM — A, confirmed implementation defect, now resolved.** A global-save `settingsRevision` change in `ChannelPreferences` invalidated the pending channel mutation's generation, cleared its guard and reloaded its draft. If that reload returned old overrides, the successful channel result was ignored. A later unrelated channel save could silently restore those stale overrides.
 
-An isolated deterministic regression demonstrated: start channel low-latency On save → complete a global text-scale save and reload old channel preferences → complete the channel save successfully → change only channel notifications → the second channel request incorrectly submits low latency as inherit. The regression fails on both the original `e63289f` implementation and cleanup code; this is not introduced by the three fixes. The probe and its output were kept outside the repository, so the committed passing test count excludes it.
+The exact regression was retained in `src/app/Browsing.test.tsx`: channel low latency On save starts → global text-scale save completes while old channel overrides remain readable → channel save succeeds → change only channel notifications → save again, without Cancel/reset. Before the fix it failed with `lowLatency: null`; after the fix it submits `lowLatency: true`. Earlier isolated review reproduced the same defect on original Phase 6 commit `e63289f` and cleanup HEAD `906ae89`.
 
-A focused follow-up should preserve the pending channel mutation/result across a global-default refresh and reconcile the effective preview without weakening account/broadcaster generation checks. Retain this sequence as its regression. This additional finding remains unresolved because the cleanup request explicitly requires reporting newly discovered defects rather than silently expanding the three-fix scope.
+The bounded mutation coordination introduced in `e60483a` is reused in `src/settings/useSettings.tsx`, now owned by the window above browsing and Developer tools. Global/path/language mutations retain their serialized queue. Channel mutations share its eight-intent bound, keyed by broadcaster ID, with a guard against overlapping full drafts for one channel. Global and channel mutations remain independent and can succeed in either order. Only accepted successes advance the shared revision. Failures preserve accepted snapshots and deliberate edits.
+
+Channel forms overlay explicit field edits on the accepted Rust snapshot. Global refreshes neither reset save guards nor invalidate a channel mutation. Reads wait for relevant pending writes, discard superseded reads/errors and obtain current effective previews from Rust. Navigation back to a pending channel waits for that save before loading the next draft. Broadcaster/session keys and unmount cancellation prevent late UI callbacks crossing channel, logout, account-replacement or same-account/new-session boundaries. Preferences still apply across accounts through a fresh Rust read; a previous session's success message is never replayed.
+
+Production Rust, schema v5, commands/DTOs, capabilities and dependency versions are unchanged. One Rust regression was added against the existing `SettingsStore`; no backend revision or patch contract was needed. Effective quality, chat, notifications and low latency, atomic persistence and sparse record removal remain Rust-owned.
+
+### Final settings-authority audit
+
+The focused review from pre-Phase-6 `509ea81` covers every frontend persistence entry point:
+
+| Entry point | Coordination and reconciliation |
+| --- | --- |
+| Global Playback/Player/Appearance/Background save | Shared global guard and queue; only accepted snapshots replace settings. Existing explicit field overlays preserve new edits through close/reopen. |
+| Language filter | Same global queue, bounded across navigation; failures preserve initialization and prior accepted settings. Original filter callbacks remain scoped to their mounted view. |
+| Settings Streamlink probe | Same global guard, including across closure; successful probe is followed by a Rust snapshot read before the next queued mutation. |
+| Developer tools Streamlink probe | Now uses that same guard across switching to/from browsing. Its path is an explicit edit over accepted settings; late diagnostics do not reset it. |
+| Channel overrides | Same coordinator capacity and success revision, independent broadcaster scope; read barriers and identity-bound forms preserve accepted overrides and deliberate edits. Same-channel remounts wait for the prior write. |
+
+Initial reads, failed writes, late reads/errors, panel closure, application remounts, language navigation, same-channel and cross-channel changes were checked. Removing the old App `settingsRevision`/channel attempt-generation coupling leaves no independent settings attempt counter capable of invalidating accepted state. There is no new frontend persistence authority or effective-settings resolver.
+
+### Additional regression coverage
+
+The cleanup baseline was **149 frontend tests**. This fix adds **26 deterministic cases**, for **175 frontend tests**. Deferred IPC promises and existing fake timers control ordering; there are no arbitrary sleeps. Coverage includes the exact failure above, both global/channel completion orders, all four effective fields, failure after either kind of accepted mutation, a pending channel failure after global success, same-channel remount after success/failure, A→B isolation, fully inherited submissions during global saves in both orders, unsaved edits including an explicit return to inherit, logout/account/session replacement, stale refresh results/errors, late initial global reads after channel success, Developer tools probe guards/drafts/failures/remounts, language acceptance during channel saves and the shared eight-intent bound.
+
+The additional Rust test uses two workers and barriers to exercise explicit overrides and full inheritance removal in both global/channel write orders. It reopens the file, checks global settings and the other channel remain intact, asserts all four effective values and verifies the fully inherited record is absent from persisted JSON. Backend unit count is now **156** (155 existing plus this regression); process count remains **30**.
+
+### Final follow-up validation — 2026-09-20
+
+All required commands were rerun on Linux with Node **24.20.0** and Rust **1.95.0** using synthetic credentials, loopback HTTP fixtures, temporary settings and fake native playback:
+
+| Check | Result |
+| --- | --- |
+| Bindings generation and generated-file diff | Passed; `src/lib/generated.ts` unchanged. |
+| TypeScript and production frontend build | Passed. |
+| Full frontend suite | **175 passed** across three suites. |
+| Candidate promotion guard tests | Passed; one Node test-file result. |
+| Rust formatting | Passed. |
+| Backend and integration suite | **156 unit**, **30 process**, **2 build-info**, **1 client-ID build-script** tests passed. |
+| Desktop all-target check and strict Clippy | Passed with `test-support`; `-D warnings`. |
+| Desktop unit subsets | **10 passed** normally; **14 passed** with `notification-acceptance`. |
+| Isolated Linux browser regressions | **2 passed**; no real browser opened. |
+| Graphical Linux background regressions | **3 passed**, serial `--ignored` run. |
+| Graphical Linux startup regression | **1 passed**, `--ignored` run. |
+| Synthetic-ID Tauri custom-protocol debug/no-bundle build | Passed; no packaging or publishing. |
+| `git diff --check` | Passed. |
+
+The graphical tests used the existing private D-Bus/fake notification and playback fixtures. All assertions passed; transient WebKit/portal/GVFS/indicator diagnostics did not fail the tests. The local Vite server was stopped, no repository application/test/server processes remained, and owned playback cleanup passed. No new manual/native acceptance is claimed: real playback/low latency, Orca/physical interaction/DPI and all macOS/Windows native acceptance gaps above remain unchanged.
+
+The final settings-authority review found no further confirmed correctness defect. This follow-up changes no version, dependencies or release behavior, rewrites no existing commit, performs no push, and starts no Phase 7 work. Phase 6 cleanup is complete and ready to push for CI/native acceptance.

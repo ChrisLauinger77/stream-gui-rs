@@ -512,6 +512,19 @@ function channelPreferences(broadcasterId = "channel-one", quality: "source" | "
     effective: { lowLatency: false, streamlinkPath: null, player: playbackSettings.player, quality, automaticChat: false } };
 }
 
+test("global save must not forget a pending accepted channel override", async () => {
+  const channelSave = deferred<Awaited<ReturnType<typeof api.saveChannelSettings>>>();
+  vi.mocked(api.saveChannelSettings).mockReturnValueOnce(channelSave.promise).mockImplementation(async request => ({ ...channelPreferences(), overrides: request.overrides }));
+  vi.mocked(api.savePlaybackSettings).mockImplementation(async value => value);
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await editControl("Channel low latency", "on", "select"); await click("Save channel settings");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Text size", "150", "select"); await click("Save settings");
+  const accepted = { ...channelPreferences(), overrides: { ...channelPreferences().overrides, lowLatency: true }, effective: { ...channelPreferences().effective, lowLatency: true } };
+  await act(async () => { vi.mocked(api.channelSettings).mockResolvedValue(accepted); channelSave.resolve(accepted); });
+  await click("Close Settings"); await editControl("Channel notifications", "off", "select"); await click("Save channel settings");
+  expect(api.saveChannelSettings).toHaveBeenLastCalledWith(expect.objectContaining({ overrides: expect.objectContaining({ lowLatency: true, notifications: false }) }));
+});
+
 test("channel preferences display Rust defaults, save overrides, and return to inheritance", async () => {
   vi.mocked(api.channelSettings).mockResolvedValue(channelPreferences("channel-one", "high"));
   await render(); await click("Live"); await click("Open channel Example Channel");
@@ -1284,4 +1297,261 @@ test.each(["channel", "watching"] as const)("native navigation refocuses an alre
   await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
   expect(container.querySelector("dialog")).toBeNull();
   expect(document.activeElement).toBe(container.querySelector(destination === "channel" ? ".browse-content h1" : ".watching-panel h2"));
+});
+
+// Synthetic persistence matches the disjoint Rust commands. Production code
+// must always use the returned channel preview, never this fixture's resolver.
+function settingsPersistence() {
+  let global = { ...playbackSettings };
+  const records = new Map<string, Awaited<ReturnType<typeof api.channelSettings>>["overrides"]>();
+  const channelSnapshot = (broadcasterId = "channel-one") => {
+    const overrides = records.get(broadcasterId) ?? channelPreferences().overrides;
+    return { ...channelPreferences(broadcasterId), overrides, defaultQuality: global.defaultQuality,
+      defaultLowLatency: global.lowLatency, defaultAutomaticChat: global.automaticChat, defaultNotifications: global.background.notificationsEnabled,
+      effectiveNotifications: overrides.notifications ?? global.background.notificationsEnabled,
+      effective: { ...channelPreferences().effective, quality: overrides.quality ?? global.defaultQuality,
+        lowLatency: overrides.lowLatency ?? global.lowLatency, automaticChat: overrides.automaticChat ?? global.automaticChat } };
+  };
+  const acceptGlobal = (value: typeof playbackSettings) => { global = value; return value; };
+  const acceptChannel = (request: Parameters<typeof api.saveChannelSettings>[0]) => {
+    records.set(request.broadcasterId, request.overrides); return channelSnapshot(request.broadcasterId);
+  };
+  vi.mocked(api.playbackSettings).mockImplementation(async () => global);
+  vi.mocked(api.savePlaybackSettings).mockImplementation(async value => acceptGlobal(value));
+  vi.mocked(api.channelSettings).mockImplementation(async id => channelSnapshot(id));
+  vi.mocked(api.saveChannelSettings).mockImplementation(async request => acceptChannel(request));
+  return { acceptGlobal, acceptChannel, channelSnapshot };
+}
+async function openChannelPreferences() { await render(); await click("Live"); await click("Open channel Example Channel"); }
+function channelChoice(label: string) {
+  return [...container.querySelectorAll<HTMLSelectElement>(".channel-preferences select")].find(control => control.labels?.[0]?.textContent?.startsWith(label))!.value;
+}
+async function changeGlobalText() {
+  await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Text size", "150", "select"); await click("Save settings");
+}
+
+test.each(["global-first", "channel-first"] as const)("channel and global defaults reconcile all Rust effective fields: %s", async order => {
+  const store = settingsPersistence();
+  const global = deferred<typeof playbackSettings>(); const saving = deferred<ReturnType<typeof store.channelSnapshot>>();
+  vi.mocked(api.savePlaybackSettings).mockReturnValue(global.promise); vi.mocked(api.saveChannelSettings).mockReturnValue(saving.promise);
+  await openChannelPreferences();
+  // Start global first, then independently submit the channel override.
+  await click("Settings"); await editControl("Default quality", "high", "select"); await toggleControl("Prefer low latency");
+  await toggleControl("Open browser chat when playback starts"); await click("Background", ".settings-nav");
+  await toggleControl("Notify when followed channels go live"); await click("Save settings"); await click("Close Settings");
+  await editControl("Channel quality", "low", "select"); await editControl("Channel low latency", "off", "select");
+  await editControl("Channel browser chat", "off", "select"); await editControl("Channel notifications", "off", "select"); await click("Save channel settings");
+  expect(api.saveChannelSettings).toHaveBeenCalledOnce(); expect(api.savePlaybackSettings).toHaveBeenCalledOnce();
+  const finishGlobal = () => global.resolve(store.acceptGlobal(vi.mocked(api.savePlaybackSettings).mock.calls[0][0]));
+  const finishChannel = () => saving.resolve(store.acceptChannel(vi.mocked(api.saveChannelSettings).mock.calls[0][0]));
+  await act(async () => { if (order === "global-first") finishGlobal(); else finishChannel(); });
+  await act(async () => { if (order === "global-first") finishChannel(); else finishGlobal(); });
+  expect(text()).toContain("Use global default (High"); expect(text()).toContain("Use default (On)");
+  expect(text()).toContain("Saved effective quality: Low · 360p30 · Low latency: Off · Browser chat: Off");
+  expect(text()).toContain("Saved notifications: Off"); expect(channelChoice("Channel low latency")).toBe("off");
+  await editControl("Channel notifications", "inherit", "select");
+  vi.mocked(api.saveChannelSettings).mockImplementation(async request => store.acceptChannel(request)); await click("Save channel settings");
+  expect(text()).toContain("Saved notifications: On");
+  expect(api.saveChannelSettings).toHaveBeenLastCalledWith(expect.objectContaining({ overrides: { quality: "low", lowLatency: false, automaticChat: false, notifications: null } }));
+});
+
+test("accepted channel save survives a newer failed global save", async () => {
+  settingsPersistence(); const global = deferred<typeof playbackSettings>();
+  await openChannelPreferences(); await editControl("Channel low latency", "on", "select"); await click("Save channel settings");
+  vi.mocked(api.savePlaybackSettings).mockReturnValue(global.promise); await changeGlobalText();
+  await act(async () => global.reject({ code: "settings" })); await click("Close Settings");
+  await editControl("Channel notifications", "off", "select"); await click("Save channel settings");
+  expect(api.saveChannelSettings).toHaveBeenLastCalledWith(expect.objectContaining({ overrides: expect.objectContaining({ lowLatency: true, notifications: false }) }));
+  expect(document.documentElement.dataset.textScale).toBe("100");
+});
+test("accepted global save survives a newer failed channel save and retains channel edits for retry", async () => {
+  settingsPersistence(); const saving = deferred<Awaited<ReturnType<typeof api.saveChannelSettings>>>();
+  await openChannelPreferences(); await changeGlobalText(); await click("Close Settings");
+  vi.mocked(api.saveChannelSettings).mockReturnValueOnce(saving.promise);
+  await editControl("Channel low latency", "on", "select"); await click("Save channel settings");
+  await act(async () => saving.reject({ code: "settings", message: "PRIVATE" }));
+  expect(document.documentElement.dataset.textScale).toBe("150"); expect(channelChoice("Channel low latency")).toBe("on");
+  expect(text()).toContain("Low latency: Off"); expect(text()).not.toContain("PRIVATE");
+  await click("Save channel settings"); expect(text()).toContain("Low latency: On");
+});
+test.each(["success", "failure"] as const)("same-channel remount waits for the previous %s before a second save", async outcome => {
+  const store = settingsPersistence(); const first = deferred<ReturnType<typeof store.channelSnapshot>>(); const second = deferred<ReturnType<typeof store.channelSnapshot>>();
+  vi.mocked(api.saveChannelSettings).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  await openChannelPreferences(); await editControl("Channel low latency", "on", "select"); await click("Save channel settings");
+  await click("Go back"); await click("Open channel Example Channel");
+  expect(text()).toContain("Loading channel settings"); expect(api.channelSettings).toHaveBeenCalledOnce();
+  await act(async () => { if (outcome === "success") first.resolve(store.acceptChannel(vi.mocked(api.saveChannelSettings).mock.calls[0][0])); else first.reject({ code: "settings" }); });
+  expect(text()).not.toContain("Channel settings saved");
+  expect(channelChoice("Channel low latency")).toBe(outcome === "success" ? "on" : "inherit");
+  await editControl("Channel notifications", "off", "select"); await click("Save channel settings"); await click("Save channel settings");
+  expect(api.saveChannelSettings).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(api.saveChannelSettings).mock.calls[1][0].overrides.lowLatency).toBe(outcome === "success" ? true : null);
+  await act(async () => second.resolve(store.acceptChannel(vi.mocked(api.saveChannelSettings).mock.calls[1][0])));
+  expect(channelChoice("Channel notifications")).toBe("off");
+});
+test("a pending channel A mutation cannot populate or block channel B", async () => {
+  const store = settingsPersistence(); const saving = deferred<ReturnType<typeof store.channelSnapshot>>();
+  vi.mocked(api.streams).mockResolvedValue(page([stream, { ...stream, broadcasterId: "channel-two", streamId: "stream-two", displayName: "Second Channel" }]));
+  vi.mocked(api.channel).mockImplementation(async request => ({ ...details, channel: { ...channel, broadcasterId: request.id } }));
+  vi.mocked(api.saveChannelSettings).mockReturnValueOnce(saving.promise);
+  await openChannelPreferences(); await editControl("Channel low latency", "on", "select"); await click("Save channel settings");
+  await click("Go back"); await click("Open channel Second Channel");
+  await editControl("Channel notifications", "off", "select"); await click("Save channel settings");
+  await act(async () => saving.resolve(store.acceptChannel(vi.mocked(api.saveChannelSettings).mock.calls[0][0])));
+  expect(channelChoice("Channel low latency")).toBe("inherit"); expect(channelChoice("Channel notifications")).toBe("off");
+  expect(api.saveChannelSettings).toHaveBeenLastCalledWith({ broadcasterId: "channel-two", overrides: { ...channelPreferences().overrides, notifications: false } });
+});
+test.each(["global-first", "channel-first"] as const)("explicit return to full inheritance during a global save: %s", async order => {
+  const store = settingsPersistence(); store.acceptChannel({ broadcasterId: "channel-one", overrides: { quality: "low", automaticChat: false, lowLatency: true, notifications: false } });
+  const global = deferred<typeof playbackSettings>(); const saving = deferred<ReturnType<typeof store.channelSnapshot>>();
+  vi.mocked(api.savePlaybackSettings).mockReturnValue(global.promise); vi.mocked(api.saveChannelSettings).mockReturnValue(saving.promise);
+  await openChannelPreferences(); await click("Settings"); await toggleControl("Prefer low latency"); await editControl("Default quality", "high", "select");
+  await toggleControl("Open browser chat when playback starts"); await click("Save settings"); await click("Close Settings");
+  for (const field of ["Channel quality", "Channel browser chat", "Channel notifications", "Channel low latency"]) await editControl(field, "inherit", "select");
+  await click("Save channel settings");
+  const finishGlobal = () => global.resolve(store.acceptGlobal(vi.mocked(api.savePlaybackSettings).mock.calls[0][0]));
+  const finishChannel = () => saving.resolve(store.acceptChannel(vi.mocked(api.saveChannelSettings).mock.calls[0][0]));
+  await act(async () => { if (order === "global-first") finishGlobal(); else finishChannel(); });
+  await act(async () => { if (order === "global-first") finishChannel(); else finishGlobal(); });
+  expect(api.saveChannelSettings).toHaveBeenCalledWith({ broadcasterId: "channel-one", overrides: { quality: null, automaticChat: null, lowLatency: null, notifications: null } });
+  expect(channelChoice("Channel low latency")).toBe("inherit");
+  expect(text()).toContain("Saved effective quality: High · 720p30 · Low latency: On · Browser chat: On");
+});
+test.each(["on", "inherit"])("unrelated global refresh preserves deliberate unsaved channel choice %s", async choice => {
+  settingsPersistence(); await openChannelPreferences();
+  await editControl("Channel low latency", "on", "select");
+  if (choice === "inherit") await editControl("Channel low latency", "inherit", "select");
+  await editControl("Channel notifications", "off", "select");
+  await changeGlobalText(); await click("Close Settings");
+  expect(channelChoice("Channel low latency")).toBe(choice); expect(channelChoice("Channel notifications")).toBe("off");
+  await click("Save channel settings");
+  expect(api.saveChannelSettings).toHaveBeenCalledWith(expect.objectContaining({ overrides: expect.objectContaining({ lowLatency: choice === "on" ? true : null, notifications: false }) }));
+});
+test.each(["logout", "other-account", "same-account"] as const)("channel mutation completion is isolated from %s session replacement", async replacement => {
+  const store = settingsPersistence(); const saving = deferred<ReturnType<typeof store.channelSnapshot>>();
+  vi.mocked(api.saveChannelSettings).mockReturnValueOnce(saving.promise);
+  await openChannelPreferences(); await editControl("Channel low latency", "on", "select"); await click("Save channel settings");
+  if (replacement === "logout") {
+    vi.mocked(api.logout).mockResolvedValue(signedOut); vi.mocked(api.authStatus).mockResolvedValue(signedOut); await click("Sign out");
+  } else {
+    vi.mocked(api.authStatus).mockResolvedValue({ ...signedIn, sessionId: "2", user: { ...signedIn.user!, id: replacement === "other-account" ? "another-viewer" : "viewer" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    await click("Live"); await click("Open channel Example Channel"); expect(text()).toContain("Loading channel settings");
+  }
+  await act(async () => saving.resolve(store.acceptChannel(vi.mocked(api.saveChannelSettings).mock.calls[0][0])));
+  expect(text()).not.toContain("Channel settings saved");
+  if (replacement === "logout") expect(container.querySelector(".channel-preferences")).toBeNull();
+  else {
+    // Local preferences apply across accounts, but only a fresh read supplies the new UI.
+    expect(api.channelSettings).toHaveBeenCalledTimes(2); expect(channelChoice("Channel low latency")).toBe("on");
+    expect(api.channel).toHaveBeenLastCalledWith(expect.objectContaining({ page: expect.objectContaining({ sessionId: "2" }) }));
+  }
+});
+test("stale channel refresh cannot undo a newer accepted channel mutation or unsaved edits", async () => {
+  const store = settingsPersistence(); const refreshing = deferred<ReturnType<typeof store.channelSnapshot>>();
+  await openChannelPreferences(); vi.mocked(api.channelSettings).mockReturnValueOnce(refreshing.promise);
+  await changeGlobalText(); await click("Close Settings");
+  await editControl("Channel low latency", "on", "select"); await click("Save channel settings");
+  await editControl("Channel notifications", "off", "select");
+  await act(async () => refreshing.resolve(channelPreferences()));
+  expect(channelChoice("Channel low latency")).toBe("on"); expect(channelChoice("Channel notifications")).toBe("off");
+  await click("Save channel settings");
+  expect(api.saveChannelSettings).toHaveBeenLastCalledWith(expect.objectContaining({ overrides: expect.objectContaining({ lowLatency: true, notifications: false }) }));
+});
+test("channel success does not invalidate a late initial global settings read", async () => {
+  settingsPersistence(); const initial = deferred<typeof playbackSettings>(); vi.mocked(api.playbackSettings).mockReturnValue(initial.promise);
+  await openChannelPreferences(); await editControl("Channel low latency", "on", "select"); await click("Save channel settings");
+  await act(async () => initial.resolve({ ...playbackSettings, textScale: "125" })); await click("Settings");
+  expect(text()).not.toContain("Loading settings"); expect(document.documentElement.dataset.textScale).toBe("125");
+  expect(channelChoice("Channel low latency")).toBe("on");
+});
+
+test("global refresh arriving before a channel failure preserves the draft and new defaults", async () => {
+  const store = settingsPersistence(); const saving = deferred<ReturnType<typeof store.channelSnapshot>>();
+  vi.mocked(api.saveChannelSettings).mockReturnValueOnce(saving.promise);
+  await openChannelPreferences(); await editControl("Channel notifications", "off", "select"); await click("Save channel settings");
+  await click("Settings"); await toggleControl("Prefer low latency"); await click("Save settings"); await click("Close Settings");
+  await act(async () => saving.reject({ code: "settings" }));
+  expect(channelChoice("Channel notifications")).toBe("off"); expect(channelChoice("Channel low latency")).toBe("inherit");
+  expect(text()).toContain("Low latency: On"); await click("Save channel settings");
+  expect(api.saveChannelSettings).toHaveBeenLastCalledWith(expect.objectContaining({ overrides: expect.objectContaining({ lowLatency: null, notifications: false }) }));
+});
+test.each(["result", "error"] as const)("an old global-triggered channel read cannot replace a newer preview with a stale %s", async outcome => {
+  const store = settingsPersistence(); const old = deferred<ReturnType<typeof store.channelSnapshot>>();
+  await openChannelPreferences(); vi.mocked(api.channelSettings).mockReturnValueOnce(old.promise);
+  await changeGlobalText(); await click("Close Settings");
+  await click("Settings"); await toggleControl("Prefer low latency"); await click("Save settings"); await click("Close Settings");
+  await act(async () => { if (outcome === "result") old.resolve(channelPreferences()); else old.reject({ code: "settings" }); });
+  expect(text()).toContain("Low latency: On"); expect(text()).not.toContain("could not be saved or read");
+});
+
+function mockDeveloperDiagnostics() {
+  vi.mocked(api.diagnostics).mockImplementation(async () => ({ name: "Stream GUI RS", version: "0.2.0", commit: "fixture", platform: "test", settingsPath: "settings.json", settings: await api.playbackSettings(), authConfigured: true }));
+}
+test("global save and Developer tools path probe share the guard across application remounts", async () => {
+  const store = settingsPersistence(); mockDeveloperDiagnostics();
+  const global = deferred<typeof playbackSettings>(); const probe = deferred<Awaited<ReturnType<typeof api.probe>>>();
+  vi.mocked(api.savePlaybackSettings).mockReturnValueOnce(global.promise); vi.mocked(api.probe).mockReturnValue(probe.promise);
+  await render(); await click("Settings"); await toggleControl("Prefer low latency"); await click("Save settings"); await click("Developer tools");
+  expect(button("Probe and save").disabled).toBe(true);
+  await editControl("Custom executable path", "/fixture/streamlink");
+  await act(async () => global.resolve(store.acceptGlobal(vi.mocked(api.savePlaybackSettings).mock.calls[0][0])));
+  expect(button("Probe and save").disabled).toBe(false); await click("Probe and save");
+  await click("← Back to browsing"); await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Text size", "150", "select");
+  expect(button("Save settings").disabled).toBe(true);
+  store.acceptGlobal({ ...vi.mocked(api.savePlaybackSettings).mock.calls[0][0], streamlinkPath: "/fixture/streamlink" });
+  await act(async () => probe.resolve({ executable: "/fixture/streamlink", version: "8.6.1" }));
+  await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ lowLatency: true, textScale: "150", streamlinkPath: "/fixture/streamlink" }));
+  expect(api.probe).toHaveBeenCalledOnce();
+});
+test("Developer tools remount preserves a pending probe and explicit new path edit", async () => {
+  const store = settingsPersistence(); mockDeveloperDiagnostics(); const probe = deferred<Awaited<ReturnType<typeof api.probe>>>();
+  vi.mocked(api.probe).mockReturnValueOnce(probe.promise).mockResolvedValue({ executable: "/fixture/second", version: "8.6.1" });
+  await render(); await click("Settings"); await click("Developer tools"); await editControl("Custom executable path", "/fixture/first"); await click("Probe and save");
+  await click("← Back to browsing"); await click("Settings"); await click("Developer tools");
+  await editControl("Custom executable path", "/fixture/second"); expect(button("Probe and save").disabled).toBe(true);
+  store.acceptGlobal({ ...playbackSettings, streamlinkPath: "/fixture/first" });
+  await act(async () => probe.resolve({ executable: "/fixture/first", version: "8.6.1" }));
+  await click("Probe and save"); expect(api.probe).toHaveBeenLastCalledWith({ customPath: "/fixture/second" });
+});
+test("failed Developer tools probe preserves accepted settings across return to browsing", async () => {
+  settingsPersistence(); mockDeveloperDiagnostics(); const probe = deferred<Awaited<ReturnType<typeof api.probe>>>();
+  vi.mocked(api.probe).mockReturnValue(probe.promise);
+  await render(); await changeGlobalText(); await click("Developer tools"); await editControl("Custom executable path", "/fixture/failed"); await click("Probe and save");
+  await click("← Back to browsing"); await click("Settings");
+  await act(async () => probe.reject({ code: "settings" })); await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ streamlinkPath: null, textScale: "150" }));
+});
+test("late Developer tools initialization cannot reset an explicitly edited path", async () => {
+  settingsPersistence(); mockDeveloperDiagnostics(); const diagnostic = deferred<Awaited<ReturnType<typeof api.diagnostics>>>(); vi.mocked(api.diagnostics).mockReturnValueOnce(diagnostic.promise);
+  vi.mocked(api.probe).mockResolvedValue({ executable: "/fixture/edited", version: "8.6.1" });
+  await render(); await click("Settings"); await click("Developer tools"); await editControl("Custom executable path", "/fixture/edited");
+  await act(async () => diagnostic.resolve({ name: "Stream GUI RS", version: "0.2.0", commit: "fixture", platform: "test", settingsPath: "settings.json", settings: playbackSettings, authConfigured: true }));
+  await click("Probe and save"); expect(api.probe).toHaveBeenCalledWith({ customPath: "/fixture/edited" });
+});
+test("language acceptance during a channel mutation survives navigation back to that channel", async () => {
+  const store = settingsPersistence(); const saving = deferred<ReturnType<typeof store.channelSnapshot>>();
+  vi.mocked(api.saveChannelSettings).mockReturnValueOnce(saving.promise);
+  vi.mocked(api.saveDiscoveryLanguage).mockImplementation(async discoveryLanguage => store.acceptGlobal({ ...playbackSettings, discoveryLanguage }));
+  await openChannelPreferences(); await editControl("Channel low latency", "on", "select"); await click("Save channel settings");
+  await click("Go back"); await selectLanguage("de"); await click("Open channel Example Channel");
+  await act(async () => saving.resolve(store.acceptChannel(vi.mocked(api.saveChannelSettings).mock.calls[0][0])));
+  await editControl("Channel notifications", "off", "select"); await click("Save channel settings");
+  expect(api.saveChannelSettings).toHaveBeenLastCalledWith(expect.objectContaining({ overrides: expect.objectContaining({ lowLatency: true, notifications: false }) }));
+  await click("Following"); await click("Live"); expect(api.streams).toHaveBeenLastCalledWith(expect.objectContaining({ language: "de" }));
+});
+test("channel mutations share the eight-intent bound across navigation and release it after completion", async () => {
+  const store = settingsPersistence(); const release = deferred<null>();
+  vi.mocked(api.streams).mockResolvedValue(page(Array.from({ length: 9 }, (_, index) => ({ ...stream, streamId: `stream-${index}`, broadcasterId: String(index + 1), displayName: `Channel ${index + 1}` }))));
+  vi.mocked(api.channel).mockImplementation(async request => ({ ...details, channel: { ...channel, broadcasterId: request.id } }));
+  vi.mocked(api.saveChannelSettings).mockImplementation(async request => { await release.promise; return store.acceptChannel(request); });
+  await render(); await click("Live");
+  for (let index = 1; index <= 9; index++) {
+    await click(`Open channel Channel ${index}`); await editControl("Channel low latency", "on", "select"); await click("Save channel settings");
+    if (index < 9) await click("Go back");
+  }
+  expect(api.saveChannelSettings).toHaveBeenCalledTimes(8);
+  await act(async () => release.resolve(null)); await click("Save channel settings");
+  expect(api.saveChannelSettings).toHaveBeenCalledTimes(9); expect(channelChoice("Channel low latency")).toBe("on");
 });

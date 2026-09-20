@@ -6,6 +6,7 @@ import { BrowserWorkspace, type BrowserActions } from "../browse/Workspace";
 import { friendlyError } from "../browse/errors";
 import type { Account, AuthStatus } from "../lib/generated";
 
+import { SettingsProvider } from "../settings/useSettings";
 import { usePlayback } from "../playback/usePlayback";
 import { About } from "../features/About";
 import { SupportReport } from "../features/SupportReport";
@@ -19,6 +20,9 @@ import { useAppearance } from "./useAppearance";
 import { useShortcuts, shortcutLabels } from "./shortcuts";
 
 export function App() {
+  return <SettingsProvider><AppContent /></SettingsProvider>;
+}
+function AppContent() {
   const [developer, setDeveloper] = useState(false);
   const desktop = useDesktop();
   useEffect(() => { if (desktop.status?.action) setDeveloper(false); }, [desktop.status?.action?.id]);
@@ -45,7 +49,6 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const settingsPanel = useRef<HTMLElement>(null);
   const settingsHeading = useRef<HTMLHeadingElement>(null);
   const watchingPanel = useRef<HTMLDivElement>(null);
-  const [settingsRevision, setSettingsRevision] = useState(0);
   const shortcuts = shortcutLabels();
   const closeSettings = () => { restore("settings", settingsPanel.current, settingsButton.current); setSettings(false); };
   const closeWatching = () => { restore("watching", watchingPanel.current, watchingButton.current); setWatching(false); };
@@ -115,7 +118,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
     <header className="app-bar"><div className="brand"><span aria-hidden="true">▶</span> Stream GUI RS</div>{controls}</header>
     {settings && <section ref={settingsPanel} className="settings-panel" aria-label="Settings">
       <div className="settings-header"><h2 tabIndex={-1} ref={settingsHeading}>Settings</h2><button className="quiet" onClick={closeSettings}>Close Settings</button><button className="quiet" onClick={() => setSupport(true)}>Prepare support report</button><button className="quiet" onClick={developer}>Developer tools</button><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.quit); }}>{activeCount ? `Quit (stops ${activeCount} streams)` : "Quit"}</button></div>
-      <PlaybackSettings desktop={desktop} saved={playback.settings} saving={playback.savingSettings} commit={playback.commitSettings} onSaved={() => { setSettingsRevision(revision => revision + 1); }} />
+      <PlaybackSettings desktop={desktop} saved={playback.settings} saving={playback.savingSettings} commit={playback.commitSettings} />
       {auth.status?.phase === "not_configured" && <p>This build does not include a Twitch application ID. If you built it from source, follow the authentication setup in the project documentation.</p>}
     </section>}
     <div className={playback.error ? "error playback-feedback" : playback.message ? "notice playback-feedback" : "playback-feedback empty-feedback"} role={playback.error ? "alert" : "status"} aria-atomic="true">{playback.error ?? playback.message}{(playback.error || playback.message) && <button className="quiet" onClick={playback.dismiss}>Dismiss</button>}</div>
@@ -129,7 +132,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       <p>The native notification activated this local target. No Twitch channel data or playback is involved.</p>
       <button onClick={() => setNotificationTest(false)}>Back to browsing</button>
       <button onClick={developer}>Developer tools</button>
-    </main> : auth.sessionId ? <BrowserWorkspace preferences={playback.settings} saveLanguage={playback.saveLanguage} actionsRef={workspace} settingsRevision={settingsRevision} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} pending={playback.pending} /> :
+    </main> : auth.sessionId ? <BrowserWorkspace preferences={playback.settings} saveLanguage={playback.saveLanguage} actionsRef={workspace} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} pending={playback.pending} /> :
       <SignIn status={auth.status} account={auth.account} busy={auth.busy} run={auth.run} />}
     {about && <About activation={about} close={() => setAbout(null)} />}
     {support && <SupportReport close={() => setSupport(false)} />}
