@@ -222,3 +222,11 @@ All required commands were rerun on Linux with Node **24.20.0** and Rust **1.95.
 The graphical tests used the existing private D-Bus/fake notification and playback fixtures. All assertions passed; transient WebKit/portal/GVFS/indicator diagnostics did not fail the tests. The local Vite server was stopped, no repository application/test/server processes remained, and owned playback cleanup passed. No new manual/native acceptance is claimed: real playback/low latency, Orca/physical interaction/DPI and all macOS/Windows native acceptance gaps above remain unchanged.
 
 The final settings-authority review found no further confirmed correctness defect. This follow-up changes no version, dependencies or release behavior, rewrites no existing commit, performs no push, and starts no Phase 7 work. Phase 6 cleanup is complete and ready to push for CI/native acceptance.
+
+### Windows CI fixture correction — 2026-09-20
+
+[Desktop checks run 35504984027, Windows job](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35504984027/job/106063156074) exposed a test-fixture portability error at `f5b74e9`. The support-report no-probe/no-credential-access test configured `/nonexistent/private/executable`, which is not an absolute Windows path. Settings validation rejected it before the report assertions ran; **155 backend tests passed and this one failed**. The frontend checks passed on all three runners.
+
+The fixture now derives its nonexistent executable path from its temporary directory and explicitly asserts that it is absolute and absent. The report/privacy assertions remain intact. Production code, settings validation, IPC and dependencies are unchanged.
+
+Local Linux revalidation passed all **3 support-report tests**, the full **156 backend / 30 process / 2 build-info / 1 client-ID** suite, formatting, strict all-target Clippy and `git diff --check`. The correction still requires a new Windows CI run; Linux results do not establish Windows native acceptance. No release or push was performed for this correction.

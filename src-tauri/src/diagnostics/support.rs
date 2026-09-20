@@ -223,9 +223,17 @@ mod tests {
             None,
             Box::new(CountingStore(reads.clone())),
         ));
+        // Derive an absolute path on every host; a Unix root-only fixture is
+        // not absolute on Windows and would fail before the report is tested.
+        let executable = directory
+            .path()
+            .join("private")
+            .join("nonexistent-streamlink");
+        assert!(executable.is_absolute());
+        assert!(!executable.exists());
         services
             .settings
-            .set_streamlink_path(Some("/nonexistent/private/executable".into()))
+            .set_streamlink_path(Some(executable.to_string_lossy().into_owned()))
             .unwrap();
         // Either a probe or credential access would fail. Reporting only reads local snapshots.
         let report = services.support_report().await.text;
