@@ -18,7 +18,7 @@ const category: CategorySummary = { id: "game-one", name: "Example Game", imageU
 const channel: ChannelSummary = { broadcasterId: "channel-one", login: "example", displayName: "Example Channel", imageUrl: null, followedAt: "2026-01-01T00:00:00Z", liveState: "offline", title: null, categoryName: null, language: null };
 const details: ChannelDetails = { channel, description: "An example description", stream: null, freshness: "network", ageSeconds: 0, warnings: [] };
 const page = <T,>(items: T[], cursor: string | null = null): PagedResult<T> => ({ items, cursor, freshness: "network", ageSeconds: 0, warnings: [] });
-function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
+function deferred<T>() { let resolve!: (value: T) => void; let reject!: (reason: unknown) => void; const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; }); return { promise, resolve, reject }; }
 let root: Root; let container: HTMLDivElement;
 const text = () => container.textContent ?? "";
 function button(label: string, area = "") {
@@ -1038,7 +1038,6 @@ test("closing and reopening Settings preserves the outstanding mutation guard", 
   await click("Close Settings"); await click("Settings");
   await click("Save settings"); expect(api.savePlaybackSettings).toHaveBeenCalledOnce();
   await act(async () => first.resolve({ ...playbackSettings, defaultQuality: "low" }));
-  await click("Cancel changes");
   expect([...container.querySelectorAll<HTMLSelectElement>("select")].find(control => control.labels?.[0]?.textContent?.startsWith("Default quality"))?.value).toBe("low");
 });
 
@@ -1050,4 +1049,70 @@ test("a language save finishing after navigation updates the default without cha
   expect(container.querySelector<HTMLSelectElement>(".language-filter select")!.value).toBe("");
   await click("Following"); await click("Live");
   expect(api.streams).toHaveBeenLastCalledWith(expect.objectContaining({ language: "de" }));
+});
+
+
+test.each(["low latency", "background"])("reopened Settings reconciles accepted %s before saving another field", async preference => {
+  const saving = deferred<typeof playbackSettings>();
+  let persisted = { ...playbackSettings };
+  vi.mocked(api.savePlaybackSettings).mockReturnValueOnce(saving.promise).mockImplementation(async request => { persisted = request; return request; });
+  await render(); await click("Settings");
+  if (preference === "background") await click("Background", ".settings-nav");
+  await toggleControl(preference === "background" ? "Monitor followed live streams" : "Prefer low latency");
+  await click("Save settings");
+  const accepted = vi.mocked(api.savePlaybackSettings).mock.calls[0][0];
+  await click("Close Settings"); await click("Settings");
+  await act(async () => saving.resolve(accepted));
+  await click("Appearance", ".settings-nav"); await editControl("Text size", "150", "select"); await click("Save settings");
+  expect(persisted.textScale).toBe("150");
+  expect(preference === "background" ? persisted.background.monitoringEnabled : persisted.lowLatency).toBe(true);
+});
+test("reopened Settings preserves deliberate nested edits while an earlier save completes", async () => {
+  const saving = deferred<typeof playbackSettings>();
+  vi.mocked(api.savePlaybackSettings).mockReturnValueOnce(saving.promise).mockImplementation(async value => value);
+  await render(); await click("Settings"); await click("Background", ".settings-nav");
+  await toggleControl("Monitor followed live streams"); await click("Save settings");
+  const accepted = vi.mocked(api.savePlaybackSettings).mock.calls[0][0];
+  await click("Close Settings"); await click("Settings"); await click("Background", ".settings-nav");
+  const interval = [...container.querySelectorAll<HTMLSelectElement>("select")].find(control => control.labels?.[0]?.textContent?.startsWith("Check for live streams"))!;
+  expect(interval.matches(":disabled")).toBe(false);
+  await editControl("Check for live streams", "300", "select");
+  await click("Appearance", ".settings-nav"); await editControl("Text size", "150", "select");
+  await click("Save settings"); expect(api.savePlaybackSettings).toHaveBeenCalledOnce();
+  await act(async () => saving.resolve(accepted));
+  await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ textScale: "150", background: { ...playbackSettings.background, monitoringEnabled: true, intervalSeconds: 300 } }));
+});
+test("reopened Settings retains an explicit edit back to its original value", async () => {
+  const saving = deferred<typeof playbackSettings>();
+  vi.mocked(api.savePlaybackSettings).mockReturnValueOnce(saving.promise).mockImplementation(async value => value);
+  await render(); await click("Settings"); await toggleControl("Prefer low latency"); await click("Save settings");
+  await click("Close Settings"); await click("Settings");
+  await toggleControl("Prefer low latency"); await toggleControl("Prefer low latency");
+  await act(async () => saving.resolve({ ...playbackSettings, lowLatency: true }));
+  await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ lowLatency: false }));
+});
+test("failed Settings saves retain the draft and accepted appearance and permit a successful retry", async () => {
+  const saving = deferred<typeof playbackSettings>();
+  vi.mocked(api.savePlaybackSettings).mockReturnValueOnce(saving.promise).mockImplementation(async value => value);
+  await render(); await click("Settings"); await toggleControl("Prefer low latency");
+  await click("Appearance", ".settings-nav"); await editControl("Text size", "150", "select"); await click("Save settings");
+  await act(async () => saving.reject({ code: "settings", message: "PRIVATE" }));
+  expect(document.documentElement.dataset.textScale).toBe("100");
+  expect(text()).toContain("Playback settings could not be saved"); expect(text()).not.toContain("PRIVATE");
+  expect([...container.querySelectorAll<HTMLSelectElement>("select")].find(control => control.labels?.[0]?.textContent?.startsWith("Text size"))?.value).toBe("150");
+  await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ lowLatency: true, textScale: "150" }));
+  expect(document.documentElement.dataset.textScale).toBe("150");
+});
+test("a failed save after Settings reopens leaves accepted values and new edits intact", async () => {
+  const saving = deferred<typeof playbackSettings>();
+  vi.mocked(api.savePlaybackSettings).mockReturnValueOnce(saving.promise).mockImplementation(async value => value);
+  await render(); await click("Settings"); await toggleControl("Prefer low latency"); await click("Save settings");
+  await click("Close Settings"); await click("Settings"); await click("Appearance", ".settings-nav");
+  await editControl("Text size", "125", "select");
+  await act(async () => saving.reject({ code: "settings" }));
+  await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ lowLatency: false, textScale: "125" }));
 });

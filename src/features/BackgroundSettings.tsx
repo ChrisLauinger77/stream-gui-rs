@@ -12,16 +12,16 @@ export const notificationPermissionMessages: Record<NotificationPermission, stri
   denied: "Notifications denied — change this in system settings", unavailable: "Native notifications unavailable. Check the app installation and OS permissions, then retry.",
   os_managed: "Delivery is controlled by your desktop notification settings",
 };
-export function BackgroundSettings({ value, change, desktop }: { value: Preferences; change: (value: Preferences) => void; desktop: ReturnType<typeof useDesktop> }) {
+export function BackgroundSettings({ value, change, desktop }: { value: Preferences; change: (value: Partial<Preferences>) => void; desktop: ReturnType<typeof useDesktop> }) {
   const status = desktop.status;
   return <div>
-    <label className="checkbox-label"><input type="checkbox" checked={value.monitoringEnabled} onChange={event => change({ ...value, monitoringEnabled: event.target.checked })} />Monitor followed live streams</label>
-    <label>Check for live streams<select value={value.intervalSeconds} onChange={event => change({ ...value, intervalSeconds: Number(event.target.value) })}>
+    <label className="checkbox-label"><input type="checkbox" checked={value.monitoringEnabled} onChange={event => change({ monitoringEnabled: event.target.checked })} />Monitor followed live streams</label>
+    <label>Check for live streams<select value={value.intervalSeconds} onChange={event => change({ intervalSeconds: Number(event.target.value) })}>
       <option value={60}>Every minute</option><option value={120}>Every 2 minutes</option><option value={300}>Every 5 minutes</option>
     </select></label>
-    <label className="checkbox-label"><input type="checkbox" checked={value.notificationsEnabled} onChange={event => change({ ...value, notificationsEnabled: event.target.checked })} />Notify when followed channels go live</label>
+    <label className="checkbox-label"><input type="checkbox" checked={value.notificationsEnabled} onChange={event => change({ notificationsEnabled: event.target.checked })} />Notify when followed channels go live</label>
     <p className="muted">Channel settings can override this notification default. Startup, Resume and recovery establish a quiet baseline; already-live streams do not trigger alerts.</p>
-    <label className="checkbox-label"><input type="checkbox" checked={value.closeToBackground} onChange={event => change({ ...value, closeToBackground: event.target.checked })} />Keep Stream GUI RS running in the background when the window is closed</label>
+    <label className="checkbox-label"><input type="checkbox" checked={value.closeToBackground} onChange={event => change({ closeToBackground: event.target.checked })} />Keep Stream GUI RS running in the background when the window is closed</label>
     <p className="muted">Monitoring and playback continue while hidden. Restore from the tray menu. If no tray is available, closing minimizes instead. Normal minimize is unchanged. Quit stops all owned playback.</p>
     {status && <>
       <p role="status">{phases[status.monitor.phase]}{status.monitor.liveCount !== null && ` · ${status.monitor.liveCount} followed live${status.monitor.stale ? " (previous count)" : ""}`}</p>
