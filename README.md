@@ -17,15 +17,19 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 
 - Twitch Device Code sign-in with credentials stored in Keychain, Credential Manager, or Secret Service
 - Following, popular live streams, categories, search, and channel details
+- Server-side language filtering for Live/category streams and exact Twitch-login lookup
 - Streamlink 8.0+ discovery and external playback
 - Streamlink default player, mpv, VLC, and custom executable modes
 - Source, High, Medium, Low, and Audio quality policies
 - Multiple simultaneous streams with Stop, Restart, Watching, and bounded diagnostics
-- Persistent global playback settings and per-channel overrides
+- Persistent global playback settings and per-channel overrides, including opt-in low latency
 - Twitch chat in the system browser
-- System, Light, and Dark themes plus focused application shortcuts
+- System, Light, and Dark themes, 100/125/150% text size, and focused application shortcuts
 - Opt-in followed-stream monitoring, desktop notifications, and per-channel notification preferences
 - Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
+- About on every desktop platform and a previewable support report
+
+The list describes the current source tree. Phase 6 additions are unreleased; this work does not change the application version or publish v0.3.0.
 
 Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. Background features are available in 0.2.0 and later; v0.1.0 packages retain their original close-to-exit behavior.
 
@@ -95,6 +99,20 @@ Navigation, interface reload, and Twitch logout leave existing streams running s
 
 The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectively, with source fallback when Twitch does not offer a matching rendition. They are preferences rather than guaranteed resolution caps.
 
+## Discovery, appearance, and support
+
+**Live** and category streams offer **Stream language**: Any language, a curated language list, or Other. Twitch applies the filter on the server. Changing it starts that view from its first page and saves the default for later discovery visits. Back restores the language used by that earlier visit. Following, Search, and the background monitor keep their existing scope.
+
+**Open channel** accepts an exact Twitch login (letters, numbers, underscores, up to 25 characters; case-insensitive). It opens the existing channel details, including offline channels. Enter a login, not a URL; lookup never starts playback. Search remains the discovery tool for partial names and categories.
+
+**Settings → Playback → Prefer low latency** defaults off. Channel preferences can inherit, enable, or disable it. This adds Streamlink's `--twitch-low-latency` flag; actual delay depends on the stream, connection, buffering and player. Saving leaves current processes unchanged. Restart applies current preferences to that session.
+
+**Settings → Appearance → Text size** supports 100%, 125%, and 150%. Save applies the Rust-persisted value; it combines with desktop/webview scaling. Closing Settings or Watching returns focus to its opener when still appropriate. Playback announcements describe the Streamlink process, not verified video rendering.
+
+**About Stream GUI RS** is available from the tray/status menu and the main interface. macOS keeps its native AppKit panel; Linux and Windows use one small main-window dialog. About restores a hidden main window, shows the icon, compiled version/commit, and a fixed GitHub repository link. Close/Escape closes the dialog; explicit application Quit still cleans up playback and monitoring.
+
+**Settings → Prepare support report** shows selectable text for manual copying. Rust includes only build/platform metadata, a previously validated numeric Streamlink version (or “not checked”), player mode, and up to sixteen anonymous process phases/failure codes/exit codes. It excludes account/channel identities, credentials, paths, arguments, environment, raw logs and arbitrary error messages. Opening it performs no probe, credential access, upload, clipboard write, or Twitch request. Review the preview before sharing; the full local Developer tools diagnostics are a different, more detailed surface.
+
 ## Background monitoring and notifications
 
 In **Settings → Background**, enable **Monitor followed live streams**, choose a 1, 2, or 5 minute interval, and enable notifications. All background preferences default off, including when upgrading existing settings. Channel preferences can inherit, enable, or disable the global notification default. Monitoring still requires sign-in; notification permission is independent.
@@ -139,7 +157,7 @@ TWITCH_CLIENT_ID_BUILD=yourPublicClientId npm run tauri build -- --no-bundle --f
 
 No client secret is used. The build fails if a distribution build has no valid embedded public ID. See [authentication](docs/authentication.md) for configuration precedence and PowerShell examples.
 
-Builds embed a seven-character lowercase Git commit in native macOS About and backend diagnostics. CI/release jobs set `STREAM_GUI_RS_COMMIT` to GitHub's exact checkout SHA (including the merge commit for pull-request checks). Local builds use Git HEAD at build time when available; source archives or invalid metadata show `unknown`. An explicit variable takes precedence over local Git and accepts 7–64 hexadecimal characters. No Git installation or source checkout is needed at runtime. Local uncommitted changes are not reflected by a dirty suffix; the identifier describes HEAD. Normal users need no configuration, and application versioning still uses the existing release metadata.
+Builds embed a seven-character lowercase Git commit in About, backend diagnostics, and the safe support report. CI/release jobs set `STREAM_GUI_RS_COMMIT` to GitHub's exact checkout SHA (including the merge commit for pull-request checks). Local builds use Git HEAD at build time when available; source archives or invalid metadata show `unknown`. An explicit variable takes precedence over local Git and accepts 7–64 hexadecimal characters. No Git installation or source checkout is needed at runtime. Local uncommitted changes are not reflected by a dirty suffix; the identifier describes HEAD. Normal users need no configuration, and application versioning still uses the existing release metadata.
 
 Run the project checks from the repository root:
 
@@ -160,10 +178,12 @@ For native notification acceptance without a Twitch live transition, build with 
 
 ## Reporting issues
 
-[Open a GitHub issue](https://github.com/ChrisLauinger77/stream-gui-rs/issues) with your operating system and version, Stream GUI RS version, Streamlink version, selected player, reproduction steps, and relevant sanitized session diagnostics. Do not paste OAuth tokens, refresh tokens, device codes, credential-store exports, or other secrets.
+[Open a GitHub issue](https://github.com/ChrisLauinger77/stream-gui-rs/issues) with reproduction steps and the previewed **Settings → Prepare support report** text. Add OS/player version details manually if useful; the report intentionally excludes identifying data and logs. Do not paste OAuth tokens, refresh tokens, device codes, credential-store exports, or other secrets.
 
 Release maintainers should use the [release process](docs/releasing.md) and [exact-artifact smoke checklist](docs/release-smoke-test.md). Historical implementation evidence remains in the phase validation documents; it is not proof of a current artifact.
 
 ## License and acknowledgements
 
 Stream GUI RS is licensed under [GNU GPL version 3 only](LICENSE). It relies on open-source Rust and npm dependencies under their respective licenses. Playback is provided by the separately installed [Streamlink](https://streamlink.github.io/) project. No assets from Streamlink Twitch GUI are distributed here.
+
+Phase 6 implementation and platform verification evidence: [validation record](docs/phase-6-validation.md).

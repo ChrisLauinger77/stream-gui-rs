@@ -157,14 +157,14 @@ user.
 
 ## Settings and launch configuration
 
-- `SettingsStore` owns strict version 4 settings: global Streamlink/player/quality/chat/theme/background preferences
+- `SettingsStore` owns strict version 5 settings: global Streamlink/player/quality/low-latency/chat/theme/background/language/text-scale preferences
   and sparse channel overrides, under Tauri's app config directory. Preserve atomic replacement, in-memory
-  migrations from this app's versions 1, 2 and 3, and rejection of malformed/unknown schemas without overwrite.
+  migrations from this app's versions 1, 2, 3 and 4, and rejection of malformed/unknown schemas without overwrite.
   Files are bounded to 256 KiB and channel overrides to 1,000 records.
 - Precedence is global defaults → optional channel overrides → optional request quality → immutable
   effective snapshot in `LaunchSpec` and the session. `quality: null` inherits; resolve only in Rust.
-- Channel overrides use stable positive decimal broadcaster IDs. Quality/chat/notifications null means inherit; false
-  explicitly disables chat. Remove fully inherited records. These local preferences apply across accounts;
+- Channel overrides use stable positive decimal broadcaster IDs. Quality/chat/notifications/low-latency null means inherit; false
+  explicitly disables the corresponding boolean preference. Remove fully inherited records. These local preferences apply across accounts;
   they never grant authentication or playback authority.
 - Saving settings does not mutate running processes. Explicit restart resolves current settings, retaining
   trusted session identity without a fresh Helix lookup. Chat opens once per enabled launch/restart;
@@ -295,15 +295,22 @@ cross-compilation or process status does not prove native behavior.
 - `docs/authentication.md`: OAuth/storage, build/runtime ID precedence and native checks.
 - `docs/helix.md`: HTTP, retry, pagination, cache and session-isolation contracts.
 - `docs/phase-0-validation.md`, `docs/phase-1-validation.md`, `docs/phase-2-validation.md`,
-  `docs/phase-3-validation.md`, `docs/phase-4-validation.md`, `docs/phase-5-validation.md`: historical evidence and manual gaps, not proof of a current run. Use current
+  `docs/phase-3-validation.md`, `docs/phase-4-validation.md`, `docs/phase-5-validation.md`,
+  `docs/phase-6-validation.md`: historical evidence and manual gaps, not proof of a current run. Use current
   README/CI build commands.
 
-The current tree implements Phase 5: the Phase 4 browsing/playback/settings MVP plus opt-in Rust followed-live
-monitoring, native notifications/tray and background window behavior. Preserve quiet baselines on startup,
+The current tree implements Phase 6: browsing/playback/settings and Rust followed-live monitoring, plus
+server-side discovery language filtering, exact-login lookup, opt-in low latency, persisted text size, safe
+support-report previews and cross-platform About. Preserve quiet baselines on startup,
 resume and recovery, session cancellation, bounded stream-ID deduplication and foreground rate priority.
 Advanced transports/chat clients, legacy import and updater polish remain deferred. Annotated `vMAJOR.MINOR.PATCH` tags trigger the
 native publishing workflow; version preparation is documented in `docs/releasing.md`. Do not start another phase as incidental cleanup. Keep detailed architecture, user setup and validation history in
 their respective documents rather than expanding this guide.
+
+The support report is a separate explicit allowlist, not redacted full diagnostics: no identities, paths,
+arguments, raw logs/errors, credentials, environment reads, probes or HTTP. Build/About metadata comes from
+`build_info`; repository opening is a parameterless fixed-destination native intent. Preserve native macOS
+About and the single main-window Linux/Windows dialog lifecycle.
 
 ## Agent checklist
 
