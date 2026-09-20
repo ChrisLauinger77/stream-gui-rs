@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import type { Theme } from "../lib/generated";
+import type { TextScale, Theme } from "../lib/generated";
 
-export function useAppearance(theme: Theme) {
+export function useAppearance(theme: Theme, textScale: TextScale = "100") {
+  useEffect(() => { document.documentElement.dataset.textScale = textScale; }, [textScale]);
   useEffect(() => {
     const media = window.matchMedia?.("(prefers-color-scheme: dark)");
     const apply = () => {

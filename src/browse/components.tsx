@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { CategorySummary, ChannelSummary, StreamSummary } from "../lib/generated";
 import { errorText } from "./errors";
 import type { Watch } from "./Workspace";
@@ -25,11 +25,13 @@ export function StreamPreview({ stream, retryGeneration }: { stream: StreamSumma
   return <div className="stream-preview"><Media retryGeneration={retryGeneration} src={stream.previewUrl} /><span className="live-tag">LIVE</span><span className="viewer-count">{viewers.format(stream.viewerCount)} viewers</span></div>;
 }
 export function StreamCard({ stream, channel, category, retryGeneration, ...watch }: { stream: StreamSummary; retryGeneration: number; channel: OpenChannel; category: OpenCategory } & Watch) {
+  const description = useId();
   return <article className="stream-card">
-    <button className="item-link" data-focus={`stream:${stream.streamId}`} onClick={() => channel(stream.broadcasterId, stream.displayName)} aria-label={`Open channel ${stream.displayName}`}>
+    <button className="item-link" data-focus={`stream:${stream.streamId}`} onClick={() => channel(stream.broadcasterId, stream.displayName)} aria-label={`Open channel ${stream.displayName}`} aria-describedby={description}>
       <StreamPreview retryGeneration={retryGeneration} stream={stream} />
       <h3>{stream.displayName}</h3><p className="stream-title" title={stream.title}>{stream.title || "Untitled stream"}</p>
     </button>
+    <span className="sr-only" id={description}>Live · {stream.categoryName ?? "Uncategorized"} · {stream.title || "Untitled stream"}</span>
     <div className="stream-meta">{stream.categoryId ? <button className="text-button" data-focus={`category:${stream.categoryId}:stream:${stream.streamId}`} onClick={() => category(stream.categoryId!, stream.categoryName ?? "Category")}>{stream.categoryName ?? "Category"}</button> : <span>Uncategorized</span>}{stream.language && <span>{stream.language.toUpperCase()}</span>}</div>
     <WatchButton id={stream.broadcasterId} name={stream.displayName} {...watch} />
   </article>;
@@ -45,11 +47,12 @@ export function CategoryList({ items, open, retryGeneration }: { items: Category
   return <div className="category-grid">{items.map(category => <button key={category.id} className="item-link category-card" data-focus={`category:${category.id}`} onClick={() => open(category.id, category.name)} aria-label={`Open category ${category.name}`}><Media retryGeneration={retryGeneration} src={category.imageUrl} shape="artwork" /><h3>{category.name}</h3></button>)}</div>;
 }
 export function ChannelList({ items, open, retryGeneration, ...watch }: { items: ChannelSummary[]; retryGeneration: number; open: OpenChannel } & Watch) {
-  return <div className="channel-list">{items.map(channel => <div className="channel-entry" key={channel.broadcasterId}><button className="item-link channel-row" data-focus={`channel:${channel.broadcasterId}`} onClick={() => open(channel.broadcasterId, channel.displayName)} aria-label={`Open channel ${channel.displayName}`}>
+  const description = useId();
+  return <div className="channel-list">{items.map(channel => <div className="channel-entry" key={channel.broadcasterId}><button className="item-link channel-row" data-focus={`channel:${channel.broadcasterId}`} onClick={() => open(channel.broadcasterId, channel.displayName)} aria-label={`Open channel ${channel.displayName}`} aria-describedby={`${description}-${channel.broadcasterId}`}>
     <Media retryGeneration={retryGeneration} src={channel.imageUrl} shape="avatar" /><span><h3>{channel.displayName}<span className={channel.liveState === "live" ? "live-tag" : "muted"}> · {channel.liveState === "unknown" ? "Status unavailable" : channel.liveState === "live" ? "LIVE" : "Offline"}</span></h3>
     <p>{channel.title ?? `@${channel.login}`}</p><p>{channel.categoryName}{channel.language && ` · ${channel.language.toUpperCase()}`}</p>
     {channel.followedAt && <p>Followed {dateLabel(channel.followedAt)}</p>}</span>
-  </button>{channel.liveState === "live" && <WatchButton id={channel.broadcasterId} name={channel.displayName} {...watch} />}</div>)}</div>;
+  </button><span className="sr-only" id={`${description}-${channel.broadcasterId}`}>{channel.liveState === "unknown" ? "Live status unavailable" : channel.liveState === "live" ? "Live" : "Offline"}{channel.categoryName && ` · ${channel.categoryName}`}</span>{channel.liveState === "live" && <WatchButton id={channel.broadcasterId} name={channel.displayName} {...watch} />}</div>)}</div>;
 }
 export function PageFrame<T>({ query, children, empty, detail = false }: { query: ReturnType<typeof usePage<T>>; children: ReactNode; empty: string; detail?: boolean }) {
   const results = useRef<HTMLDivElement>(null);

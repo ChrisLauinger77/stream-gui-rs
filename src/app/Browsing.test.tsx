@@ -352,7 +352,7 @@ test.each(["Following", "Live", "Category"])("Watch launches trusted broadcaster
   expect(api.launch).toHaveBeenCalledWith({ authSessionId: "1", broadcasterId: "channel-one", quality: null });
   expect(container.querySelector(".workspace")).not.toBeNull();
   expect(container.querySelector(".watching-panel")?.textContent).toContain("running");
-  expect(text()).toContain("Streamlink started");
+  expect(text()).toContain("Streamlink process started");
 });
 test("live search and Channel details offer Watch but offline and unknown channels do not", async () => {
   vi.mocked(api.searchChannels).mockResolvedValue(page([{ ...channel, liveState: "live" }, { ...channel, broadcasterId: "offline", displayName: "Offline" }, { ...channel, broadcasterId: "unknown", displayName: "Unknown", liveState: "unknown" }]));
@@ -918,4 +918,45 @@ test("channel low latency keeps inherit, on and off distinct and displays Rust e
     expect(api.saveChannelSettings).toHaveBeenLastCalledWith(expect.objectContaining({ overrides: expect.objectContaining({ lowLatency: expected }) }));
     expect(text()).toContain(`Low latency: ${expected === false ? "Off" : "On"}`);
   }
+});
+
+test("panel closing returns focus to its opener and respects a deliberate focus move", async () => {
+  await render(); await click("Live");
+  const opener = button("Open channel Example Channel"); opener.focus();
+  await keypress(","); expect(document.activeElement).toBe(container.querySelector(".settings-header h2"));
+  await click("Close Settings"); expect(document.activeElement).toBe(opener);
+  await click("Settings"); button("Following").focus();
+  await click("Close Settings"); expect(document.activeElement).toBe(button("Following"));
+  await click("Watching"); await click("Close Watching"); expect(document.activeElement).toBe(button("Watching"));
+});
+test("closing Watching falls back safely after the original channel opener disappears", async () => {
+  vi.mocked(api.launch).mockResolvedValue(playing()); await render(); await click("Live");
+  button("Watch Example Channel").focus(); await click("Watch Example Channel");
+  vi.mocked(api.logout).mockResolvedValue(signedOut); await click("Sign out");
+  await click("Close Watching"); expect(document.activeElement).toBe(button("Watching"));
+});
+test("text size applies only accepted Rust settings and a late save does not steal focus", async () => {
+  const saving = deferred<typeof playbackSettings>(); vi.mocked(api.savePlaybackSettings).mockReturnValue(saving.promise);
+  await render(); await click("Settings"); await click("Appearance", ".settings-nav");
+  await editControl("Text size", "150", "select"); expect(document.documentElement.dataset.textScale).toBe("100");
+  await click("Save settings"); await click("Close Settings"); button("Live").focus();
+  await act(async () => saving.resolve({ ...playbackSettings, textScale: "150" }));
+  expect(document.documentElement.dataset.textScale).toBe("150"); expect(document.activeElement).toBe(button("Live"));
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, textScale: "125" });
+  await act(async () => root.render(null)); await render(); expect(document.documentElement.dataset.textScale).toBe("125");
+});
+test("accepted launch announces the returned process state rather than claiming video playback", async () => {
+  vi.mocked(api.launch).mockResolvedValue({ ...playing(), phase: "exited", endedAt: 200 });
+  await render(); const status = container.querySelector(".playback-feedback"); expect(status?.getAttribute("role")).toBe("status");
+  await click("Live"); await click("Watch Example Channel");
+  expect(status?.textContent).toContain("already stopped"); expect(status?.textContent).not.toContain("process started");
+});
+test("stream and followed-channel actions expose category, title and live state without image duplication", async () => {
+  await render(); await click("Live");
+  const action = button("Open channel Example Channel");
+  expect(document.getElementById(action.getAttribute("aria-describedby")!)?.textContent).toContain("A live broadcast");
+  expect(document.getElementById(action.getAttribute("aria-describedby")!)?.textContent).toContain("Example Game");
+  await click("Following"); await click("All channels");
+  const followed = button("Open channel Example Channel");
+  expect(document.getElementById(followed.getAttribute("aria-describedby")!)?.textContent).toContain("Offline");
 });

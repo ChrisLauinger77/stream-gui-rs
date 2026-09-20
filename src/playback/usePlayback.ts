@@ -65,7 +65,10 @@ export function usePlayback() {
           if (old && old.generation > snapshot.generation) return items;
           return old ? items.map(item => item.id === snapshot.id ? snapshot : item) : [...items, snapshot].slice(-16);
         });
-        setMessage(success);
+        if (snapshot.failure || snapshot.phase === "failed") setError(playbackError({ code: snapshot.failure ?? "process_failed" }));
+        else if (!key.startsWith("stop:") && ["stopping", "exited"].includes(snapshot.phase)) setMessage("The Streamlink process has already stopped or is stopping.");
+        else if (key.startsWith("stop:") && !["exited", "failed"].includes(snapshot.phase)) setMessage("Stopping the Streamlink process…");
+        else setMessage(success);
       }
     } catch (error) { if (mounted.current) setError(playbackError(error)); }
     finally {

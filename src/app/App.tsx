@@ -12,6 +12,7 @@ import { PlaybackSettings } from "../features/PlaybackSettings";
 import { api } from "../lib/ipc";
 import { useDesktop } from "./useDesktop";
 import { isNotificationTest, NotificationAcceptance } from "./NotificationAcceptance";
+import { usePanelFocus } from "./usePanelFocus";
 import { useAppearance } from "./useAppearance";
 import { useShortcuts, shortcutLabels } from "./shortcuts";
 
@@ -31,12 +32,18 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const [watching, setWatching] = useState(false);
   const playback = usePlayback();
   const { run } = playback;
-  useAppearance(playback.settings?.theme ?? "system");
+  useAppearance(playback.settings?.theme ?? "system", playback.settings?.textScale ?? "100");
   const workspace = useRef<BrowserActions>(null);
+  const { capture, restore } = usePanelFocus();
+  const settingsButton = useRef<HTMLButtonElement>(null);
+  const watchingButton = useRef<HTMLButtonElement>(null);
+  const settingsPanel = useRef<HTMLElement>(null);
   const settingsHeading = useRef<HTMLHeadingElement>(null);
   const watchingPanel = useRef<HTMLDivElement>(null);
   const [settingsRevision, setSettingsRevision] = useState(0);
   const shortcuts = shortcutLabels();
+  const closeSettings = () => { restore("settings", settingsPanel.current, settingsButton.current); setSettings(false); };
+  const closeWatching = () => { restore("watching", watchingPanel.current, watchingButton.current); setWatching(false); };
   useEffect(() => {
     const action = desktop.status?.action;
     if (!action) return;
@@ -68,35 +75,35 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   };
   useShortcuts({
     search: () => navigate("search"), following: () => navigate("following"), live: () => navigate("live"), categories: () => navigate("categories"),
-    watching: () => { setWatching(true); setSettings(false); }, settings: () => { setSettings(true); setWatching(false); },
-    back: () => { if (settings) setSettings(false); else if (watching) setWatching(false); else if (notificationTest) setNotificationTest(false); else workspace.current?.back(); },
+    watching: () => { if (!watching) capture("watching"); setWatching(true); setSettings(false); }, settings: () => { if (!settings) capture("settings"); setSettings(true); setWatching(false); },
+    back: () => { if (settings) closeSettings(); else if (watching) closeWatching(); else if (notificationTest) setNotificationTest(false); else workspace.current?.back(); },
     refresh: () => { if (!settings) workspace.current?.refresh(); },
   });
   const watch = useCallback((broadcasterId: string) => {
     if (!auth.sessionId) return;
-    setWatching(true); setSettings(false);
-    void run(`launch:${broadcasterId}`, () => api.launch({ authSessionId: auth.sessionId!, broadcasterId, quality: null }), "Streamlink started. Check Watching for status.");
-  }, [auth.sessionId, run]);
+    capture("watching"); setWatching(true); setSettings(false);
+    void run(`launch:${broadcasterId}`, () => api.launch({ authSessionId: auth.sessionId!, broadcasterId, quality: null }), "Streamlink process started. Check Watching for status.");
+  }, [auth.sessionId, run, capture]);
   const activeCount = playback.sessions.filter(session => session.restarting || ["starting", "running", "stopping"].includes(session.phase)).length;
   const controls = <div className="account-controls">
     <span className="connection-dot" aria-hidden="true" />
     <span>{auth.account?.displayName ?? auth.status?.user?.login ?? "Not connected"}</span>
     {auth.sessionId && <button className="quiet" disabled={auth.busy === "logout"} onClick={() => { void auth.run("logout"); }}>Sign out</button>}
-    <button className="quiet" aria-label="Watching" title={`Watching (${shortcuts.watching})`} aria-expanded={watching} onClick={() => { setWatching(!watching); if (!watching) setSettings(false); }}>Watching{activeCount > 0 && ` (${activeCount})`}</button>
-    <button className="quiet" title={`Settings (${shortcuts.settings})`} aria-expanded={settings} onClick={() => { setSettings(!settings); if (!settings) setWatching(false); }}>Settings</button>
+    <button ref={watchingButton} className="quiet" aria-label="Watching" title={`Watching (${shortcuts.watching})`} aria-expanded={watching} onClick={event => { if (watching) closeWatching(); else { capture("watching", event.currentTarget); setWatching(true); setSettings(false); } }}>Watching{activeCount > 0 && ` (${activeCount})`}</button>
+    <button ref={settingsButton} className="quiet" title={`Settings (${shortcuts.settings})`} aria-expanded={settings} onClick={event => { if (settings) closeSettings(); else { capture("settings", event.currentTarget); setSettings(true); setWatching(false); } }}>Settings</button>
   </div>;
   return <div className="application">
     <header className="app-bar"><div className="brand"><span aria-hidden="true">▶</span> Stream GUI RS</div>{controls}</header>
-    {settings && <section className="settings-panel" aria-label="Settings">
-      <div className="settings-header"><h2 tabIndex={-1} ref={settingsHeading}>Settings</h2><button className="quiet" onClick={developer}>Developer tools</button><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.quit); }}>{activeCount ? `Quit (stops ${activeCount} streams)` : "Quit"}</button></div>
+    {settings && <section ref={settingsPanel} className="settings-panel" aria-label="Settings">
+      <div className="settings-header"><h2 tabIndex={-1} ref={settingsHeading}>Settings</h2><button className="quiet" onClick={closeSettings}>Close Settings</button><button className="quiet" onClick={developer}>Developer tools</button><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.quit); }}>{activeCount ? `Quit (stops ${activeCount} streams)` : "Quit"}</button></div>
       <PlaybackSettings desktop={desktop} saved={playback.settings} onSaved={value => { playback.setSettings(value); setSettingsRevision(revision => revision + 1); }} />
       {auth.status?.phase === "not_configured" && <p>This build does not include a Twitch application ID. If you built it from source, follow the authentication setup in the project documentation.</p>}
     </section>}
-    {(playback.error || playback.message) && <div className={playback.error ? "error playback-feedback" : "notice playback-feedback"} role={playback.error ? "alert" : "status"}>{playback.error ?? playback.message}<button className="quiet" onClick={playback.dismiss}>Dismiss</button></div>}
-    {watching && <div className="watching-panel" ref={watchingPanel}><Playback sessions={playback.sessions}
+    <div className={playback.error ? "error playback-feedback" : playback.message ? "notice playback-feedback" : "playback-feedback empty-feedback"} role={playback.error ? "alert" : "status"} aria-atomic="true">{playback.error ?? playback.message}{(playback.error || playback.message) && <button className="quiet" onClick={playback.dismiss}>Dismiss</button>}</div>
+    {watching && <div className="watching-panel" ref={watchingPanel}><button className="quiet close-panel" onClick={closeWatching}>Close Watching</button><Playback sessions={playback.sessions}
       isStopping={id => playback.pending.has(`stop:${id}`)} isRestarting={id => playback.pending.has(`restart:${id}`)}
       stop={id => { void playback.run(`stop:${id}`, () => api.stop(id), "Playback stopped."); }}
-      restart={(session, quality) => { void playback.run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), "Streamlink restarted."); }} /></div>}
+      restart={(session, quality) => { void playback.run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), "Streamlink process restarted."); }} /></div>}
     {auth.error && <p className="error" role="alert">{auth.error}</p>}
     {notificationTest ? <main className="settings-panel">
       <h1 tabIndex={-1} ref={testHeading}>TEST notification · Synthetic channel</h1>

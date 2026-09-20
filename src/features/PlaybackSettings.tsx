@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { api } from "../lib/ipc";
-import type { PlayerDiscovery, PlayerMode, ProbeResult, Settings, Theme } from "../lib/generated";
+import type { PlayerDiscovery, PlayerMode, ProbeResult, Settings, TextScale, Theme } from "../lib/generated";
 import { QualitySelect } from "../playback/QualitySelect";
 import { playbackError } from "../playback/usePlayback";
 import { shortcutLabels } from "../app/shortcuts";
@@ -79,6 +79,7 @@ function SettingsForm({ initial, saved, onSaved, desktop }: { desktop: ReturnTyp
           </details>
         </div>
         <div hidden={section !== "Appearance"} className="setting-group">
+          <label>Text size<select value={draft.textScale} onChange={event => setDraft({ ...draft, textScale: event.target.value as TextScale })}><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option></select></label>
           <label>Appearance<select value={draft.theme} onChange={event => setDraft({ ...draft, theme: event.target.value as Theme })}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
           <p className="muted">System follows the color preference provided by your desktop. Save to apply your selection.</p>
         </div>
