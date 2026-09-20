@@ -1116,3 +1116,113 @@ test("a failed save after Settings reopens leaves accepted values and new edits 
   await click("Save settings");
   expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ lowLatency: false, textScale: "125" }));
 });
+
+test("failed early language save does not discard the initial settings snapshot", async () => {
+  const loading = deferred<typeof playbackSettings>();
+  vi.mocked(api.playbackSettings).mockReturnValue(loading.promise);
+  vi.mocked(api.saveDiscoveryLanguage).mockRejectedValue({ code: "settings" });
+  await render(); await click("Live"); await selectLanguage("de");
+  await act(async () => loading.resolve({ ...playbackSettings, textScale: "150", theme: "dark" }));
+  await click("Settings");
+  expect(text()).not.toContain("Loading settings");
+  expect(document.documentElement.dataset.textScale).toBe("150"); expect(document.documentElement.dataset.theme).toBe("dark");
+});
+test("failed later language intent retains an earlier success across filter remounts", async () => {
+  const first = deferred<typeof playbackSettings>(); const second = deferred<typeof playbackSettings>();
+  vi.mocked(api.saveDiscoveryLanguage).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  await render(); await click("Live"); await selectLanguage("de");
+  await click("Following"); await click("Live"); await selectLanguage("en");
+  await act(async () => first.resolve({ ...playbackSettings, discoveryLanguage: "de" }));
+  expect(api.saveDiscoveryLanguage).toHaveBeenCalledTimes(2);
+  await act(async () => second.reject({ code: "settings" }));
+  await click("Following"); await click("Live");
+  expect(container.querySelector<HTMLSelectElement>(".language-filter select")!.value).toBe("de");
+  expect(api.streams).toHaveBeenLastCalledWith(expect.objectContaining({ language: "de" }));
+});
+test("accepted language save wins over a late initial settings read", async () => {
+  const loading = deferred<typeof playbackSettings>();
+  vi.mocked(api.playbackSettings).mockReturnValue(loading.promise);
+  vi.mocked(api.saveDiscoveryLanguage).mockResolvedValue({ ...playbackSettings, discoveryLanguage: "de", textScale: "125" });
+  await render(); await click("Live"); await selectLanguage("de");
+  await act(async () => loading.resolve(playbackSettings));
+  await click("Following"); await click("Live"); await click("Settings");
+  expect(text()).not.toContain("Loading settings"); expect(document.documentElement.dataset.textScale).toBe("125");
+  expect(api.streams).toHaveBeenLastCalledWith(expect.objectContaining({ language: "de" }));
+});
+test("failed language save preserves a previously accepted language", async () => {
+  vi.mocked(api.saveDiscoveryLanguage).mockResolvedValueOnce({ ...playbackSettings, discoveryLanguage: "de" }).mockRejectedValueOnce({ code: "settings" });
+  await render(); await click("Live"); await selectLanguage("de"); await selectLanguage("en");
+  expect(container.querySelector<HTMLSelectElement>(".language-filter select")!.value).toBe("de");
+  await click("Following"); await click("Live");
+  expect(api.streams).toHaveBeenLastCalledWith(expect.objectContaining({ language: "de" }));
+});
+test("language and global saves preserve accepted appearance and background preferences", async () => {
+  const language = deferred<typeof playbackSettings>(); const global = deferred<typeof playbackSettings>();
+  vi.mocked(api.saveDiscoveryLanguage).mockReturnValue(language.promise);
+  vi.mocked(api.savePlaybackSettings).mockReturnValue(global.promise);
+  await render(); await click("Live"); await selectLanguage("de"); await click("Settings");
+  await click("Appearance", ".settings-nav"); await editControl("Text size", "150", "select");
+  await click("Background", ".settings-nav"); await toggleControl("Monitor followed live streams"); await click("Save settings");
+  await act(async () => language.resolve({ ...playbackSettings, discoveryLanguage: "de" }));
+  expect(api.savePlaybackSettings).toHaveBeenCalledOnce();
+  await act(async () => global.resolve({ ...vi.mocked(api.savePlaybackSettings).mock.calls[0][0], discoveryLanguage: "de" }));
+  await click("Close Settings"); await click("Following"); await click("Live"); await click("Settings");
+  expect(api.streams).toHaveBeenLastCalledWith(expect.objectContaining({ language: "de" }));
+  expect(document.documentElement.dataset.textScale).toBe("150");
+  await click("Background", ".settings-nav");
+  expect([...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(input => input.closest("label")?.textContent?.includes("Monitor followed live streams"))?.checked).toBe(true);
+});
+test("language saves queued across navigation preserve newer successful intent", async () => {
+  const first = deferred<typeof playbackSettings>(); const second = deferred<typeof playbackSettings>();
+  vi.mocked(api.saveDiscoveryLanguage).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  await render(); await click("Live"); await selectLanguage("de");
+  await click("Following"); await click("Live"); await selectLanguage("en");
+  expect(api.saveDiscoveryLanguage).toHaveBeenCalledOnce();
+  await act(async () => first.resolve({ ...playbackSettings, discoveryLanguage: "de" }));
+  expect(api.saveDiscoveryLanguage).toHaveBeenLastCalledWith("en");
+  await act(async () => second.resolve({ ...playbackSettings, discoveryLanguage: "en" }));
+  await click("Following"); await click("Live");
+  expect(api.streams).toHaveBeenLastCalledWith(expect.objectContaining({ language: "en" }));
+});
+
+test("language mutation after a pending global save keeps its accepted appearance and background", async () => {
+  const saving = deferred<typeof playbackSettings>(); let persisted = { ...playbackSettings };
+  vi.mocked(api.savePlaybackSettings).mockReturnValue(saving.promise);
+  vi.mocked(api.saveDiscoveryLanguage).mockImplementation(async discoveryLanguage => ({ ...persisted, discoveryLanguage }));
+  await render(); await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Text size", "150", "select");
+  await click("Background", ".settings-nav"); await toggleControl("Monitor followed live streams"); await click("Save settings");
+  await click("Live"); await selectLanguage("de");
+  expect(api.saveDiscoveryLanguage).not.toHaveBeenCalled();
+  persisted = vi.mocked(api.savePlaybackSettings).mock.calls[0][0];
+  await act(async () => saving.resolve(persisted));
+  expect(document.documentElement.dataset.textScale).toBe("150");
+  await click("Close Settings"); await click("Settings"); await click("Background", ".settings-nav");
+  expect([...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(input => input.closest("label")?.textContent?.includes("Monitor followed live streams"))?.checked).toBe(true);
+  await click("Following"); await click("Live");
+  expect(api.streams).toHaveBeenLastCalledWith(expect.objectContaining({ language: "de" }));
+});
+test("queued settings mutations recover from failure and ignore late initialization errors", async () => {
+  const loading = deferred<typeof playbackSettings>(); const language = deferred<typeof playbackSettings>();
+  vi.mocked(api.playbackSettings).mockReturnValue(loading.promise);
+  vi.mocked(api.saveDiscoveryLanguage).mockReturnValueOnce(language.promise).mockResolvedValueOnce({ ...playbackSettings, discoveryLanguage: "en", textScale: "125" });
+  await render(); await click("Live"); await selectLanguage("de");
+  await click("Following"); await click("Live"); await selectLanguage("en");
+  await act(async () => language.reject({ code: "settings" }));
+  await act(async () => loading.reject({ code: "settings" }));
+  await click("Settings");
+  expect(text()).not.toContain("Loading settings"); expect(text()).not.toContain("could not be saved or read");
+  expect(document.documentElement.dataset.textScale).toBe("125");
+  expect(api.streams).toHaveBeenLastCalledWith(expect.objectContaining({ language: "en" }));
+});
+test("repeated language filter remounts retain bounded pending mutations", async () => {
+  const first = deferred<typeof playbackSettings>();
+  vi.mocked(api.saveDiscoveryLanguage).mockReturnValueOnce(first.promise).mockImplementation(async discoveryLanguage => ({ ...playbackSettings, discoveryLanguage }));
+  await render();
+  for (let attempt = 0; attempt < 9; attempt++) {
+    await click("Live"); await selectLanguage(attempt % 2 ? "en" : "de"); await click("Following");
+  }
+  expect(api.saveDiscoveryLanguage).toHaveBeenCalledOnce();
+  await act(async () => first.resolve({ ...playbackSettings, discoveryLanguage: "de" }));
+  expect(api.saveDiscoveryLanguage).toHaveBeenCalledTimes(8);
+  await click("Live"); expect(api.streams).toHaveBeenLastCalledWith(expect.objectContaining({ language: "en" }));
+});
