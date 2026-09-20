@@ -442,11 +442,21 @@ fn notification_overrides_inherit_enable_disable_and_remain_sparse() {
 #[test]
 fn version_four_migration_preserves_released_preferences_and_defaults_phase_six() {
     let root = tempfile::tempdir().unwrap();
+    // Use portable absolute paths without depending on installed executables.
+    let streamlink = root.path().join("Tools ü/Streamlink/streamlink.exe");
+    let player = root.path().join("Media Players ü/mpv.exe");
+    let arguments = [
+        "--volume=25",
+        "literal spaces",
+        "{braces}",
+        "\"quoted\"",
+        "",
+    ];
     let old = serde_json::json!({"version":4,"settings":{
-        "streamlinkPath":null,"player":{"mode":"mpv","executable":null,"arguments":["literal","{braces}",""]},
+        "streamlinkPath":streamlink,"player":{"mode":"mpv","executable":player,"arguments":arguments},
         "defaultQuality":"audio","automaticChat":true,"theme":"dark",
         "background":{"monitoringEnabled":true,"notificationsEnabled":true,"closeToBackground":true,"intervalSeconds":300}
-    },"channelOverrides":{"123":{"quality":"low","automaticChat":false,"notifications":false},"456":{"quality":null,"automaticChat":null,"notifications":null}}});
+    },"channelOverrides":{"123":{"quality":"low","automaticChat":false,"notifications":false},"456":{"quality":null,"automaticChat":null,"notifications":null},"789":{"quality":"high","automaticChat":true,"notifications":true}}});
     let original = old.to_string();
     fs::write(root.path().join("settings.json"), &original).unwrap();
     let store = SettingsStore::open(root.path()).unwrap();
@@ -454,28 +464,54 @@ fn version_four_migration_preserves_released_preferences_and_defaults_phase_six(
     assert_eq!(settings.discovery_language, None);
     assert_eq!(settings.text_scale, TextScale::Normal);
     assert!(!settings.low_latency);
-    assert_eq!(settings.player.arguments, ["literal", "{braces}", ""]);
+    assert_eq!(settings.streamlink_path.as_deref(), streamlink.to_str());
+    assert_eq!(settings.player.executable.as_deref(), player.to_str());
+    assert_eq!(
+        settings.player.mode,
+        crate::streamlink::playback::PlayerMode::Mpv
+    );
+    assert_eq!(settings.player.arguments, arguments);
     assert_eq!(settings.default_quality, QualityPolicy::Audio);
     assert!(settings.automatic_chat && settings.background.close_to_background);
     assert!(settings.background.monitoring_enabled && settings.background.notifications_enabled);
     assert_eq!(settings.background.interval_seconds, 300);
     assert_eq!(settings.theme, Theme::Dark);
-    assert_eq!(store.channel("123").unwrap().overrides.low_latency, None);
-    assert!(!store.notifications("123"));
-    assert!(
-        !store
-            .value
-            .lock()
-            .unwrap()
-            .channel_overrides
-            .contains_key("456")
-    );
+    let check_channels = |store: &SettingsStore| {
+        for (id, quality, enabled) in [
+            ("123", QualityPolicy::Low, false),
+            ("789", QualityPolicy::High, true),
+        ] {
+            let channel = store.channel(id).unwrap();
+            assert_eq!(
+                channel.overrides,
+                ChannelOverrides {
+                    quality: Some(quality),
+                    automatic_chat: Some(enabled),
+                    notifications: Some(enabled),
+                    low_latency: None,
+                }
+            );
+            assert_eq!(channel.effective.quality, quality);
+            assert_eq!(channel.effective.automatic_chat, enabled);
+            assert!(!channel.effective.low_latency);
+            assert_eq!(store.notifications(id), enabled);
+        }
+        let value = store.value.lock().unwrap();
+        assert_eq!(value.channel_overrides.len(), 2);
+        assert!(!value.channel_overrides.contains_key("456"));
+    };
+    check_channels(&store);
     assert_eq!(fs::read_to_string(store.path()).unwrap(), original);
     store.update(settings.clone()).unwrap();
-    assert_eq!(
-        SettingsStore::open(root.path()).unwrap().snapshot(),
-        settings
-    );
+    let reopened = SettingsStore::open(root.path()).unwrap();
+    assert_eq!(reopened.snapshot(), settings);
+    check_channels(&reopened);
+    let saved: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
+    assert_eq!(saved["version"], 5);
+    assert!(saved["settings"]["discoveryLanguage"].is_null());
+    assert_eq!(saved["settings"]["lowLatency"], false);
+    assert_eq!(saved["settings"]["textScale"], "100");
     for key in ["lowLatency", "textScale", "discoveryLanguage"] {
         let mut invalid = old.clone();
         invalid["settings"][key] = serde_json::json!(false);

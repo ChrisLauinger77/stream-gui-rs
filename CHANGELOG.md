@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-09-20
+
+### Added
+
+- Language filtering for Live and category streams, with saved defaults and Back navigation.
+- Direct channel lookup by exact Twitch login, including offline channels.
+- Optional low-latency Twitch playback, globally or per channel.
+- Application text sizes of 100%, 125% and 150%.
+- Previewable support reports with anonymous, allowlisted troubleshooting information.
+- About access from the main interface and tray/status menu on every platform, with consistent version, build commit and repository link.
+
+### Improved
+
+- Keyboard focus restoration, wrapping at larger text sizes, and accessible live/offline/unknown channel descriptions.
+
+### Fixed
+
+- Saved preferences stay consistent when Settings closes/reopens or language, global and channel saves overlap; deliberate unsaved edits are retained.
+- Tray and notification navigation reveal their destination when a modal dialog was open.
+
 ## 0.2.0 - 2026-09-20
 
 ### Added

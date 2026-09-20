@@ -230,3 +230,8 @@ The final settings-authority review found no further confirmed correctness defec
 The fixture now derives its nonexistent executable path from its temporary directory and explicitly asserts that it is absolute and absent. The report/privacy assertions remain intact. Production code, settings validation, IPC and dependencies are unchanged.
 
 Local Linux revalidation passed all **3 support-report tests**, the full **156 backend / 30 process / 2 build-info / 1 client-ID** suite, formatting, strict all-target Clippy and `git diff --check`. The correction still requires a new Windows CI run; Linux results do not establish Windows native acceptance. No release or push was performed for this correction.
+
+
+## Maintainer native report before 0.3.0 hardening
+
+On 2026-09-20, the maintainer reported completed Phase 6 native testing on Linux, Windows and macOS, with real Twitch playback verified on all three and CI green. This is user-reported development evidence; exact package hashes, environment details and individual accessibility/privacy checks were not supplied with that report. It does not accept the subsequently built 0.3.0 candidate. That candidate uses the focused [release smoke checklist](release-smoke-test.md) and a run-specific result record.

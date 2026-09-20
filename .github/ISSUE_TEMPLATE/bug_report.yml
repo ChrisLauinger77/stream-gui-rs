@@ -20,8 +20,8 @@ body:
     id: build
     attributes:
       label: Stream GUI RS version / build
-      description: Copy the version and commit exactly as shown in About on macOS or Settings → Developer tools → Backend diagnostics on any platform.
-      placeholder: 0.2.0 (c0bbb61)
+      description: Copy the version and commit from About, Settings → Prepare support report, or Settings → Developer tools → Backend diagnostics.
+      placeholder: 0.3.0 (a1b2c3d)
     validations:
       required: true
   - type: dropdown
@@ -138,10 +138,10 @@ body:
   - type: textarea
     id: diagnostics
     attributes:
-      label: Sanitized diagnostics / logs
+      label: Support report / sanitized diagnostics
       description: >-
-        Paste only relevant output. Stream GUI RS diagnostics are designed to avoid credentials,
-        but review everything before submitting. DO NOT include Twitch OAuth access tokens,
+        Prefer Settings → Prepare support report and review the preview before copying. Full local
+        diagnostics and logs contain more detail; remove identifying data. DO NOT include Twitch OAuth access tokens,
         refresh tokens, credentials, private keys or passwords. Remove device codes and private
         personal information too.
       render: text

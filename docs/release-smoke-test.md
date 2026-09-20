@@ -2,14 +2,20 @@
 
 Before publication, use only files downloaded from one successful manual Release candidate run. Record its URL, run ID, exact 40-character commit SHA, SHA-256 files, artifact names, tester, date, OS version/architecture, Linux distribution/desktop/session, Streamlink version and player version. After publication, verify that downloads have those same checksums. Do not rebuild or substitute files after testing.
 
+## Scope for 0.3.0
+
+Complete the integrity, focused 0.3.0 and relevant platform checks on Windows, Linux (prefer DEB) and macOS using the same candidate run. Perform the real 0.2.0 upgrade below on at least one platform **before** any logout, reset or uninstall. Preserve an existing profile on the other platforms where available; mark fresh-install credential checks separately.
+
+The detailed historical background/Notification Center stress scenarios remain a reference for changes affecting those areas; they are not all repeated for this release. Record untested Linux formats, Intel/Apple Silicon execution, high-DPI and screen-reader coverage explicitly. Metadata/architecture checks still cover every package. An incomplete exhaustive screen-reader audit alone is not a blocker; a keyboard trap, unreachable action, invisible focus, unusable 150% layout or false status is.
+
 ## Integrity and common checks
 
 - [ ] The candidate run identifies the intended commit and version. No tag is needed for candidate testing.
 - [ ] Every downloaded filename identifies the release version, platform, and architecture.
 - [ ] `SHA256SUMS_<platform>_<architecture>.txt` verifies every distributable in its artifact archive.
 - [ ] Install or open the package without setting `TWITCH_CLIENT_ID` or `TWITCH_CLIENT_ID_BUILD`.
-- [ ] The application identifies itself as Stream GUI RS X.Y.Z and the expected short commit in diagnostics; macOS About matches.
-- [ ] Connect to Twitch through the browser Device Code flow.
+- [ ] The application identifies itself as Stream GUI RS X.Y.Z and the expected short commit in About, diagnostics and the support report on every platform.
+- [ ] First verify restored credentials on upgrade profiles. Exercise Device Code sign-in separately on a fresh profile or after the upgrade result is recorded.
 - [ ] Quit and relaunch; the authenticated session restores from native secure storage.
 - [ ] Following, Live, Categories, Search, and channel details load real Twitch data.
 - [ ] Streamlink 8.0+ is discovered or accepted by absolute path.
@@ -40,7 +46,7 @@ Artifacts: `Stream-GUI-RS_X.Y.Z_windows_x86_64-setup.exe`, `Stream-GUI-RS_X.Y.Z_
 
 Artifacts: `Stream-GUI-RS_X.Y.Z_linux_x86_64.AppImage`, `Stream-GUI-RS_X.Y.Z_linux_amd64.deb`, and `Stream-GUI-RS_X.Y.Z_linux_x86_64.rpm`
 
-Test all three formats separately on matching supported desktop sessions.
+Record each format separately on matching desktop sessions; 0.3.0 requires a native Linux candidate smoke test, preferably DEB. Content/metadata checks cover all three formats; do not infer RPM/AppImage execution from DEB success.
 
 - [ ] AppImage is executable and starts from the desktop environment.
 - [ ] AppImage startup emits no GVFS `undefined symbol` error and no `EGL_BAD_PARAMETER` abort.
@@ -69,7 +75,7 @@ Artifact: `Stream-GUI-RS_X.Y.Z_macos_universal.dmg`
 - [ ] Dragging the app to Applications and removing it both work as expected.
 - [ ] After publication, `brew tap ChrisLauinger77/cask` and `brew install --cask stream-gui-rs` install the same universal DMG from the release, and `brew uninstall --cask stream-gui-rs` succeeds.
 
-## Background behavior (0.2.0 and later)
+## Extended background regression reference (0.2.0 and later)
 
 - [ ] Upgrade a version 3 settings file; playback/theme/channel preferences survive and monitoring, notifications and background close default off.
 - [ ] Enable monitoring/notifications, grant permission where requested, and confirm the initial live list is quiet.
@@ -111,22 +117,35 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --features test-s
 
 These helper tests do not replace the installed-artifact checks above. macOS bundle permission, denial/re-enable, notification focus, menu-bar controls and Command-Q acceptance remain separate pending checks on both supported native architectures.
 
-## Upgrade from 0.1.0 and result record
+## Upgrade from 0.2.0 and result record
 
-At least one real native upgrade is required before approval. Quit 0.1.0 normally with a stored Twitch login and representative playback paths/arguments, quality, channel overrides, browser-chat preference and theme. Install the candidate over it without clearing settings or credential storage. Confirm automatic sign-in and unchanged preferences, new background options off, working playback, and persistence after Quit/relaunch. Never copy or print credentials. Migration stays in memory until the next settings save; that save writes schema 4. Downgrading to 0.1.0 after saving schema 4 is not supported.
+At least one real native upgrade is required before approval. Quit 0.2.0 normally with a stored Twitch login and representative Streamlink/player paths (including spaces where available), arguments, quality, automatic browser chat, theme, monitoring/notification/close settings and channel quality/chat/notification overrides. Install the exact candidate over it without logout, reset, uninstall or clearing native credentials. Never inspect, copy or print token values.
 
-Record every row as **PASS**, **FAIL** or **NOT TESTED**, with the artifact name/hash and environment. Record Debian/RPM/AppImage and macOS architectures separately where tested; one desktop cannot establish universal Linux parity.
+Confirm startup without migration errors, automatic sign-in and unchanged old preferences. New defaults must be Any language, low latency Off, channel low latency Inherit and 100% text. Confirm no unnecessary fully inherited channel records. Migration remains in memory until a settings save writes schema 5; save once, Quit/relaunch and verify settings/login/playback again. Downgrading to 0.2.0 after a schema 5 save is unsupported. Automated migrations 1–4 complement this real-profile check.
+
+## Focused 0.3.0 candidate checks
+
+Run on each of Linux, Windows and macOS and record PASS, FAIL or NOT TESTED with the exact artifact/hash and environment:
+
+- [ ] Real Twitch browsing works. Live/category language selection changes the results, survives navigation, and Back restores the earlier selection; Following remains unfiltered. Errors are not presented as empty results.
+- [ ] Exact Twitch login lookup opens the expected channel without autoplay; invalid, not-found and offline/error states remain distinct.
+- [ ] Real playback works with low latency Off and On. Changing a global/channel preference leaves a running stream unchanged; Restart uses the current effective preference. Exercise Inherit/On/Off, Stop and independent sessions where practical. No exact latency measurement is required or claimed.
+- [ ] 100/125/150% text remains usable; primary actions, Settings, support report and About are keyboard accessible with visible/restored focus and truthful states. Record high-DPI checks and Orca/Narrator/VoiceOver separately without claiming certification.
+- [ ] Preview a real support report. Visually verify absence of username, profile/drive/path, executable paths, player arguments, Twitch account/channel/title, OAuth data and raw logs. Preview performs no automatic upload/copy/save. Copy only deliberately after review.
+- [ ] Main-interface and tray/status About agree with diagnostics/report: `0.3.0 (<candidate SHA first seven characters>)`, icon/name and the fixed repository link. Repeated activation reuses the dialog; hidden-window activation restores access; closing About leaves playback/monitoring running. macOS app/menu-bar entries invoke the same native AppKit panel.
+- [ ] Existing background monitoring remains healthy; test notification activation where practical. Close-to-background preserves playback, restored Watching reconstructs state, and explicit Quit (including tray Quit/Command-Q) cleans up owned playback. Relaunch preserves login/settings. Windows startup/probes/playback produce no unwanted console.
 
 | Native gate | Windows | Linux | macOS |
 | --- | --- | --- | --- |
-| Install/startup and version/commit | NOT TESTED | NOT TESTED | NOT TESTED |
-| Existing login and settings upgrade | NOT TESTED | NOT TESTED | NOT TESTED |
-| Real browsing/playback, Stop/Restart, two sessions | NOT TESTED | NOT TESTED | NOT TESTED |
-| Notification permission/delivery/click and retention | NOT TESTED | NOT TESTED | NOT TESTED |
-| Tray/menu-bar, Pause/Resume and background close | NOT TESTED | NOT TESTED | NOT TESTED |
-| Hidden playback and restored Watching state | NOT TESTED | NOT TESTED | NOT TESTED |
-| Sleep/network recovery and quiet baseline | NOT TESTED | NOT TESTED | NOT TESTED |
-| Browser chat, explicit Quit and owned-process cleanup | NOT TESTED | NOT TESTED | NOT TESTED |
-| Relaunch persistence | NOT TESTED | NOT TESTED | NOT TESTED |
+| Exact package install/startup, signing behavior and build identity | NOT TESTED | NOT TESTED | NOT TESTED |
+| Existing login and v4 → v5 settings upgrade (at least one required) | NOT TESTED | NOT TESTED | NOT TESTED |
+| Discovery language and exact lookup | NOT TESTED | NOT TESTED | NOT TESTED |
+| Real playback, low latency Off/On, unchanged active run, Restart/Stop | NOT TESTED | NOT TESTED | NOT TESTED |
+| Text sizes, keyboard/focus and status feedback | NOT TESTED | NOT TESTED | NOT TESTED |
+| Support report privacy preview | NOT TESTED | NOT TESTED | NOT TESTED |
+| About, hidden/repeated activation, identity and repository link | NOT TESTED | NOT TESTED | NOT TESTED |
+| Background/Watching, explicit Quit and relaunch persistence | NOT TESTED | NOT TESTED | NOT TESTED |
+| Notification activation where practical | NOT TESTED | NOT TESTED | NOT TESTED |
+| Orca / Narrator / VoiceOver (record gaps) | NOT TESTED | NOT TESTED | NOT TESTED |
 
-This table is a blank checklist, not a claim about a candidate. Store completed results with the candidate run identity without changing its source commit. Any post-test source change requires a new candidate.
+This is a blank checklist, not candidate acceptance. Store completed results with the candidate run identity without changing its source commit. Any post-test source/configuration change requires a new candidate.

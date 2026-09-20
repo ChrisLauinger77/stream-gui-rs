@@ -29,7 +29,7 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
 - About on every desktop platform and a previewable support report
 
-The list describes the current source tree. Phase 6 additions are unreleased; this work does not change the application version or publish v0.3.0.
+The list describes the 0.3.0 source tree. See [release notes](docs/release-notes-0.3.0.md) for changes and upgrade guidance; candidate builds are not published releases.
 
 Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. Background features are available in 0.2.0 and later; v0.1.0 packages retain their original close-to-exit behavior.
 
@@ -115,7 +115,7 @@ The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectiv
 
 ## Background monitoring and notifications
 
-In **Settings → Background**, enable **Monitor followed live streams**, choose a 1, 2, or 5 minute interval, and enable notifications. All background preferences default off, including when upgrading existing settings. Channel preferences can inherit, enable, or disable the global notification default. Monitoring still requires sign-in; notification permission is independent.
+In **Settings → Background**, enable **Monitor followed live streams**, choose a 1, 2, or 5 minute interval, and enable notifications. Background preferences default off for new installations; upgrades from 0.2.0 preserve existing monitoring, notification and close behavior. Channel preferences can inherit, enable, or disable the global notification default. Monitoring still requires sign-in; notification permission is independent.
 
 The first scan is quiet. Later newly observed Twitch stream IDs can notify with channel, title, and category. Pause stops polling until Resume or application restart. Resume, waking from sleep, and recovering from an outage establish a quiet baseline, without replaying missed transitions. Incomplete scans retain a marked previous count and retry with bounded backoff. Very large or slow scans can report incomplete monitoring; they never silently report a partial list as complete. At most ten eligible notifications are sent per scan; excess transitions are suppressed rather than queued into a later burst.
 
@@ -127,7 +127,7 @@ Notification clicks restore the app and select the channel while the original si
 - **Windows:** native toast notifications use the application's installed identity. After a banner times out, its Notification Center entry remains actionable for up to 15 minutes while the app and original monitoring/sign-in session remain active. Pause, logout and Quit retire those entries; notification clicks cannot reopen the app after Quit. Use the installer and its Start-menu shortcut for notification testing; an unregistered portable executable may not support delivery/activation. Installed Notification Center behavior still needs the [native acceptance checks](docs/release-smoke-test.md#windows-notification-center-acceptance).
 - **macOS:** allow notifications explicitly in Settings, then manage denial in macOS System Settings. Notifications require an installed, correctly signed app bundle; a bare development executable reports unavailable. Authorization failures remain visible and can be retried after correcting the installation. See the [notification acceptance guide](docs/notification-acceptance.md) if no permission prompt appears.
 
-See the [0.2.0 release checks](docs/release-readiness-0.2.0.md) for validation scope and native acceptance requirements.
+See the [0.3.0 release checks](docs/release-readiness-0.3.0.md) for validation scope and native acceptance requirements.
 
 ## Current limitations
 

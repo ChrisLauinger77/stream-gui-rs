@@ -1,6 +1,6 @@
 [package]
 name = "stream-gui-rs"
-version = "0.2.0"
+version = "0.3.0"
 description = "A modern Rust/Tauri desktop frontend for watching Twitch streams via Streamlink"
 authors = ["ChrisLauinger77"]
 license = "GPL-3.0-only"
