@@ -10,11 +10,12 @@ import type { useDesktop } from "../app/useDesktop";
 
 const sections = ["Playback", "Streamlink", "Player", "Appearance", "Background", "Shortcuts"] as const;
 type Section = typeof sections[number];
-export function PlaybackSettings({ saved, onSaved, desktop }: { desktop: ReturnType<typeof useDesktop>; saved: Settings | null; onSaved: (value: Settings) => void }) {
-  if (!saved) return <p role="status">Loading settings…</p>;
-  return <SettingsForm initial={saved} saved={saved} onSaved={onSaved} desktop={desktop} />;
+type SettingsProps = { desktop: ReturnType<typeof useDesktop>; saved: Settings | null; onSaved: (value: Settings) => void; saving: boolean; commit: (action: () => Promise<Settings>) => Promise<Settings> };
+export function PlaybackSettings(props: SettingsProps) {
+  if (!props.saved) return <p role="status">Loading settings…</p>;
+  return <SettingsForm {...props} initial={props.saved} saved={props.saved} />;
 }
-function SettingsForm({ initial, saved, onSaved, desktop }: { desktop: ReturnType<typeof useDesktop>; initial: Settings; saved: Settings; onSaved: (value: Settings) => void }) {
+function SettingsForm({ initial, saved, onSaved, desktop, saving, commit }: SettingsProps & { initial: Settings; saved: Settings }) {
   const [section, setSection] = useState<Section>("Playback");
   const [draft, setDraft] = useState(initial);
   const [probe, setProbe] = useState<ProbeResult | null>(null);
@@ -24,7 +25,7 @@ function SettingsForm({ initial, saved, onSaved, desktop }: { desktop: ReturnTyp
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const run = async (key: string, action: () => Promise<void>) => {
-    if (inFlight.current) return;
+    if (inFlight.current || saving) return;
     inFlight.current = true; setBusy(key); setError(null); setMessage(null);
     try { await action(); } catch (error) { setError(playbackError(error)); }
     finally { inFlight.current = false; setBusy(null); }
@@ -36,11 +37,11 @@ function SettingsForm({ initial, saved, onSaved, desktop }: { desktop: ReturnTyp
     <form noValidate className="playback-settings" aria-label="Application preferences" onSubmit={event => {
       event.preventDefault();
       void run("save", async () => {
-        const value = await api.savePlaybackSettings(draft);
+        const value = await commit(() => api.savePlaybackSettings(draft));
         setDraft(value); onSaved(value); setMessage("Settings saved. Background preferences apply now; playback preferences apply to new launches and restarts.");
       });
     }}>
-      <fieldset disabled={!!busy}>
+      <fieldset disabled={!!busy || saving}>
         <legend>{section}</legend>
         <div hidden={section !== "Playback"} className="setting-group">
           <QualitySelect label="Default quality" value={draft.defaultQuality} change={defaultQuality => setDraft({ ...draft, defaultQuality })} />
@@ -55,8 +56,12 @@ function SettingsForm({ initial, saved, onSaved, desktop }: { desktop: ReturnTyp
           <label>Streamlink executable<input value={draft.streamlinkPath ?? ""} placeholder="Automatic discovery" maxLength={4096} onChange={event => { setDraft({ ...draft, streamlinkPath: event.target.value || null }); setProbe(null); }} /></label>
           <p className="muted">{draft.streamlinkPath ? "Explicit executable override" : "Automatic discovery from PATH and standard installation locations"}</p>
           <button type="button" onClick={() => { void run("probe", async () => {
-            setProbe(null); const result = await api.probe({ customPath: draft.streamlinkPath });
-            setProbe(result); onSaved(await api.playbackSettings());
+            setProbe(null);
+            const value = await commit(async () => {
+              const result = await api.probe({ customPath: draft.streamlinkPath });
+              setProbe(result); return api.playbackSettings();
+            });
+            onSaved(value);
           }); }}>Test and save Streamlink path</button>
           <p className="muted path">Detected: {probe?.executable ?? "Not tested"}<br />Version: {probe?.version ?? "—"}</p>
           <p className="muted">Install Streamlink 8 or newer separately. A failed test preserves the saved path. Streamlink configuration files and sideloaded plugins are disabled.</p>
@@ -92,7 +97,7 @@ function SettingsForm({ initial, saved, onSaved, desktop }: { desktop: ReturnTyp
         </div>
         {section !== "Shortcuts" && <div className="settings-save"><button type="submit">Save settings</button><button type="button" onClick={() => { setDraft(saved); setProbe(null); setError(null); setMessage("Unsaved changes discarded."); }}>Cancel changes</button><span className="muted">{JSON.stringify(draft) !== JSON.stringify(saved) ? "Unsaved changes" : "Saved preferences"}</span></div>}
       </fieldset>
-      {busy && <p role="status">{busy === "probe" ? "Testing Streamlink…" : "Working…"}</p>}
+      {(busy || saving) && <p role="status">{busy === "probe" ? "Testing Streamlink…" : "Working…"}</p>}
       {error && <p className="error" role="alert">{error}</p>}
       {message && <p role="status">{message}</p>}
     </form>

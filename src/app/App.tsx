@@ -101,7 +101,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
     <header className="app-bar"><div className="brand"><span aria-hidden="true">▶</span> Stream GUI RS</div>{controls}</header>
     {settings && <section ref={settingsPanel} className="settings-panel" aria-label="Settings">
       <div className="settings-header"><h2 tabIndex={-1} ref={settingsHeading}>Settings</h2><button className="quiet" onClick={closeSettings}>Close Settings</button><button className="quiet" onClick={() => setSupport(true)}>Prepare support report</button><button className="quiet" onClick={developer}>Developer tools</button><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.quit); }}>{activeCount ? `Quit (stops ${activeCount} streams)` : "Quit"}</button></div>
-      <PlaybackSettings desktop={desktop} saved={playback.settings} onSaved={value => { playback.setSettings(value); setSettingsRevision(revision => revision + 1); }} />
+      <PlaybackSettings desktop={desktop} saved={playback.settings} saving={playback.savingSettings} commit={playback.commitSettings} onSaved={() => { setSettingsRevision(revision => revision + 1); }} />
       {auth.status?.phase === "not_configured" && <p>This build does not include a Twitch application ID. If you built it from source, follow the authentication setup in the project documentation.</p>}
     </section>}
     <div className={playback.error ? "error playback-feedback" : playback.message ? "notice playback-feedback" : "playback-feedback empty-feedback"} role={playback.error ? "alert" : "status"} aria-atomic="true">{playback.error ?? playback.message}{(playback.error || playback.message) && <button className="quiet" onClick={playback.dismiss}>Dismiss</button>}</div>

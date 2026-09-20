@@ -19,12 +19,26 @@ export function playbackError(error: unknown) {
 export function usePlayback() {
   const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
   const [settings, updateSettings] = useState<Settings | null>(null);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const settingsInFlight = useRef(false);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const languageRevision = useRef(0);
   const setSettings = useCallback((value: Settings) => updateSettings(current => ({ ...value,
     discoveryLanguage: current ? current.discoveryLanguage : value.discoveryLanguage })), []);
+  const commitSettings = useCallback(async (action: () => Promise<Settings>) => {
+    if (settingsInFlight.current) throw { code: "capacity" };
+    settingsInFlight.current = true; setSavingSettings(true);
+    try {
+      const value = await action();
+      if (mounted.current) setSettings(value);
+      return value;
+    } finally {
+      settingsInFlight.current = false;
+      if (mounted.current) setSavingSettings(false);
+    }
+  }, [setSettings]);
   const saveLanguage = useCallback(async (language: StreamLanguage | null) => {
     const version = ++languageRevision.current;
     const value = await api.saveDiscoveryLanguage(language);
@@ -76,5 +90,5 @@ export function usePlayback() {
       if (mounted.current) setPending(new Set(inFlight.current));
     }
   }, []);
-  return { sessions, settings, setSettings, saveLanguage, pending, run, error, message, dismiss: () => { setError(null); setMessage(null); } };
+  return { sessions, settings, commitSettings, savingSettings, saveLanguage, pending, run, error, message, dismiss: () => { setError(null); setMessage(null); } };
 }

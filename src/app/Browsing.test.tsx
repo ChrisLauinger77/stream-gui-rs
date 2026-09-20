@@ -1030,3 +1030,23 @@ test("older WebKit dialog fallback contains keyboard focus and restores the page
   expect(container.querySelector("dialog")).toBeNull(); expect(container.querySelector(".app-bar")?.hasAttribute("aria-hidden")).toBe(false);
   expect(document.activeElement).toBe(button("Prepare support report"));
 });
+
+test("closing and reopening Settings preserves the outstanding mutation guard", async () => {
+  const first = deferred<typeof playbackSettings>(); vi.mocked(api.savePlaybackSettings).mockReturnValue(first.promise);
+  await render(); await click("Settings"); await editControl("Default quality", "low", "select"); await click("Save settings");
+  await click("Close Settings"); await click("Settings");
+  await click("Save settings"); expect(api.savePlaybackSettings).toHaveBeenCalledOnce();
+  await act(async () => first.resolve({ ...playbackSettings, defaultQuality: "low" }));
+  await click("Cancel changes");
+  expect([...container.querySelectorAll<HTMLSelectElement>("select")].find(control => control.labels?.[0]?.textContent?.startsWith("Default quality"))?.value).toBe("low");
+});
+
+test("a language save finishing after navigation updates the default without changing the new visit", async () => {
+  const saved = deferred<typeof playbackSettings>(); vi.mocked(api.saveDiscoveryLanguage).mockReturnValue(saved.promise);
+  await render(); await click("Live"); await selectLanguage("de"); await click("Example Game");
+  expect(api.category).toHaveBeenLastCalledWith(expect.objectContaining({ page: expect.objectContaining({ language: null }) }));
+  await act(async () => saved.resolve({ ...playbackSettings, discoveryLanguage: "de" }));
+  expect(container.querySelector<HTMLSelectElement>(".language-filter select")!.value).toBe("");
+  await click("Following"); await click("Live");
+  expect(api.streams).toHaveBeenLastCalledWith(expect.objectContaining({ language: "de" }));
+});
