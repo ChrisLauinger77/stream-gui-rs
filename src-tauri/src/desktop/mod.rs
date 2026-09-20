@@ -62,6 +62,7 @@ fn build_app() -> tauri::Result<tauri::App> {
             commands::acknowledge_desktop_action,
             commands::quit_application,
             commands::backend_diagnostics,
+            commands::support_report,
             commands::streamlink_probe,
             commands::open_channel_chat,
             commands::channel_settings,

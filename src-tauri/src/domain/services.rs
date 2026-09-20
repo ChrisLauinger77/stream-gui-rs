@@ -34,6 +34,7 @@ pub struct Services {
     pub monitor: Arc<crate::monitor::Monitor>,
     chat: super::chat::BrowserChat,
     streamlink_operation: Mutex<()>,
+    known_streamlink: std::sync::Mutex<Option<(Option<String>, [u32; 3])>>,
     closing: AtomicBool,
     auth_configured: bool,
     browse_slots: Arc<tokio::sync::Semaphore>,
@@ -84,6 +85,7 @@ impl Services {
             auth,
             chat: super::chat::BrowserChat::default(),
             streamlink_operation: Mutex::new(()),
+            known_streamlink: std::sync::Mutex::new(None),
             closing: AtomicBool::new(false),
             auth_configured,
             browse_slots: Arc::new(tokio::sync::Semaphore::new(8)),
@@ -153,9 +155,35 @@ impl Services {
             .map_err(|_| AppError::new(ErrorCode::Capacity, "Browsing is busy. Try again shortly."))
     }
 
+    // Only explicit user probes and normal playback preparation populate this cache.
+    // Report generation itself cannot discover/spawn executables or read credentials.
+    fn remember_streamlink(&self, path: Option<String>, version: &str) {
+        *self
+            .known_streamlink
+            .lock()
+            .expect("version cache poisoned") =
+            crate::diagnostics::numeric_version(version).map(|version| (path, version));
+    }
+
+    pub async fn support_report(&self) -> crate::diagnostics::SupportReport {
+        let settings = self.settings.snapshot();
+        let version = self
+            .known_streamlink
+            .lock()
+            .expect("version cache poisoned")
+            .as_ref()
+            .filter(|(path, _)| path == &settings.streamlink_path)
+            .map(|(_, version)| *version);
+        crate::diagnostics::support_report(
+            settings.player.mode,
+            version,
+            &self.sessions.sessions().await,
+        )
+    }
+
     pub fn diagnostics(&self) -> BackendDiagnostics {
         BackendDiagnostics {
-            name: "Stream GUI RS".into(),
+            name: crate::build_info::NAME.into(),
             version: crate::build_info::VERSION.into(),
             commit: crate::build_info::COMMIT.into(),
             platform: format!("{} / {}", std::env::consts::OS, std::env::consts::ARCH),
@@ -172,6 +200,7 @@ impl Services {
         let custom_path = custom_path.filter(|p| !p.trim().is_empty());
         let result = streamlink::probe(custom_path.as_deref(), Duration::from_secs(5)).await?;
         check_version(&result.version)?;
+        self.remember_streamlink(custom_path.clone(), &result.version);
         let settings = self.settings.clone();
         tokio::task::spawn_blocking(move || settings.set_streamlink_path(custom_path))
             .await
@@ -193,6 +222,7 @@ impl Services {
         if let Some(path) = &settings.streamlink_path {
             let probe = streamlink::probe(Some(path), Duration::from_secs(5)).await?;
             check_version(&probe.version)?;
+            self.remember_streamlink(settings.streamlink_path.clone(), &probe.version);
         }
         resolve_player(&settings.player, &SearchLocations::system())?;
         self.ensure_open()?;
@@ -242,6 +272,7 @@ impl Services {
         let probe =
             streamlink::probe(settings.streamlink_path.as_deref(), Duration::from_secs(5)).await?;
         check_version(&probe.version)?;
+        self.remember_streamlink(settings.streamlink_path.clone(), &probe.version);
         self.ensure_open()?;
         Ok(LaunchSpec {
             executable: probe.executable.into(),

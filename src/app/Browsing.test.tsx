@@ -33,6 +33,8 @@ async function type(value: string) {
 }
 async function render(strict = false) { await act(async () => { root.render(strict ? <StrictMode><App /></StrictMode> : <App />); }); }
 beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  HTMLDialogElement.prototype.close = function () { this.open = false; };
   Object.defineProperty(navigator, "platform", { configurable: true, value: "Linux x86_64" });
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
   vi.mocked(api.sessions).mockResolvedValue([]);
@@ -959,4 +961,22 @@ test("stream and followed-channel actions expose category, title and live state 
   await click("Following"); await click("All channels");
   const followed = button("Open channel Example Channel");
   expect(document.getElementById(followed.getAttribute("aria-describedby")!)?.textContent).toContain("Offline");
+});
+
+test("support report previews only its safe DTO, permits selection and restores focus", async () => {
+  vi.mocked(api.supportReport).mockResolvedValue({ text: "Stream GUI RS support report\nProcess 1: phase=running" });
+  await render(); await click("Settings"); button("Prepare support report").focus(); await click("Prepare support report");
+  expect(container.querySelectorAll("dialog[open]")).toHaveLength(1);
+  const preview = container.querySelector<HTMLTextAreaElement>("dialog textarea")!;
+  expect(preview.readOnly).toBe(true); expect(preview.value).toContain("phase=running"); preview.focus(); preview.select();
+  expect(preview.selectionEnd).toBe(preview.value.length);
+  expect(api.diagnostics).not.toHaveBeenCalled(); expect(api.probe).not.toHaveBeenCalled();
+  const navigation = await keypress("2"); expect(navigation.defaultPrevented).toBe(false);
+  await click("Close", "dialog"); expect(document.activeElement).toBe(button("Prepare support report"));
+});
+test("support report close ignores a late response and errors never expose unknown text", async () => {
+  const result = deferred<{ text: string }>(); vi.mocked(api.supportReport).mockReturnValueOnce(result.promise).mockRejectedValueOnce({ code: "internal", message: "PRIVATE" });
+  await render(); await click("Settings"); await click("Prepare support report"); expect(text()).toContain("Preparing report");
+  await click("Close", "dialog"); await act(async () => result.resolve({ text: "LATE" })); expect(text()).not.toContain("LATE");
+  await click("Prepare support report"); expect(text()).not.toContain("PRIVATE"); expect(container.querySelector("dialog [role=alert]")).not.toBeNull();
 });

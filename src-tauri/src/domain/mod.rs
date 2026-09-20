@@ -144,6 +144,8 @@ pub fn typescript_bindings() -> String {
         ChannelSettings::decl(&config),
         EffectivePlaybackSettings::decl(&config),
         BackendDiagnostics::decl(&config),
+        crate::diagnostics::SupportReport::decl(&config),
+        crate::build_info::AppInfo::decl(&config),
         ProbeResult::decl(&config),
         SessionPhase::decl(&config),
         LogSource::decl(&config),

@@ -7,6 +7,7 @@ import { friendlyError } from "../browse/errors";
 import type { Account, AuthStatus } from "../lib/generated";
 
 import { usePlayback } from "../playback/usePlayback";
+import { SupportReport } from "../features/SupportReport";
 import { Playback } from "../features/Playback";
 import { PlaybackSettings } from "../features/PlaybackSettings";
 import { api } from "../lib/ipc";
@@ -28,6 +29,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const actionState = desktop.actions.current;
   const [notificationTest, setNotificationTest] = useState(() => isNotificationTest(desktop.status) && actionState.handled !== desktop.status?.action?.id);
   const testHeading = useRef<HTMLHeadingElement>(null);
+  const [support, setSupport] = useState(false);
   const [settings, setSettings] = useState(false);
   const [watching, setWatching] = useState(false);
   const playback = usePlayback();
@@ -95,7 +97,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   return <div className="application">
     <header className="app-bar"><div className="brand"><span aria-hidden="true">▶</span> Stream GUI RS</div>{controls}</header>
     {settings && <section ref={settingsPanel} className="settings-panel" aria-label="Settings">
-      <div className="settings-header"><h2 tabIndex={-1} ref={settingsHeading}>Settings</h2><button className="quiet" onClick={closeSettings}>Close Settings</button><button className="quiet" onClick={developer}>Developer tools</button><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.quit); }}>{activeCount ? `Quit (stops ${activeCount} streams)` : "Quit"}</button></div>
+      <div className="settings-header"><h2 tabIndex={-1} ref={settingsHeading}>Settings</h2><button className="quiet" onClick={closeSettings}>Close Settings</button><button className="quiet" onClick={() => setSupport(true)}>Prepare support report</button><button className="quiet" onClick={developer}>Developer tools</button><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.quit); }}>{activeCount ? `Quit (stops ${activeCount} streams)` : "Quit"}</button></div>
       <PlaybackSettings desktop={desktop} saved={playback.settings} onSaved={value => { playback.setSettings(value); setSettingsRevision(revision => revision + 1); }} />
       {auth.status?.phase === "not_configured" && <p>This build does not include a Twitch application ID. If you built it from source, follow the authentication setup in the project documentation.</p>}
     </section>}
@@ -112,6 +114,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       <button onClick={developer}>Developer tools</button>
     </main> : auth.sessionId ? <BrowserWorkspace preferences={playback.settings} saveLanguage={playback.saveLanguage} actionsRef={workspace} settingsRevision={settingsRevision} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} pending={playback.pending} /> :
       <SignIn status={auth.status} account={auth.account} busy={auth.busy} run={auth.run} />}
+    {support && <SupportReport close={() => setSupport(false)} />}
     <footer className="app-footer"><span>Twitch browsing · Streamlink desktop</span><span>{auth.sessionId ? "Connected to Twitch" : "Connect your Twitch account"}</span></footer>
   </div>;
 }

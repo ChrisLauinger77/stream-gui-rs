@@ -37,6 +37,14 @@ fn main() {
         return;
     }
     if args == ["--version"] {
+        if name.contains("reportprobe") {
+            let marker = executable.with_extension("count");
+            let count = std::fs::read_to_string(&marker)
+                .ok()
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(0);
+            std::fs::write(marker, (count + 1).to_string()).unwrap();
+        }
         if name.contains("timeout") {
             std::fs::write(
                 executable.with_extension("pid"),

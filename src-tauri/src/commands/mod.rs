@@ -41,6 +41,13 @@ pub async fn streamlink_restart(
 }
 
 #[tauri::command]
+pub async fn support_report(
+    services: State<'_, Arc<Services>>,
+) -> Result<crate::diagnostics::SupportReport> {
+    Ok(services.support_report().await)
+}
+
+#[tauri::command]
 pub fn backend_diagnostics(services: State<'_, Arc<Services>>) -> BackendDiagnostics {
     services.diagnostics()
 }

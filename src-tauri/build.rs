@@ -109,6 +109,7 @@ fn main() {
             "acknowledge_desktop_action",
             "quit_application",
             "backend_diagnostics",
+            "support_report",
             "streamlink_probe",
             "streamlink_launch",
             "streamlink_stop",

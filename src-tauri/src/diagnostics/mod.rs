@@ -1,5 +1,8 @@
+mod support;
 use crate::config::Settings;
 use serde::{Deserialize, Serialize};
+pub(crate) use support::numeric_version;
+pub use support::{SupportReport, support_report};
 use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

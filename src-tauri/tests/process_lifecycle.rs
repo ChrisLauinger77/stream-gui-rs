@@ -1270,3 +1270,47 @@ async fn failed_browser_open_keeps_playback_running_and_failed_restart_opens_not
     assert_eq!(recorder.0.load(std::sync::atomic::Ordering::SeqCst), 1);
     services.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn support_report_reuses_validated_version_without_spawning_the_custom_executable() {
+    let directory = helper_directory();
+    let executable = renamed_helper(directory.path(), "reportprobe");
+    let marker = executable.with_extension("count");
+    let services = Services::new(directory.path(), None).unwrap();
+    services
+        .settings
+        .set_streamlink_path(Some(executable.to_string_lossy().into()))
+        .unwrap();
+    assert!(
+        services
+            .support_report()
+            .await
+            .text
+            .contains("Streamlink: not checked")
+    );
+    assert!(!marker.exists());
+    services
+        .probe(Some(executable.to_string_lossy().into()))
+        .await
+        .unwrap();
+    assert_eq!(std::fs::read_to_string(&marker).unwrap(), "1");
+    for _ in 0..3 {
+        assert!(
+            services
+                .support_report()
+                .await
+                .text
+                .contains("Streamlink: 8.6.1")
+        );
+    }
+    assert_eq!(std::fs::read_to_string(&marker).unwrap(), "1");
+    services.settings.set_streamlink_path(None).unwrap();
+    assert!(
+        services
+            .support_report()
+            .await
+            .text
+            .contains("Streamlink: not checked")
+    );
+    assert_eq!(std::fs::read_to_string(&marker).unwrap(), "1");
+}
