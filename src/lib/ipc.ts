@@ -4,7 +4,7 @@ import type {
   ChatRequest, ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
   LookupChannelRequest, ChannelIdentity, StreamLanguage, StreamBrowseRequest, CategoryStreamsRequest, BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
   Account, AppError, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
-  ProbeResult, SessionSnapshot, StopRequest, SupportReport,
+  ProbeResult, SessionSnapshot, StopRequest, SupportReport, AppInfo,
 } from "./generated";
 
 // Only these named operations are available. DTOs are generated from Rust.
@@ -27,6 +27,9 @@ type Commands = {
   lookup_channel: [LookupChannelRequest, ChannelIdentity];
   get_channel: [EntityRequest, ChannelDetails];
 
+  app_info: [undefined, AppInfo];
+  show_about: [undefined, null];
+  open_repository: [undefined, null];
   support_report: [undefined, SupportReport];
   backend_diagnostics: [undefined, BackendDiagnostics];
   streamlink_probe: [ProbeRequest, ProbeResult];
@@ -76,6 +79,9 @@ export const api = {
   lookupChannel: (request: LookupChannelRequest) => call("lookup_channel", request),
   channel: (request: EntityRequest) => call("get_channel", request),
 
+  appInfo: () => call("app_info"),
+  showAbout: () => call("show_about"),
+  openRepository: () => call("open_repository"),
   supportReport: () => call("support_report"),
   diagnostics: () => call("backend_diagnostics"),
   probe: (request: ProbeRequest) => call("streamlink_probe", request),

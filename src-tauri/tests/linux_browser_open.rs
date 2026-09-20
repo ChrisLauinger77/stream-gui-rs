@@ -9,6 +9,14 @@ use std::{fs, path::Path, process::Command, time::Duration};
 // and ordinary tests must never use or change the user's browser configuration.
 #[test]
 fn desktop_browser_dispatch_uses_the_default_handler_and_reaps_its_launcher() {
+    for destination in [
+        "https://www.twitch.tv/popout/synthetic/chat",
+        env!("CARGO_PKG_REPOSITORY"),
+    ] {
+        check_destination(destination);
+    }
+}
+fn check_destination(destination: &str) {
     let directory = tempfile::tempdir().unwrap();
     let applications = directory.path().join("applications");
     fs::create_dir(&applications).unwrap();
@@ -28,6 +36,7 @@ fn desktop_browser_dispatch_uses_the_default_handler_and_reaps_its_launcher() {
     let result = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "isolated_browser_dispatch", "--nocapture"])
         .env("STREAM_GUI_BROWSER_TEST_MARKER", &marker)
+        .env("STREAM_GUI_BROWSER_TEST_DESTINATION", destination)
         .env("XDG_CONFIG_HOME", directory.path())
         .env("XDG_DATA_HOME", directory.path())
         .env("XDG_DATA_DIRS", directory.path())
@@ -46,7 +55,7 @@ fn desktop_browser_dispatch_uses_the_default_handler_and_reaps_its_launcher() {
         String::from_utf8_lossy(&result.stderr)
     );
     let (_, uri): (u32, String) = serde_json::from_slice(&fs::read(marker).unwrap()).unwrap();
-    assert_eq!(uri, "https://www.twitch.tv/popout/synthetic/chat");
+    assert_eq!(uri, destination);
 }
 
 #[test]
@@ -54,7 +63,7 @@ fn isolated_browser_dispatch() {
     let Some(marker) = std::env::var_os("STREAM_GUI_BROWSER_TEST_MARKER") else {
         return;
     };
-    browser::open("https://www.twitch.tv/popout/synthetic/chat").unwrap();
+    browser::open(&std::env::var("STREAM_GUI_BROWSER_TEST_DESTINATION").unwrap()).unwrap();
     for _ in 0..150 {
         if let Ok(bytes) = fs::read(&marker) {
             if let Ok((pid, _)) = serde_json::from_slice::<(u32, String)>(&bytes) {

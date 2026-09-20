@@ -38,6 +38,7 @@ beforeEach(() => {
   Object.defineProperty(navigator, "platform", { configurable: true, value: "Linux x86_64" });
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
   vi.mocked(api.sessions).mockResolvedValue([]);
+  vi.mocked(api.acknowledgeDesktopAction).mockResolvedValue(null);
   vi.mocked(api.playbackSettings).mockResolvedValue({ discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
   vi.mocked(api.channelSettings).mockImplementation(async broadcasterId => ({ broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: "source", defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false, effective: { lowLatency: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, quality: "source", automaticChat: false } }));
   vi.mocked(api.authStatus).mockResolvedValue(signedIn);
@@ -979,4 +980,53 @@ test("support report close ignores a late response and errors never expose unkno
   await render(); await click("Settings"); await click("Prepare support report"); expect(text()).toContain("Preparing report");
   await click("Close", "dialog"); await act(async () => result.resolve({ text: "LATE" })); expect(text()).not.toContain("LATE");
   await click("Prepare support report"); expect(text()).not.toContain("PRIVATE"); expect(container.querySelector("dialog [role=alert]")).not.toBeNull();
+});
+
+test("About dispatch is native-owned and repeated desktop actions reuse and focus one dialog", async () => {
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  vi.mocked(api.desktopStatus).mockResolvedValue(desktopSnapshot);
+  vi.mocked(api.appInfo).mockResolvedValue({ name: "Stream GUI RS", version: "1.2.3", commit: "abcdef1", repository: "https://github.com/example/project" });
+  vi.mocked(api.showAbout).mockResolvedValue(null); vi.mocked(api.openRepository).mockResolvedValue(null);
+  await render(); button("About Stream GUI RS").focus(); await click("About Stream GUI RS");
+  expect(api.showAbout).toHaveBeenCalledOnce(); expect(container.querySelector("dialog")).toBeNull();
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action: { kind: "about", id: "about-1" } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  const dialog = container.querySelector<HTMLDialogElement>("dialog")!;
+  expect(dialog.open).toBe(true); expect(dialog.textContent).toContain("Version 1.2.3 (abcdef1)");
+  expect(document.activeElement).toBe(dialog.querySelector("h2"));
+  const link = dialog.querySelector("a")!; link.focus(); await act(async () => link.click()); expect(api.openRepository).toHaveBeenCalledWith();
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action: { kind: "about", id: "about-2" } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(container.querySelectorAll("dialog")).toHaveLength(1); expect(container.querySelector("dialog")).toBe(dialog);
+  expect(document.activeElement).toBe(dialog.querySelector("h2")); expect(api.appInfo).toHaveBeenCalledOnce();
+  await act(async () => { dialog.dispatchEvent(new Event("cancel", { cancelable: true })); });
+  expect(container.querySelector("dialog")).toBeNull(); expect(document.activeElement).toBe(button("About Stream GUI RS"));
+  expect(api.quit).not.toHaveBeenCalled(); expect(api.launch).not.toHaveBeenCalled(); expect(api.pauseMonitor).not.toHaveBeenCalled();
+});
+test("About uses safe repository errors and handles delayed metadata after close", async () => {
+  const metadata = deferred<import("../lib/generated").AppInfo>();
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action: { kind: "about", id: "first" } });
+  vi.mocked(api.appInfo).mockReturnValueOnce(metadata.promise).mockResolvedValue({ name: "Stream GUI RS", version: "1.2.3", commit: "abcdef1", repository: "https://github.com/example/project" });
+  await render(); await click("Close", "dialog");
+  await act(async () => metadata.resolve({ name: "LATE", version: "1", commit: "unknown", repository: "" })); expect(text()).not.toContain("LATE");
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action: { kind: "about", id: "second" } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  vi.mocked(api.openRepository).mockRejectedValue({ code: "browser_open", message: "PRIVATE" });
+  await act(async () => container.querySelector<HTMLAnchorElement>("dialog a")!.click());
+  expect(container.querySelector("dialog [role=alert]")).not.toBeNull(); expect(text()).not.toContain("PRIVATE");
+});
+
+test("older WebKit dialog fallback contains keyboard focus and restores the page on Escape", async () => {
+  Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, writable: true, value: undefined });
+  vi.mocked(api.supportReport).mockResolvedValue({ text: "Safe report" });
+  await render(); await click("Settings"); button("Prepare support report").focus(); await click("Prepare support report");
+  const dialog = container.querySelector<HTMLDialogElement>("dialog")!;
+  expect(dialog.classList.contains("dialog-fallback")).toBe(true);
+  expect(container.querySelector(".app-bar")?.getAttribute("aria-hidden")).toBe("true");
+  button("Live").focus(); expect(document.activeElement).toBe(dialog.querySelector("h2"));
+  button("Close", "dialog").focus();
+  await keypress("Tab", {}, document.activeElement!); expect(document.activeElement).toBe(dialog.querySelector("textarea"));
+  await keypress("Escape", {}, document.activeElement!);
+  expect(container.querySelector("dialog")).toBeNull(); expect(container.querySelector(".app-bar")?.hasAttribute("aria-hidden")).toBe(false);
+  expect(document.activeElement).toBe(button("Prepare support report"));
 });

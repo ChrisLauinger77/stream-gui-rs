@@ -36,6 +36,30 @@ fn app_context() -> tauri::Context<tauri::Wry> {
     context
 }
 
+pub(crate) fn show_about(app: &tauri::AppHandle) {
+    if app
+        .state::<Arc<Lifecycle>>()
+        .stopping
+        .load(Ordering::SeqCst)
+    {
+        return;
+    }
+    show_window(app);
+    #[cfg(target_os = "macos")]
+    about::show(app);
+    #[cfg(not(target_os = "macos"))]
+    {
+        app.state::<Arc<notifications::Notifications>>()
+            .shared
+            .state
+            .lock()
+            .expect("native notification state poisoned")
+            .action = Some(crate::domain::background::DesktopAction::About {
+            id: uuid::Uuid::new_v4().to_string(),
+        });
+    }
+}
+
 fn build_app() -> tauri::Result<tauri::App> {
     let builder = tauri::Builder::default();
     #[cfg(target_os = "linux")]
@@ -48,7 +72,7 @@ fn build_app() -> tauri::Result<tauri::App> {
     #[cfg(target_os = "macos")]
     let builder = builder.menu(about::menu).on_menu_event(|app, event| {
         if event.id().as_ref() == about::MENU_ID {
-            about::show(app);
+            show_about(app);
         }
     });
     builder
@@ -62,6 +86,9 @@ fn build_app() -> tauri::Result<tauri::App> {
             commands::acknowledge_desktop_action,
             commands::quit_application,
             commands::backend_diagnostics,
+            commands::open_repository,
+            commands::show_about,
+            commands::app_info,
             commands::support_report,
             commands::streamlink_probe,
             commands::open_channel_chat,
@@ -304,6 +331,44 @@ pub use smoke::run as run_background_smoke;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn phase_six_commands_require_the_local_main_window() {
+        use tauri::ipc::Origin;
+        let mut context = super::app_context();
+        let authority = context.runtime_authority_mut();
+        for command in [
+            "save_discovery_language",
+            "lookup_channel",
+            "support_report",
+            "app_info",
+            "show_about",
+            "open_repository",
+        ] {
+            assert!(
+                authority
+                    .resolve_access(command, "main", "main", &Origin::Local)
+                    .is_some(),
+                "{command}"
+            );
+            assert!(
+                authority
+                    .resolve_access(command, "other", "other", &Origin::Local)
+                    .is_none()
+            );
+            assert!(
+                authority
+                    .resolve_access(
+                        command,
+                        "main",
+                        "main",
+                        &Origin::Remote {
+                            url: "https://example.invalid".parse().unwrap()
+                        }
+                    )
+                    .is_none()
+            );
+        }
+    }
     #[test]
     fn notification_acceptance_permission_requires_feature_and_local_main_window() {
         use tauri::ipc::Origin;

@@ -35,11 +35,14 @@ pub enum DesktopAction {
     Watching {
         id: String,
     },
+    About {
+        id: String,
+    },
 }
 impl DesktopAction {
     pub fn id(&self) -> &str {
         match self {
-            Self::Channel { id, .. } | Self::Watching { id } => id,
+            Self::Channel { id, .. } | Self::Watching { id } | Self::About { id } => id,
         }
     }
 }

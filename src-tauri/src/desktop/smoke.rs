@@ -3,6 +3,7 @@ use super::*;
 use crate::{domain::LaunchRequest, streamlink::SessionPhase};
 use std::{path::Path, time::Duration};
 mod notification_server;
+mod phase_six;
 mod titlebar;
 
 pub fn run(
@@ -10,7 +11,8 @@ pub fn run(
     action: &str,
     marker: &Path,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let quit = action == "quit";
+    let phase_six = action == "phase6";
+    let quit = action == "quit" || phase_six;
     let titlebar_only = action == "titlebar";
     let directory = tempfile::tempdir()?;
     // No client ID: this fixture cannot open any production credential entry.
@@ -34,13 +36,23 @@ pub fn run(
             let marker = marker.clone();
             let notifications = notifications.clone();
             tauri::async_runtime::spawn(async move {
+                let check_app = app.clone();
+                let check_marker = marker.clone();
+                // A failed UI assertion must still drain the real fixture children.
                 let checked = tokio::time::timeout(
-                    Duration::from_secs(20),
-                    scenario(&app, &marker, &notifications, titlebar_only),
+                    Duration::from_secs(45),
+                    tokio::spawn(async move {
+                        scenario(&check_app, &check_marker, &notifications, titlebar_only).await?;
+                        if phase_six {
+                            phase_six::check(&check_app).await;
+                        }
+                        Ok::<(), crate::domain::AppError>(())
+                    }),
                 )
                 .await;
-                *result.lock().unwrap() = Some(matches!(checked, Ok(Ok(()))));
-                if matches!(checked, Ok(Ok(()))) {
+                let passed = matches!(checked, Ok(Ok(Ok(()))));
+                *result.lock().unwrap() = Some(passed);
+                if passed {
                     std::fs::write(&marker, "passed").unwrap();
                     if quit {
                         begin_shutdown(&app);

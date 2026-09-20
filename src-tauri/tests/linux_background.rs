@@ -16,6 +16,12 @@ fn native_wayland_titlebar_is_compact_and_preserves_window_actions() {
     run_scenarios(&["titlebar"]);
 }
 
+#[test]
+#[ignore = "requires a graphical Linux session and the frontend dev server; synthetic isolated services only"]
+fn phase_six_about_support_and_text_scale_use_the_native_webview() {
+    run_scenarios(&["phase6"]);
+}
+
 fn run_scenarios(actions: &[&str]) {
     for action in actions {
         let directory = tempfile::tempdir().unwrap();
@@ -53,7 +59,7 @@ fn run_scenarios(actions: &[&str]) {
                 }
                 break;
             }
-            if start.elapsed() > Duration::from_secs(30) {
+            if start.elapsed() > Duration::from_secs(60) {
                 let _ = child.kill();
                 let _ = child.wait();
                 panic!("native background smoke timed out");

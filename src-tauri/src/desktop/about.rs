@@ -25,7 +25,7 @@ pub(super) fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let about = MenuItem::with_id(
         app,
         MENU_ID,
-        format!("About {}", app.package_info().name),
+        format!("About {}", build_info::NAME),
         true,
         None::<&str>,
     )?;
@@ -35,12 +35,10 @@ pub(super) fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 }
 
 pub(super) fn show<R: Runtime>(app: &AppHandle<R>) {
-    let name = app.package_info().name.clone();
-    // Same authoritative Tauri package version as the original native About item.
-    let version = app.package_info().version.to_string();
+    let info = build_info::snapshot();
     let _ = app.run_on_main_thread(move || {
         if let Some(main) = MainThreadMarker::new() {
-            let options = options(&name, &version, build_info::COMMIT);
+            let options = options(&info.name, &info.version, &info.commit);
             // SAFETY: all option keys have their documented AppKit value types;
             // the panel is opened on the main thread and retains its own values.
             unsafe {

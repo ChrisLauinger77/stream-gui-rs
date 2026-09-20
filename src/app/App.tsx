@@ -7,6 +7,7 @@ import { friendlyError } from "../browse/errors";
 import type { Account, AuthStatus } from "../lib/generated";
 
 import { usePlayback } from "../playback/usePlayback";
+import { About } from "../features/About";
 import { SupportReport } from "../features/SupportReport";
 import { Playback } from "../features/Playback";
 import { PlaybackSettings } from "../features/PlaybackSettings";
@@ -29,6 +30,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const actionState = desktop.actions.current;
   const [notificationTest, setNotificationTest] = useState(() => isNotificationTest(desktop.status) && actionState.handled !== desktop.status?.action?.id);
   const testHeading = useRef<HTMLHeadingElement>(null);
+  const [about, setAbout] = useState<string | null>(null);
   const [support, setSupport] = useState(false);
   const [settings, setSettings] = useState(false);
   const [watching, setWatching] = useState(false);
@@ -59,7 +61,8 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
           if (!workspace.current) return;
           setSettings(false); setWatching(false); workspace.current.channel(action.broadcasterId, action.displayName);
         }
-      } else { setNotificationTest(false); setSettings(false); setWatching(true); }
+      } else if (action.kind === "about") { setSupport(false); setAbout(action.id); }
+      else { setNotificationTest(false); setSettings(false); setWatching(true); }
       actionState.handled = action.id;
     }
     if (actionState.acknowledged === action.id || actionState.acknowledging) return;
@@ -114,8 +117,9 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       <button onClick={developer}>Developer tools</button>
     </main> : auth.sessionId ? <BrowserWorkspace preferences={playback.settings} saveLanguage={playback.saveLanguage} actionsRef={workspace} settingsRevision={settingsRevision} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} pending={playback.pending} /> :
       <SignIn status={auth.status} account={auth.account} busy={auth.busy} run={auth.run} />}
+    {about && <About activation={about} close={() => setAbout(null)} />}
     {support && <SupportReport close={() => setSupport(false)} />}
-    <footer className="app-footer"><span>Twitch browsing · Streamlink desktop</span><span>{auth.sessionId ? "Connected to Twitch" : "Connect your Twitch account"}</span></footer>
+    <footer className="app-footer"><span>Twitch browsing · Streamlink desktop</span><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.showAbout); }}>About Stream GUI RS</button><span>{auth.sessionId ? "Connected to Twitch" : "Connect your Twitch account"}</span></footer>
   </div>;
 }
 function SignIn({ status, busy, run }: { status: AuthStatus | null; account: Account | null; busy: string | null; run: ReturnType<typeof useAuthentication>["run"] }) {

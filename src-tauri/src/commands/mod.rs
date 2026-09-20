@@ -316,3 +316,29 @@ pub async fn lookup_channel(
         .lookup_channel(request, &tokio_util::sync::CancellationToken::new())
         .await
 }
+
+#[tauri::command]
+pub fn app_info() -> crate::build_info::AppInfo {
+    crate::build_info::snapshot()
+}
+
+#[tauri::command]
+pub fn show_about(app: tauri::AppHandle) {
+    crate::desktop::show_about(&app);
+}
+
+// No destination parameter: a webview cannot turn this into an arbitrary opener.
+#[tauri::command]
+pub async fn open_repository() -> Result<()> {
+    tokio::task::spawn_blocking(|| crate::desktop::browser::open(crate::build_info::REPOSITORY))
+        .await
+        .ok()
+        .filter(|result| result.is_ok())
+        .map(|_| ())
+        .ok_or_else(|| {
+            AppError::new(
+                ErrorCode::BrowserOpen,
+                "The repository could not be opened in your browser.",
+            )
+        })
+}

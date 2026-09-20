@@ -37,6 +37,7 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
     let hide = MenuItem::with_id(app, "hide", "Hide window", true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "monitor", "Pause monitoring", false, None::<&str>)?;
     let watching = MenuItem::with_id(app, "watching", "Watching (0)", true, None::<&str>)?;
+    let about = MenuItem::with_id(app, "about", "About Stream GUI RS", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
@@ -45,6 +46,8 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
             &hide,
             &pause,
             &watching,
+            &PredefinedMenuItem::separator(app)?,
+            &about,
             &PredefinedMenuItem::separator(app)?,
             &quit,
         ],
@@ -71,6 +74,7 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
                 });
                 show_window(app);
             }
+            "about" => show_about(app),
             "quit" => begin_shutdown(app),
             _ => {}
         });

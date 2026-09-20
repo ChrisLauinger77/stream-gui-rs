@@ -7,6 +7,9 @@
   ],
   "permissions": [
     "allow-backend-diagnostics",
+    "allow-open-repository",
+    "allow-show-about",
+    "allow-app-info",
     "allow-support-report",
     "allow-streamlink-probe",
     "allow-streamlink-launch",

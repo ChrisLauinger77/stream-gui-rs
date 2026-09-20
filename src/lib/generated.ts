@@ -2,7 +2,7 @@
 export type ErrorCode = "invalid_input" | "incomplete" | "notification" | "browser_open" | "streamlink_not_found" | "unsupported_streamlink" | "player_not_found" | "invalid_player" | "startup_failed" | "streamlink_exited" | "restart_failed" | "stream_offline" | "not_found" | "invalid_executable" | "probe_failed" | "timeout" | "spawn_failed" | "process_failed" | "capacity" | "settings" | "settings_version" | "not_configured" | "auth_denied" | "auth_expired" | "auth_invalid" | "auth_provider" | "network" | "unauthenticated" | "unauthorized" | "rate_limited" | "invalid_response" | "twitch_server" | "cancelled" | "credential_store" | "internal";
 export type NotificationPermission = "unknown" | "not_requested" | "granted" | "denied" | "unavailable" | "os_managed";
 export type NotificationTestAction = "send" | "clear";
-export type DesktopAction = { "kind": "channel", id: string, authSessionId: string, broadcasterId: string, displayName: string, } | { "kind": "watching", id: string, };
+export type DesktopAction = { "kind": "channel", id: string, authSessionId: string, broadcasterId: string, displayName: string, } | { "kind": "watching", id: string, } | { "kind": "about", id: string, };
 export type DesktopStatus = { monitor: MonitorStatus, notificationPermission: NotificationPermission, notificationClickSupported: boolean, notificationTestAvailable: boolean, trayAvailable: boolean, action: DesktopAction | null, };
 export type AcknowledgeDesktopAction = { id: string, };
 export type ChatRequest = { authSessionId: string, broadcasterId: string, };
