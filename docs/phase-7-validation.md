@@ -114,8 +114,10 @@ Upstream stable v2.5.5 sources were inspected:
 [Windows installation](https://github.com/Chatterino/chatterino2/blob/v2.5.5/.CI/chatterino-installer.iss)
 and [macOS bundle naming](https://github.com/Chatterino/chatterino2/blob/v2.5.5/src/CMakeLists.txt).
 Channel-only mode disables settings saving: configure/sign in using Chatterino's
-normal launcher first. A new window/process may remain. **Instance reuse has not
-been natively observed on any platform and is not promised.** The fixed official
+normal launcher first. **Linux Flatpak acceptance confirmed a new window/process
+on channel opening, including when Chatterino is already running.** This is
+accepted external-app behavior; Stream GUI RS does not attempt process reuse or
+IPC control. Behavior on other platforms remains unverified. The fixed official
 Linux Flatpak is supported; arbitrary Flatpak IDs and Snap command wrappers are
 not integrated. Native executables/AppImages may use the override.
 
@@ -274,9 +276,12 @@ availability without changing the native override.
 system Flathub package was Chatterino **2.5.5**. A temporary native smoke entry point
 called the production resolver and launcher with the public `twitch` channel; the
 user confirmed that Chatterino opened that channel successfully. The entry point
-was removed afterward. This confirms the native launch path and visible channel,
-not end-to-end authenticated manual/automatic chat IPC, instance reuse, repeated
-channels or real Stop/Quit behavior. Those remaining checks are separate below.
+was removed afterward. Follow-up user acceptance confirmed discovery and launch
+as PASS and observed a new Chatterino window/process on opening a channel,
+including when Chatterino was already running. This behavior is accepted; process
+reuse and IPC control of Chatterino are outside the integration's scope.
+End-to-end authenticated manual/automatic chat IPC, repeated same-channel requests
+and real Stop/Quit behavior remain separate checks below.
 
 No dependencies, settings schema, generated bindings, IPC command shapes or
 permissions changed. Version remains 0.3.0; no publication or Phase 8 work is part
@@ -334,15 +339,17 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
 | Official live update response | PASS, backend manual check | NOT TESTED | NOT TESTED |
 | View release opens official page | NOT TESTED; fixed destination and browser adapter covered separately | NOT TESTED | NOT TESTED |
 | Actual Chatterino discovery/manual/automatic chat | System Flathub 2.5.5 discovery and channel launch PASS through production launcher, user confirmed; authenticated manual/automatic IPC NOT TESTED | NOT TESTED | NOT TESTED |
-| Actual Chatterino reuse/new process, repeated channels, Stop/Quit | NOT TESTED; independent native fixture lifetime/reaping pass | NOT TESTED | NOT TESTED |
+| Actual Chatterino new-window/process behavior | PASS, user confirmed a new window/process on channel opening, including while already running; accepted behavior, no reuse/IPC control attempted | NOT TESTED | NOT TESTED |
+| Actual Chatterino repeated same-channel requests and Stop/Quit | NOT TESTED; independent native fixture lifetime/reaping pass | NOT TESTED | NOT TESTED |
 | Native UI/scaling/About/background/Quit | Isolated WebKitGTK fixtures PASS as described above | NOT TESTED on WKWebView | NOT TESTED on WebView2 |
 | Screen reader / OS high-DPI / packaged console behavior | Screen reader/OS scaling NOT TESTED; webview zoom checked | VoiceOver NOT TESTED | Narrator/high-DPI/console NOT TESTED |
 
 Remaining manual acceptance must use the Phase 7 build: preserve an existing
 login/profile, browse and play real video/audio, exercise representative mpv/VLC
 profiles and Restart, open the release page, and verify background notifications,
-About and Quit. Where installed, test Chatterino from both stopped and running
-states, repeated channels and explicit paths; record actual process behavior
+About and Quit. Complete Chatterino checks for repeated same-channel requests,
+explicit native paths and real Stop/Quit. macOS/Windows also need discovery and
+launch checks from stopped and running states; record actual process behavior
 separately on each OS. macOS also needs app-bundle/GUI-PATH discovery and Command-Q;
 Windows needs `.exe` discovery, spaces/Unicode, no console flashes and Job Object
 cleanup. Previous v0.3.0 acceptance is historical evidence, not a Phase 7 pass.
