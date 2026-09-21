@@ -47,7 +47,8 @@ label { display:grid; gap:6px; font-size:0.8125rem; }
 .side-nav button { display:flex; align-items:center; gap:12px; width:100%; text-align:left; border:0; background:transparent; padding:10px 12px; margin:3px 0; border-radius:3px; }
 .side-nav button[aria-current="page"] { background:var(--raised); color:var(--accent); box-shadow:inset 3px 0 var(--accent); font-weight:650; }
 .side-nav .nav-symbol { width:16px; text-align:center; color:var(--muted); }
-.browse-content { flex:1; min-width:0; padding:22px 26px 40px; overflow:auto; scroll-behavior:auto; }
+/* Keep positioned accessibility descriptions inside this pane's scroll area. */
+.browse-content { position:relative; flex:1; min-width:0; padding:22px 26px 40px; overflow:auto; scroll-behavior:auto; }
 .view-top { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
 .view-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; }
 .view-heading p { color:var(--muted); font-size:0.8125rem; }

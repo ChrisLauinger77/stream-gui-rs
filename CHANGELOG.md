@@ -19,6 +19,7 @@
 
 ### Fixed
 
+- Long channel lists scroll within the results pane, keeping the header, navigation and About footer visible without a second page scrollbar.
 - Saved preferences stay consistent when Settings closes/reopens or language, global and channel saves overlap; deliberate unsaved edits are retained.
 - Tray and notification navigation reveal their destination when a modal dialog was open.
 

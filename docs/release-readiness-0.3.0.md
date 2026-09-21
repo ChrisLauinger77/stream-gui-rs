@@ -6,9 +6,11 @@ Preparation date: 2026-09-20. This record accompanies the candidate source, not 
 
 Starting branch: clean `main`, synchronized with local and remote `origin/main` at `9087c40511235cd63f44d81fdbc8d68af17c31be`. Released baseline: annotated `v0.2.0`, commit `c0bbb61c3c86c5de1665d7b35b02771302db4e51`. Starting [Desktop checks](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35505409979) and [CodeQL](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35505409973) succeeded on that starting SHA.
 
-The hardening commit synchronizes 0.3.0 metadata, strengthens the realistic v4 upgrade regression and prepares documentation/forms. It changes no application runtime behavior or dependency versions. See the [release notes](release-notes-0.3.0.md) and [changelog](../CHANGELOG.md) for user-visible scope. No later-phase features or Renovate updates are included.
+The initial hardening commit synchronizes 0.3.0 metadata, strengthens the realistic v4 upgrade regression and prepares documentation/forms. A follow-up fixes the extra outer scrollbar found during candidate acceptance: positioned accessibility descriptions now stay inside the results pane, so the header, navigation and About footer remain in place. Dependency versions are unchanged. See the [release notes](release-notes-0.3.0.md) and [changelog](../CHANGELOG.md) for user-visible scope. No later-phase features or Renovate updates are included.
 
-The candidate SHA is the preparation commit containing this file. Its full SHA, hosted results, first-attempt Release run, artifact IDs/expiry/checksums and native observations must be recorded together in the run-specific completion record. Do not commit results after building merely to insert a self-referential SHA: that would create a different candidate revision. The checked-in checklist below deliberately claims no future results.
+The replacement candidate SHA is the follow-up commit containing this file. Its full SHA, hosted results, first-attempt Release run, artifact IDs/expiry/checksums and native observations must be recorded together in the run-specific completion record. Do not commit results after building merely to insert a self-referential SHA: that would create a different candidate revision. The checked-in checklist below deliberately claims no future results.
+
+On 2026-09-21, the maintainer reported all three native platforms passed the first candidate's tests except the extra scrollbar/header/footer defect. That candidate was [run 35508256749](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35508256749), SHA `9c7264e99067867bef60f9b324615bc4748f26ff`. Its Desktop checks, CodeQL, artifact/signature/checksum audit passed. It is superseded by this source fix and must not be promoted. The maintainer also explicitly confirmed a previous Linux test build upgraded directly over 0.2.0 without logout/reset, preserving login/settings and applying Any language, Off/Inherit low latency and 100% text defaults. This is prior-build migration evidence for unchanged migration code, not an exact replacement-package upgrade. No untouched v4 profile remains. Replacement artifacts require focused native scrolling/text-size/keyboard/About checks on all three platforms and matching build identity; earlier native results remain recorded against their original build.
 
 ## Upgrade and credentials
 
@@ -25,9 +27,9 @@ Credential adapters, storage format and client-ID validation/configuration have 
 - Reachable-history pattern audit inspected 816 blobs (808 text blobs) at the starting revision. Credential-looking literals were synthetic fixtures in Twitch/Helix tests; personal-path matches were hostile synthetic privacy-test input. No private-key/provider-token pattern, tracked `.env`, credential export or signing material was found. Current tracked changes were inspected separately. This is a focused audit, not a guarantee that pattern matching detects every possible secret. No real secure-store entries were read and no history was rewritten.
 - Version sources are npm/Cargo/Tauri, synchronized by the existing script. About, diagnostics and support report derive the same build info; workflows embed the captured SHA, without runtime Git. Bundle/installer metadata derives from these sources.
 
-No concrete runtime blocker was found during this review. **SHOULD FIX BEFORE 0.3.0**, resolved in preparation: stale README upgrade defaults/version framing; bug-form macOS-only About guidance; smoke checklist still targeting 0.1.0 and allowing authentication reset before upgrade evidence; incomplete representative migration assertions. Exact hosted/artifact/native gates remain required, not assumed passed.
+The initial review found no concrete runtime blocker. **SHOULD FIX BEFORE 0.3.0**, resolved in preparation: stale README upgrade defaults/version framing; bug-form macOS-only About guidance; smoke checklist still targeting 0.1.0 and allowing authentication reset before upgrade evidence; incomplete representative migration assertions. Subsequent native acceptance found the double-scroll defect on all three platforms. Its focused CSS fix includes native WebKitGTK coverage for long stream/channel lists at two widths and all text sizes, including focus-driven scrolling. Exact replacement hosted/artifact/native gates remain required, not assumed passed.
 
-## Automated validation
+## Initial preparation automated validation
 
 Run on Debian forky/sid x86_64, GNOME Wayland, Node 24.20.0 and Rust 1.95.0. Results are finalized before committing this record.
 
@@ -47,6 +49,8 @@ Run on Debian forky/sid x86_64, GNOME Wayland, Node 24.20.0 and Rust 1.95.0. Res
 | Issue forms / command permissions / version consistency / diff whitespace | PASS; 41 closed commands aligned |
 
 Loopback HTTP and native fixtures use synthetic credentials; graphical fixtures use isolated settings/D-Bus/notification service/fake playback. They do not authenticate to real Twitch or accept a release package. Hosted Desktop checks and CodeQL must subsequently pass on the candidate SHA on Linux, Windows and macOS as configured.
+
+The complete local suite was rerun after the scrolling correction on 2026-09-21, with all the same counts passing. The graphical Phase 6 test additionally covers twelve real WebKitGTK layout cases; its retained regression fails against the original CSS and passes with the correction. See the [follow-up validation record](phase-6-validation.md#candidate-scrolling-correction--2026-09-21).
 
 ## Candidate artifacts and promotion
 

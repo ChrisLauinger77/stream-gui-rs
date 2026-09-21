@@ -11,6 +11,7 @@ Better discovery, optional low-latency viewing, accessible controls and safer tr
 - Preview and manually copy a support report containing only build/platform metadata, validated version information and anonymous process summaries. No paths, account/channel identities, arguments or raw logs are included.
 - Open About from the main interface or tray/status menu on every platform: native AppKit on macOS, an application dialog on Linux/Windows, with matching version/commit and a fixed repository link.
 - Preferences remain consistent across overlapping saves and reopened settings panels. Native navigation reveals its destination when a dialog was open.
+- Long channel lists keep the header, navigation and About footer in place while results scroll.
 
 ## Installation and upgrade
 

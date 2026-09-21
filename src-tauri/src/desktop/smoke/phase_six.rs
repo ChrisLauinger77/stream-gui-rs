@@ -61,6 +61,13 @@ pub(super) async fn check(app: &tauri::AppHandle) {
     let before = services.sessions.sessions().await;
     let monitor = services.monitor.snapshot().phase;
     until(app, "!!document.querySelector('.app-footer')").await;
+    for width in [620, 1120] {
+        window
+            .set_size(tauri::LogicalSize::new(width, 600))
+            .unwrap();
+        until(app, &format!("innerWidth === {width}")).await;
+        check_browsing_scroll(app).await;
+    }
     window.hide().unwrap();
     wait_until(|| !window.is_visible().unwrap_or(true)).await;
     show_about(app);
@@ -177,4 +184,30 @@ pub(super) async fn check(app: &tauri::AppHandle) {
         after.iter().map(|s| (&s.id, s.pid)).collect::<Vec<_>>()
     );
     assert!(after.iter().all(|s| s.phase == SessionPhase::Running));
+}
+
+async fn check_browsing_scroll(app: &tauri::AppHandle) {
+    let script = format!(
+        "{}().then(result => window.__browseLayoutResult = result, error => window.__browseLayoutResult = String(error)); true",
+        include_str!("browse_layout.js")
+    );
+    evaluate(app, &script).await;
+    until(app, "window.__browseLayoutResult !== undefined").await;
+    let cases = evaluate(app, "(() => {const result = window.__browseLayoutResult; delete window.__browseLayoutResult; return result;})()").await;
+    let cases = cases.as_array().expect("layout cases");
+    assert_eq!(cases.len(), 6);
+    for case in cases {
+        let number = |key: &str| case[key].as_f64().expect(key);
+        assert!(
+            number("documentHeight") <= number("height") + 1.0
+                && number("outerScroll") == 0.0
+                && number("innerScroll") > 0.0
+                && case["focused"] == true
+                && number("focusedScroll") > 0.0
+                && number("focusedOuterScroll") == 0.0
+                && number("headerTop").abs() <= 1.0
+                && (number("footerBottom") - number("height")).abs() <= 1.0,
+            "browsing must scroll independently with the header/footer in place: {case}"
+        );
+    }
 }
