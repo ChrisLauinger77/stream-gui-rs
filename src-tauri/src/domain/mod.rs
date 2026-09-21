@@ -13,6 +13,7 @@ pub enum ErrorCode {
     Notification,
     BrowserOpen,
     ChatterinoNotFound,
+    ChatterinoCapacity,
     ChatLaunch,
     StreamlinkNotFound,
     UnsupportedStreamlink,

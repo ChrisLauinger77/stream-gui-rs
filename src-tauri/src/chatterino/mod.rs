@@ -153,7 +153,7 @@ impl Chatterino {
         let mut command = command(&executable, login)?;
         let permit = self.children.clone().try_acquire_owned().map_err(|_| {
             AppError::new(
-                ErrorCode::Capacity,
+                ErrorCode::ChatterinoCapacity,
                 "Sixteen Chatterino launches are still running. Close one or use browser chat.",
             )
         })?;

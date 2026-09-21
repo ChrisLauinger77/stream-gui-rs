@@ -1643,6 +1643,23 @@ test("Chatterino errors offer browser chat without automatically opening it", as
   await openChannelPreferences(); await click("Open chat in Chatterino");
   expect(text()).toContain("Chatterino was not found"); expect(text()).not.toContain("private path"); expect(api.openBrowserChat).not.toHaveBeenCalled();
 });
+test("Chatterino capacity gives actionable guidance and keeps browser chat usable", async () => {
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, chatProvider: "chatterino" });
+  vi.mocked(api.openChat).mockRejectedValue({ code: "chatterino_capacity", message: "private backend message" });
+  vi.mocked(api.openBrowserChat).mockResolvedValue(null);
+  await openChannelPreferences(); await click("Open chat in Chatterino");
+  expect(text()).toContain("Too many Chatterino instances are active. Close a Chatterino window or use browser chat.");
+  expect(text()).not.toContain("Browsing is busy"); expect(text()).not.toContain("private backend message");
+  expect(api.openBrowserChat).not.toHaveBeenCalled(); expect(button("Open chat in browser").disabled).toBe(false);
+  await click("Open chat in browser");
+  expect(api.openBrowserChat).toHaveBeenCalledExactlyOnceWith({ authSessionId: "1", broadcasterId: "channel-one" });
+});
+test("browsing capacity retains its existing busy guidance", async () => {
+  vi.mocked(api.streams).mockRejectedValue({ code: "capacity", message: "private browsing message" });
+  await render(); await click("Live");
+  expect(text()).toContain("Browsing is busy. Please try again shortly.");
+  expect(text()).not.toContain("Too many Chatterino instances"); expect(text()).not.toContain("private browsing message");
+});
 async function openUpdates() { await click("Settings"); await click("Updates", ".settings-nav"); }
 test.each([
   ["current", "Stream GUI RS is up to date", "0.3.0"], ["available", "Version 0.4.0 is available", "0.4.0"],

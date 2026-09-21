@@ -1602,10 +1602,12 @@ async fn chatterino_waiter_capacity_is_bounded_and_released_after_short_lived_cl
     for _ in 0..16 {
         chat.open(executable.to_str(), "hold").unwrap();
     }
+    assert_eq!(chat.active_launchers(), 16);
     assert_eq!(
         chat.open(executable.to_str(), "hold").unwrap_err().code,
-        ErrorCode::Capacity
+        ErrorCode::ChatterinoCapacity
     );
+    assert_eq!(chat.active_launchers(), 16);
     std::fs::write(executable.with_extension("release"), "done").unwrap();
     tokio::time::timeout(Duration::from_secs(3), async {
         while chat.active_launchers() != 0 {
