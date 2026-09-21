@@ -4,24 +4,84 @@ use crate::{
     streamlink::{discovery::SearchLocations, validate_executable},
 };
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::Arc,
 };
 
-pub fn resolve(path: Option<&str>, locations: &SearchLocations) -> Result<std::path::PathBuf> {
-    let found = match path {
-        Some(path)
-            if path.len() <= 4096
-                && !path.chars().any(char::is_control)
-                && Path::new(path).is_absolute() =>
-        {
-            validate_executable(Path::new(path)).ok()
+#[cfg(target_os = "linux")]
+mod flatpak;
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum LaunchSource {
+    Native(PathBuf),
+    #[cfg(target_os = "linux")]
+    Flatpak {
+        executable: PathBuf,
+        installation: flatpak::Installation,
+    },
+}
+impl LaunchSource {
+    pub fn description(&self) -> String {
+        match self {
+            Self::Native(path) => path.to_string_lossy().into_owned(),
+            #[cfg(target_os = "linux")]
+            Self::Flatpak { .. } => "Installed".into(),
         }
-        Some(_) => None,
-        None => locations.find("chatterino"),
+    }
+}
+
+pub fn resolve(path: Option<&str>, locations: &SearchLocations) -> Result<LaunchSource> {
+    resolve_with(path, |name| locations.find(name))
+}
+fn resolve_with(
+    path: Option<&str>,
+    find: impl Fn(&str) -> Option<PathBuf>,
+) -> Result<LaunchSource> {
+    let missing = || {
+        AppError::new(
+            ErrorCode::ChatterinoNotFound,
+            "Chatterino was not found. Install it or set its executable path; browser chat remains available.",
+        )
     };
-    found.ok_or_else(|| AppError::new(ErrorCode::ChatterinoNotFound, "Chatterino was not found. Install it or set its executable path; browser chat remains available."))
+    if let Some(path) = path {
+        // An explicit native override never falls through to a different installation.
+        return (path.len() <= 4096 && !path.chars().any(char::is_control))
+            .then(|| validate_executable(Path::new(path)).ok())
+            .flatten()
+            .map(LaunchSource::Native)
+            .ok_or_else(missing);
+    }
+    if let Some(native) = find("chatterino") {
+        return Ok(LaunchSource::Native(native));
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(executable) = find("flatpak") {
+        if let Some(installation) = flatpak::detect(&executable) {
+            return Ok(LaunchSource::Flatpak {
+                executable,
+                installation,
+            });
+        }
+    }
+    Err(missing())
+}
+
+// Inject only executable candidates, so normal CI never discovers host applications.
+#[cfg(all(target_os = "linux", feature = "test-support"))]
+pub fn resolve_test_candidates(
+    path: Option<&str>,
+    native: Option<&Path>,
+    flatpak: Option<&Path>,
+) -> Result<LaunchSource> {
+    resolve_with(path, |name| {
+        (if name == "chatterino" {
+            native
+        } else {
+            flatpak
+        })
+        .and_then(|p| validate_executable(p).ok())
+    })
 }
 fn arguments(login: &str) -> Result<[String; 2]> {
     crate::streamlink::playback::channel_url(login)?;
@@ -38,10 +98,30 @@ fn launch_error() -> AppError {
         "Could not start Chatterino. Check its installation or use browser chat.",
     )
 }
-fn command(path: &Path, login: &str) -> Result<Command> {
+fn command(source: &LaunchSource, login: &str) -> Result<Command> {
+    let channel = arguments(login)?;
+    match source {
+        LaunchSource::Native(path) => isolated_command(path, &channel),
+        #[cfg(target_os = "linux")]
+        LaunchSource::Flatpak {
+            executable,
+            installation,
+        } => isolated_command(
+            executable,
+            &[
+                "run".into(),
+                installation.flag().into(),
+                flatpak::APP_REF.into(),
+                channel[0].clone(),
+                channel[1].clone(),
+            ],
+        ),
+    }
+}
+fn isolated_command(path: &Path, args: &[String]) -> Result<Command> {
     let mut command = Command::new(path);
     command
-        .args(arguments(login)?)
+        .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -100,7 +180,7 @@ fn command(path: &Path, login: &str) -> Result<Command> {
                 })
             })
             .collect::<Result<_>>()?;
-        if environment.len() >= 64 || args.len() != 2 {
+        if environment.len() >= 64 || args.len() > 6 {
             return Err(launch_error());
         }
         // SAFETY: captures own stable CString buffers prepared before fork. The
@@ -113,12 +193,11 @@ fn command(path: &Path, login: &str) -> Result<Command> {
                 if libc::setsid() == -1 {
                     return Err(std::io::Error::last_os_error());
                 }
-                let argv = [
-                    program.as_ptr(),
-                    args[0].as_ptr(),
-                    args[1].as_ptr(),
-                    std::ptr::null(),
-                ];
+                let mut argv = [std::ptr::null(); 8];
+                argv[0] = program.as_ptr();
+                for (slot, value) in argv[1..].iter_mut().zip(&args) {
+                    *slot = value.as_ptr();
+                }
                 let mut envp = [std::ptr::null(); 64];
                 for (slot, value) in envp.iter_mut().zip(&environment) {
                     *slot = value.as_ptr();
@@ -149,8 +228,31 @@ impl Default for Chatterino {
 }
 impl Chatterino {
     pub fn open(&self, path: Option<&str>, login: &str) -> Result<()> {
-        let executable = resolve(path, &SearchLocations::system())?;
-        let mut command = command(&executable, login)?;
+        self.open_after_discovery(
+            login,
+            || resolve(path, &SearchLocations::system()),
+            || false,
+        )
+    }
+    pub(crate) fn open_after_discovery(
+        &self,
+        login: &str,
+        discover: impl FnOnce() -> Result<LaunchSource>,
+        cancelled: impl Fn() -> bool,
+    ) -> Result<()> {
+        let source = discover()?;
+        // Flatpak discovery waits for a bounded child; logout/Stop/Quit may have
+        // cancelled this dispatch while the probe was in progress.
+        if cancelled() {
+            return Err(AppError::new(
+                ErrorCode::Cancelled,
+                "Chat request was cancelled.",
+            ));
+        }
+        self.open_source(&source, login)
+    }
+    pub fn open_source(&self, source: &LaunchSource, login: &str) -> Result<()> {
+        let mut command = command(source, login)?;
         let permit = self.children.clone().try_acquire_owned().map_err(|_| {
             AppError::new(
                 ErrorCode::ChatterinoCapacity,
@@ -188,6 +290,21 @@ impl Chatterino {
 mod tests {
     use super::*;
     #[test]
+    fn cancellation_during_discovery_prevents_chat_spawn() {
+        let cancelled = std::cell::Cell::new(false);
+        let chat = Chatterino::default();
+        let result = chat.open_after_discovery(
+            "example",
+            || {
+                cancelled.set(true);
+                Ok(LaunchSource::Native("/absent/synthetic-chat".into()))
+            },
+            || cancelled.get(),
+        );
+        assert_eq!(result.unwrap_err().code, ErrorCode::Cancelled);
+        assert_eq!(chat.active_launchers(), 0);
+    }
+    #[test]
     fn typed_arguments_paths_and_environment_do_not_forward_credentials() {
         assert_eq!(
             arguments("Example_1").unwrap(),
@@ -205,7 +322,11 @@ mod tests {
         ] {
             assert!(arguments(login).is_err());
         }
-        let cmd = command(Path::new("/synthetic path/播放器"), "example").unwrap();
+        let cmd = command(
+            &LaunchSource::Native("/synthetic path/播放器".into()),
+            "example",
+        )
+        .unwrap();
         assert_eq!(cmd.get_program(), "/synthetic path/播放器");
         assert_eq!(
             cmd.get_args().collect::<Vec<_>>(),

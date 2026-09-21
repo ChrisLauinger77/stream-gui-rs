@@ -88,7 +88,9 @@ introduced. It avoids maintaining a home-grown semantic-version parser.
 - Discovery reuses existing executable validation and searches up to 128 absolute
   PATH entries plus native locations: Linux package paths, macOS Homebrew and
   system/user Applications bundles, and Windows Program Files/Local App Data.
-  There is no recursive scan, downloader, wrapper command or custom chat argv.
+  Linux also supports the fixed official Chatterino Flatpak after native discovery,
+  as described below. There is no recursive scan, downloader, user-supplied wrapper
+  command or custom chat argv.
 - A validated fresh/session-bound Twitch login yields exactly
   `--channels`, `t:<lowercase login>`. Automatic chat uses the immutable launch
   snapshot and generation-checked error reporting. Display metadata is never argv.
@@ -113,32 +115,33 @@ Upstream stable v2.5.5 sources were inspected:
 and [macOS bundle naming](https://github.com/Chatterino/chatterino2/blob/v2.5.5/src/CMakeLists.txt).
 Channel-only mode disables settings saving: configure/sign in using Chatterino's
 normal launcher first. A new window/process may remain. **Instance reuse has not
-been natively observed on any platform and is not promised.** Flatpak/Snap command
-wrappers are not integrated; native executables/AppImages may use the override.
+been natively observed on any platform and is not promised.** The fixed official
+Linux Flatpak is supported; arbitrary Flatpak IDs and Snap command wrappers are
+not integrated. Native executables/AppImages may use the override.
 
 ## Automated validation
 
 All standard tests use synthetic credentials, local HTTP and native fixtures;
 they do not require real Twitch, GitHub or Chatterino. Results below include the
-cleanup rerun unless explicitly marked historical.
+Linux Flatpak fix rerun unless explicitly marked historical.
 
 | Check | Local Linux result |
 | --- | --- |
-| Generated bindings (`npm run bindings`) | PASS; generated DTOs committed with Rust changes |
+| Generated bindings (`npm run bindings`) | PASS; byte-for-byte unchanged by the Flatpak fix |
 | TypeScript and production frontend (`npm run build`) | PASS |
-| Frontend (`npm test`) | **201 passed**, 3 files; 191 before cleanup |
+| Frontend (`npm test`) | **202 passed**, 3 files; 201 before the Flatpak fix |
 | Candidate promotion guards | PASS |
 | Rust formatting | PASS |
-| Backend unit tests, no desktop | **169 passed** |
-| Native process lifecycle integration | **36 passed** |
+| Backend unit tests, no desktop | **170 passed** |
+| Native process lifecycle integration | **42 passed** |
 | Build metadata / public client-ID guards | **2 / 1 passed** |
-| Desktop-enabled library with notification acceptance | **183 passed** (includes backend tests) |
+| Desktop-enabled library with notification acceptance | **184 passed** (includes backend tests) |
 | Desktop-only tests without acceptance feature | **10 passed** |
 | All-target Rust check / strict Clippy | PASS |
 | Native debug desktop build, no bundle | PASS; synthetic compile-only public ID |
 | Linux browser dispatch/reaping | **2 passed** |
 | Linux startup | **1 passed** |
-| Linux graphical background/titlebar/Phase 6/Phase 7 | **4 passed** on serial rerun; initial parallel run **3 passed / 1 failed** (Phase 6 incomplete) |
+| Linux graphical background/titlebar/Phase 6/Phase 7 | **4 passed** on serial rerun with polling server; preceding run **3 passed / 1 failed** while dev server exited with ENOSPC |
 | Original final Phase 7 graphical layout scenario | **1 passed**, after long-name/overflow checks; historical targeted run |
 | Whitespace/diff review | PASS |
 | Hosted Linux/macOS/Windows CI | **NOT RUN** for this change yet |
@@ -159,10 +162,11 @@ cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --featu
 TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --debug --no-bundle --features custom-protocol --ci
 cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_browser_open --features test-support
 cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_startup --features test-support -- --ignored
-# In a graphical session, with npm run dev -- --strictPort serving the frontend:
+# Original cleanup graphical attempts, with npm run dev -- --strictPort:
 cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_background --features test-support -- --ignored
 # Cleanup follow-up after an incomplete Phase 6 scenario in the parallel run:
 cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_background --features test-support phase_six_about_support_and_text_scale_use_the_native_webview -- --ignored
+# Flatpak fix graphical rerun, with CHOKIDAR_USEPOLLING=true npm run dev -- --strictPort:
 cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_background --features test-support -- --ignored --test-threads=1
 git diff --check
 ```
@@ -230,6 +234,64 @@ again with a byte-for-byte consistency check. No dependencies, command shapes,
 command registrations or permissions changed; the sole IPC DTO addition is the
 new error-code variant. Application versions remain 0.3.0.
 
+## Linux Flatpak acceptance fix
+
+Linux native testing found that Chatterino installed from Flathub was not detected.
+The native executable search was working, but the official Flatpak application
+`com.chatterino.chatterino` was outside its supported launch sources.
+
+The focused fix preserves explicit native override → native discovery precedence,
+then checks the host `flatpak` executable through the same bounded executable search.
+Only `info --user app/com.chatterino.chatterino` and, if absent, the matching
+`--system` query are allowed. Both probes and lock contention share a two-second
+deadline, with at most one probe child at a time, null stdio and timeout kill/reap.
+Missing Flatpak/app and failed probes are normal discovery absence. User installs
+win when both scopes are installed; non-default named system installations remain
+outside this focused support.
+
+Launch invokes executable/argv directly: `flatpak run --user|--system
+app/com.chatterino.chatterino --channels t:<validated lowercase login>`. The
+`app/` prefix restricts the target to an application, preventing a runtime shell
+target. The scope is the one found by discovery; neither it nor the app ID is
+accepted from the frontend. The existing credential-free environment, direct
+Unix `execve`, independent session, bounded 16-launch tracking, typed capacity
+error and waiter reaping are reused. Cancellation is rechecked after discovery.
+The discovery DTO remains `string | null`: native paths remain unchanged and a
+Flatpak detection displays “Chatterino: Installed”, without writing a command
+into the optional native executable override.
+
+Deterministic regressions add six Linux native-process tests for missing
+Flatpak/app; native and explicit override precedence; user/system/both-installed
+selection and exact argv; hostile logins; no implicit shell on probe or launch;
+bounded noisy/hanging probes and reaping; typed capacity and recovery; independence
+from playback Stop/shutdown and parent exit; and absence of synthetic credentials
+from both info probes and launched children. The existing native fixture supplies
+all Flatpak behavior, so CI needs no Flatpak installation. One backend unit test
+guards cancellation after discovery; one frontend behavior test verifies detected
+availability without changing the native override.
+
+**Real Linux Flatpak check: PASS for discovery and channel launch.** The installed
+system Flathub package was Chatterino **2.5.5**. A temporary native smoke entry point
+called the production resolver and launcher with the public `twitch` channel; the
+user confirmed that Chatterino opened that channel successfully. The entry point
+was removed afterward. This confirms the native launch path and visible channel,
+not end-to-end authenticated manual/automatic chat IPC, instance reuse, repeated
+channels or real Stop/Quit behavior. Those remaining checks are separate below.
+
+No dependencies, settings schema, generated bindings, IPC command shapes or
+permissions changed. Version remains 0.3.0; no publication or Phase 8 work is part
+of this fix. README, architecture and the engineering guide record the narrowed
+Flatpak support and unchanged ownership/security rules.
+
+Focused Chatterino checks passed first (three backend units, ten process tests and
+five frontend cases), followed by the full validation recorded above. The first
+full serial graphical run passed three scenarios and failed Phase 6's layout
+assertion; its frontend server had exited with `ENOSPC: System limit for number
+of file watchers reached`. Restarting the test server with
+`CHOKIDAR_USEPOLLING=true` allowed all four scenarios to pass. No application/test
+behavior or host watcher limits were changed. This environment failure is
+separate from the earlier unresolved allocator diagnostic.
+
 ## Native observations and remaining acceptance
 
 Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
@@ -271,7 +333,7 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
 | Profile switch/edit/delete with real player, two sessions and Restart | NOT TESTED; deterministic native executable fixtures pass | NOT TESTED | NOT TESTED |
 | Official live update response | PASS, backend manual check | NOT TESTED | NOT TESTED |
 | View release opens official page | NOT TESTED; fixed destination and browser adapter covered separately | NOT TESTED | NOT TESTED |
-| Actual Chatterino discovery/manual/automatic chat | NOT TESTED: Chatterino not installed | NOT TESTED | NOT TESTED |
+| Actual Chatterino discovery/manual/automatic chat | System Flathub 2.5.5 discovery and channel launch PASS through production launcher, user confirmed; authenticated manual/automatic IPC NOT TESTED | NOT TESTED | NOT TESTED |
 | Actual Chatterino reuse/new process, repeated channels, Stop/Quit | NOT TESTED; independent native fixture lifetime/reaping pass | NOT TESTED | NOT TESTED |
 | Native UI/scaling/About/background/Quit | Isolated WebKitGTK fixtures PASS as described above | NOT TESTED on WKWebView | NOT TESTED on WebView2 |
 | Screen reader / OS high-DPI / packaged console behavior | Screen reader/OS scaling NOT TESTED; webview zoom checked | VoiceOver NOT TESTED | Narrator/high-DPI/console NOT TESTED |

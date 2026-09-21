@@ -113,9 +113,16 @@ impl BrowserChat {
                     crate::config::ChatProvider::Browser => {
                         opener.open(&target).map_err(|_| open_error())
                     }
-                    crate::config::ChatProvider::Chatterino => {
-                        chatterino.open(path.as_deref(), &target.login)
-                    }
+                    crate::config::ChatProvider::Chatterino => chatterino.open_after_discovery(
+                        &target.login,
+                        || {
+                            crate::chatterino::resolve(
+                                path.as_deref(),
+                                &crate::streamlink::discovery::SearchLocations::system(),
+                            )
+                        },
+                        || closing.load(Ordering::SeqCst) || cancel.is_cancelled(),
+                    ),
                 }
             })
             .await

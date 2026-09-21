@@ -382,7 +382,7 @@ pub async fn discover_chatterino() -> Result<Option<String>> {
             &crate::streamlink::discovery::SearchLocations::system(),
         )
         .ok()
-        .map(|p| p.to_string_lossy().into_owned())
+        .map(|source| source.description())
     })
     .await
     .map_err(|_| {

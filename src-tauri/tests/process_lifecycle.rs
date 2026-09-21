@@ -8,6 +8,9 @@ use stream_gui_rs::{
     domain::{ErrorCode, LaunchRequest, services::Services},
     streamlink::{self, LogSource, SessionPhase, SessionSnapshot, Supervisor},
 };
+#[cfg(target_os = "linux")]
+#[path = "support/chatterino_flatpak.rs"]
+mod chatterino_flatpak;
 
 fn helper() -> &'static Path {
     Path::new(env!("CARGO_BIN_EXE_fake-streamlink"))

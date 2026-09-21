@@ -3,10 +3,16 @@ use std::{
     io::{self, Write},
     time::Duration,
 };
+#[cfg(target_os = "linux")]
+mod fake_flatpak;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let executable = std::env::current_exe().unwrap();
+    #[cfg(target_os = "linux")]
+    if fake_flatpak::run(&args, &executable) {
+        return;
+    }
     let name = executable.file_stem().unwrap().to_string_lossy();
     #[cfg(windows)]
     if args == ["--version"] || args.first().is_some_and(|arg| arg == "--no-config") {

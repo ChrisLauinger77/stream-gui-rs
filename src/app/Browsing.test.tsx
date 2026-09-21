@@ -1643,6 +1643,15 @@ test("Chatterino errors offer browser chat without automatically opening it", as
   await openChannelPreferences(); await click("Open chat in Chatterino");
   expect(text()).toContain("Chatterino was not found"); expect(text()).not.toContain("private path"); expect(api.openBrowserChat).not.toHaveBeenCalled();
 });
+test("detected Chatterino availability leaves the native override unchanged", async () => {
+  settingsPersistence(); vi.mocked(api.discoverChatterino).mockResolvedValue("Installed");
+  await render(); await click("Settings"); await editControl("Chat application", "chatterino", "select");
+  await click("Find Chatterino");
+  expect(text()).toContain("Chatterino: Installed");
+  expect((container.querySelector('input[placeholder="Automatic discovery"]') as HTMLInputElement).value).toBe("");
+  await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ chatProvider: "chatterino", chatterinoPath: null }));
+});
 test("Chatterino capacity gives actionable guidance and keeps browser chat usable", async () => {
   vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, chatProvider: "chatterino" });
   vi.mocked(api.openChat).mockRejectedValue({ code: "chatterino_capacity", message: "private backend message" });
