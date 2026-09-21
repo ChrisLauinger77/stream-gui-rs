@@ -124,12 +124,13 @@ not integrated. Native executables/AppImages may use the override.
 ## Automated validation
 
 All standard tests use synthetic credentials, local HTTP and native fixtures;
-they do not require real Twitch, GitHub or Chatterino. Results below include the
-Linux Flatpak fix rerun unless explicitly marked historical.
+they do not require real Twitch, GitHub or Chatterino. Results below were rerun
+before the first hosted CI push, after the native test readiness correction,
+unless explicitly marked historical. Live GitHub acceptance is separate below.
 
 | Check | Local Linux result |
 | --- | --- |
-| Generated bindings (`npm run bindings`) | PASS; byte-for-byte unchanged by the Flatpak fix |
+| Generated bindings (`npm run bindings`) | PASS; byte-for-byte unchanged |
 | TypeScript and production frontend (`npm run build`) | PASS |
 | Frontend (`npm test`) | **202 passed**, 3 files; 201 before the Flatpak fix |
 | Candidate promotion guards | PASS |
@@ -143,10 +144,28 @@ Linux Flatpak fix rerun unless explicitly marked historical.
 | Native debug desktop build, no bundle | PASS; synthetic compile-only public ID |
 | Linux browser dispatch/reaping | **2 passed** |
 | Linux startup | **1 passed** |
-| Linux graphical background/titlebar/Phase 6/Phase 7 | **4 passed** on serial rerun with polling server; preceding run **3 passed / 1 failed** while dev server exited with ENOSPC |
+| Linux graphical background/titlebar/Phase 6/Phase 7 | **4 passed** in 53.46 seconds after the readiness correction below; polling dev server |
 | Original final Phase 7 graphical layout scenario | **1 passed**, after long-name/overflow checks; historical targeted run |
 | Whitespace/diff review | PASS |
-| Hosted Linux/macOS/Windows CI | **NOT RUN** for this change yet |
+| Hosted Linux/macOS/Windows CI | Reported in the Phase 7 pull request's checks after the acceptance push; separate from native acceptance |
+
+The acceptance-preparation run initially passed three graphical tests and failed
+the Phase 6 About image assertion. A focused rerun then exposed a layout check
+running across the shared scenario's requested reload. Phase 6 had accepted old
+DOM nodes as readiness, whereas Phase 7 already required a fresh document. The
+test now uses the same fresh-document guard and awaits image loading through the
+existing bounded helper. Assertions and deadlines are retained. The isolated
+Phase 6 check passed, followed by the complete validation suite and all four
+graphical tests. This is a test-harness correction, not an application UI or
+allocator fix; earlier unrelated failures are preserved in their original notes.
+
+CI packaging now also runs for same-repository pull requests, excluding
+Dependabot, so macOS/Windows acceptance can use installers before merge. Forks
+retain compilation checks, packaging still requires the registered client ID,
+and workflow permissions/publication behavior are unchanged. YAML parsing and
+20 gate cases (main/internal/fork/Dependabot/branch with platform conditions)
+passed. Package identity and the focused manual steps are documented in
+[Phase 7 native acceptance](phase-7-native-acceptance.md).
 
 Commands run from the repository root:
 
@@ -301,6 +320,51 @@ separate from the earlier unresolved allocator diagnostic.
 
 Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
 
+- Final Linux update acceptance used a temporary detached checkout of `55ff255`,
+  unchanged production frontend/update/browser code, bundled production assets
+  (`custom-protocol`, `tauri:` origin), and a temporary native WebKitGTK test
+  driver. This was a non-publishing debug build in packaged mode, with a synthetic
+  compile-only client ID; its services had no Twitch client ID or credential
+  access. Settings/cache/data were isolated. No fake version, release, update
+  endpoint, production behavior change or permanent test hook was used.
+- The real fixed GitHub latest-release endpoint returned **v0.3.0**. **Check for
+  updates** immediately showed **Checking for updates…**, then **Stream GUI RS is
+  up to date**. After the normal one-minute cooldown, **Refresh update check**
+  replaced the prior status with progress, then the correct final status.
+- For failure/recovery, only the test process used a temporary loopback CONNECT
+  proxy restricted to `api.github.com:443`. TLS remained end-to-end; payloads were
+  not inspected or logged. Rejecting one connection produced **Unable to check
+  for updates**; settings navigation remained usable. The connection log showed
+  no automatic retries during the cooldown. Restoring forwarding and explicitly
+  refreshing after 61 seconds showed progress and recovered to **up to date**.
+  System networking/proxy settings were untouched. The temporary observer was
+  corrected to wait for initial WebKit readiness and reattach after navigation;
+  the focused failure/navigation/recovery rerun passed. No app fix was involved.
+- **View release** was available while current, so a temporary version override
+  was unnecessary. The actual UI action used the existing parameterless IPC,
+  Rust-reconstructed destination and production GIO opener, with no application
+  shell command or arbitrary URL input. It opened
+  `https://github.com/ChrisLauinger77/stream-gui-rs/releases/tag/v0.3.0` in Firefox,
+  the configured default handler; the user confirmed the correct page opened.
+  The app stayed responsive and retained its accepted update status without
+  displaying update-check progress for browser opening. The temporary checkout
+  and proxy were removed/stopped after acceptance.
+- Real player-profile acceptance is user-reported with **mpv in windowed mode**;
+  profile B changed **low latency**. The completed profile/Restart smoke report
+  covers playback with A, selecting B while the stream remained running and
+  unchanged, Restart resolving B, and successful Stop/cleanup. Profile names and
+  the exact On/Off values were not supplied; no measured latency improvement or
+  additional real-player coverage is claimed.
+- Linux Phase 7 native acceptance is **complete for the requested focused scope**:
+  update awareness/release activation, Chatterino Flatpak, explicit browser
+  fallback, real profiles/Restart, Stop/Quit and the previously reported
+  About/tray/background/notification regressions. Chatterino discovery and launch
+  were directly confirmed; its new-window/process behavior is accepted. Stop and
+  Quit independence are recorded from the user's completed Linux smoke checklist,
+  separately from the deterministic lifecycle fixtures. Broader accessibility,
+  exhaustive player/installation coverage and exact release-candidate package
+  acceptance below remain open. The historical allocator observation is retained
+  without making it a release blocker in the absence of new evidence.
 - Follow-up Linux native acceptance: the user observed notifications and confirmed
   that player profiles work. Both are recorded as PASS for the reported behavior.
 - The user also confirmed that the native update check and View release button
@@ -373,11 +437,11 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
 | --- | --- | --- | --- |
 | Existing real login/settings/profile restore | PASS, user-reported Linux smoke checklist | NOT TESTED | NOT TESTED |
 | Real desktop notification delivery | PASS, user observed notifications | NOT TESTED | NOT TESTED |
-| Player profile use | PASS, user confirmed profiles work; specific players not recorded | NOT TESTED | NOT TESTED |
-| Real playback video/audio with profiles | PASS, user-reported Linux smoke checklist; exact player coverage not recorded | NOT TESTED | NOT TESTED |
+| Player profile use | PASS, user confirmed windowed mpv with a low-latency profile change; other players not claimed | NOT TESTED | NOT TESTED |
+| Real playback video/audio with profiles | PASS, user-reported Linux smoke checklist; mpv identified in follow-up | NOT TESTED | NOT TESTED |
 | Profile switch/edit/delete with real player, two sessions and Restart | PASS, user-reported Linux smoke checklist; deterministic native fixtures also pass | NOT TESTED | NOT TESTED |
-| Manual update check | PASS, user confirmed native UI; earlier live backend check also passed | NOT TESTED | NOT TESTED |
-| View release opens official page | PASS, user confirmed View release works | NOT TESTED | NOT TESTED |
+| Manual update check | PASS, live packaged-mode native UI check/refresh/progress and isolated network failure/recovery | NOT TESTED | NOT TESTED |
+| View release opens official page | PASS, real UI activation opened official v0.3.0 page in Firefox; user confirmed destination | NOT TESTED | NOT TESTED |
 | Actual Chatterino discovery/manual/automatic chat and browser fallback | PASS, system Flathub 2.5.5 discovery/channel launch confirmed; subsequent chat checks covered by user-reported Linux smoke checklist | NOT TESTED | NOT TESTED |
 | Actual Chatterino new-window/process behavior | PASS, user confirmed a new window/process on channel opening, including while already running; accepted behavior, no reuse/IPC control attempted | NOT TESTED | NOT TESTED |
 | Actual Chatterino repeated same-channel requests and Stop/Quit | PASS, user-reported Linux smoke checklist; independent native fixture lifetime/reaping also pass | NOT TESTED | NOT TESTED |
@@ -409,7 +473,10 @@ cleanup above. The cumulative Phase 7 diff was reviewed again with focus on
 update-request state, typed chat errors, fixed frontend messages, accessibility
 announcements and credential boundaries. No further confirmed application defect
 was identified within that focused review.
-Hosted CI and the native gaps above remain open validation gates.
+Hosted CI results are recorded on the Phase 7 pull request. macOS/Windows native
+acceptance remains a separate gate; use the
+[focused native checklist](phase-7-native-acceptance.md). The historical allocator
+observation remains unresolved, without a speculative fix or a harmlessness claim.
 
 Confirmed issues addressed during implementation include the Unix ENOEXEC shell
 fallback, stale global saves overwriting narrow profile mutations, inability to
