@@ -65,7 +65,12 @@ pub(super) async fn check(app: &tauri::AppHandle) {
     let services = app.state::<Arc<Services>>();
     let before = services.sessions.sessions().await;
     let monitor = services.monitor.snapshot().phase;
-    until(app, "!!document.querySelector('.app-footer')").await;
+    // The shared scenario requests a reload; old DOM nodes cannot establish readiness.
+    until(
+        app,
+        "window.__streamGuiSmokeReload !== true && !!document.querySelector('.app-footer')",
+    )
+    .await;
     for width in [620, 1120] {
         window
             .set_size(tauri::LogicalSize::new(width, 600))
@@ -89,14 +94,12 @@ pub(super) async fn check(app: &tauri::AppHandle) {
         .await,
         true
     );
-    assert_eq!(
-        evaluate(
-            app,
-            "document.querySelector('.about-dialog img').naturalWidth > 0"
-        )
-        .await,
-        true
-    );
+    // The dialog can render before WebKit finishes decoding its local image.
+    until(
+        app,
+        "document.querySelector('.about-dialog img').naturalWidth > 0",
+    )
+    .await;
     evaluate(
         app,
         "document.querySelector('.about-dialog a').focus(); true",
