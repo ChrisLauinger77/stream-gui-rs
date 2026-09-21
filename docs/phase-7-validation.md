@@ -301,6 +301,10 @@ separate from the earlier unresolved allocator diagnostic.
 
 Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
 
+- Follow-up Linux native acceptance: the user observed notifications and confirmed
+  that player profiles work. Both are recorded as PASS for the reported behavior.
+  Specific player coverage, profile mutation/Restart scenarios and notification
+  activation/background lifecycle were not detailed in that report.
 - The isolated graphical harness passed profile create/select/delete with active
   deletion falling back to Default, initial editor focus, Chatterino controls and
   Updates rendering without HTTP on navigation. It paired 100% text with System,
@@ -334,7 +338,9 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
 | Acceptance area | Linux | macOS | Windows |
 | --- | --- | --- | --- |
 | Existing real login/settings restore | NOT TESTED for Phase 7; synthetic migrations pass | NOT TESTED | NOT TESTED |
-| Real Twitch browsing/video/audio and mpv/VLC/custom profiles | NOT TESTED; native fake-process contracts pass | NOT TESTED | NOT TESTED |
+| Real desktop notification delivery | PASS, user observed notifications | NOT TESTED | NOT TESTED |
+| Player profile use | PASS, user confirmed profiles work; specific players not recorded | NOT TESTED | NOT TESTED |
+| Real Twitch browsing/video/audio across mpv/VLC/custom players | NOT CONFIRMED in detail; native fake-process contracts pass | NOT TESTED | NOT TESTED |
 | Profile switch/edit/delete with real player, two sessions and Restart | NOT TESTED; deterministic native executable fixtures pass | NOT TESTED | NOT TESTED |
 | Official live update response | PASS, backend manual check | NOT TESTED | NOT TESTED |
 | View release opens official page | NOT TESTED; fixed destination and browser adapter covered separately | NOT TESTED | NOT TESTED |
@@ -346,7 +352,7 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
 
 Remaining manual acceptance must use the Phase 7 build: preserve an existing
 login/profile, browse and play real video/audio, exercise representative mpv/VLC
-profiles and Restart, open the release page, and verify background notifications,
+profiles and Restart, open the release page, and verify notification activation/background lifecycle,
 About and Quit. Complete Chatterino checks for repeated same-channel requests,
 explicit native paths and real Stop/Quit. macOS/Windows also need discovery and
 launch checks from stopped and running states; record actual process behavior
