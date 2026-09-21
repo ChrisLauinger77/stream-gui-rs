@@ -23,13 +23,15 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Source, High, Medium, Low, and Audio quality policies
 - Multiple simultaneous streams with Stop, Restart, Watching, and bounded diagnostics
 - Persistent global playback settings and per-channel overrides, including opt-in low latency
-- Twitch chat in the system browser
+- Twitch chat in the system browser or independently authenticated Chatterino
+- Up to 16 reusable named player profiles, with optional quality and low-latency preferences
+- Manual stable-release awareness from the official GitHub repository (no automatic updater)
 - System, Light, and Dark themes, 100/125/150% text size, and focused application shortcuts
 - Opt-in followed-stream monitoring, desktop notifications, and per-channel notification preferences
 - Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
 - About on every desktop platform and a previewable support report
 
-The list describes the 0.3.0 source tree. See [release notes](docs/release-notes-0.3.0.md) for changes and upgrade guidance; candidate builds are not published releases.
+The list describes the development tree including Phase 7. The released baseline remains v0.3.0; these additions have not been released. See [v0.3.0 release notes](docs/release-notes-0.3.0.md) and [Phase 7 validation](docs/phase-7-validation.md) for their separate validation scope.
 
 Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. Background features are available in 0.2.0 and later; v0.1.0 packages retain their original close-to-exit behavior.
 
@@ -113,6 +115,18 @@ The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectiv
 
 **Settings → Prepare support report** shows selectable text for manual copying. Rust includes only build/platform metadata, a previously validated numeric Streamlink version (or “not checked”), player mode, and up to sixteen anonymous process phases/failure codes/exit codes. It excludes account/channel identities, credentials, paths, arguments, environment, raw logs and arbitrary error messages. Opening it performs no probe, credential access, upload, clipboard write, or Twitch request. Review the preview before sharing; the full local Developer tools diagnostics are a different, more detailed surface.
 
+## Profiles, external chat and update checks (Phase 7 development)
+
+In **Settings → Player → Profiles**, choose a configuration and press **Use profile**. Add, edit/rename or delete profiles there; names are unique and limited to 64 characters / 128 UTF-8 bytes, with at most 16 profiles. The separate Default configuration remains available. A profile contains the existing player mode, optional executable override and literal argument rows, plus optional quality and low latency. Select a profile in the management list to repair or delete it even if its executable has disappeared.
+
+Effective playback uses **global defaults → selected profile → channel overrides → explicit launch quality**. A profile replaces the player configuration; omitted profile quality/low latency inherit global values. Channels keep their independent overrides, but do not select profiles. Editing, selecting or deleting a profile leaves running sessions unchanged; **Restart** resolves current preferences. Deleting the active profile selects Default configuration for future launches/restarts. Upgrading keeps existing player settings and starts with no profiles.
+
+In **Settings → Playback → Chat application**, choose Browser (the default) or Chatterino. Chatterino must be installed separately and signed in independently; Stream GUI RS never transfers its Twitch credentials. Discovery checks PATH and common native installation locations, with an absolute executable override. macOS overrides point to the executable inside the app bundle. Flatpak/Snap command wrappers and custom arguments are not integrated; use a native executable or AppImage where available.
+
+The integration requests a channel-only Chatterino window. Upstream disables settings saving for this mode, so configure/sign in through Chatterino's normal launcher first. Each invocation may create another independent process/window; reuse is not guaranteed. These windows survive Stop and Quit and must be closed in Chatterino. At most 16 still-running direct Chatterino launches are retained by this app. A missing/failed Chatterino launch produces a clear error without stopping playback or silently opening another provider. Channel details always offer **Open chat in browser**. Automatic chat and per-channel inheritance continue to use the selected provider.
+
+**Settings → Updates → Check for updates** contacts only this project's public GitHub latest-release endpoint. Checks are manual on every installation; there is no startup check, background polling, notification or stored update preference. Rust keeps results and failures for 24 hours during the current application run; **Refresh update check** bypasses that cache at most once per minute. A newer stable semantic version offers **View release**, opening the fixed official repository's release page. A newer development version is never offered an older stable version as an upgrade. Update failure cannot block authentication, browsing or playback. No installer is downloaded or executed automatically.
+
 ## Background monitoring and notifications
 
 In **Settings → Background**, enable **Monitor followed live streams**, choose a 1, 2, or 5 minute interval, and enable notifications. Background preferences default off for new installations; upgrades from 0.2.0 preserve existing monitoring, notification and close behavior. Channel preferences can inherit, enable, or disable the global notification default. Monitoring still requires sign-in; notification permission is independent.
@@ -131,7 +145,7 @@ See the [0.3.0 release checks](docs/release-readiness-0.3.0.md) for validation s
 
 ## Current limitations
 
-Stream GUI RS does not provide embedded video/chat, external chat applications, advanced Streamlink transports or player profiles, an updater, or legacy configuration import. Monitoring stops when the application is fully quit. Active sessions and logs are not persisted. See [architecture](docs/architecture.md) for the detailed contracts.
+Stream GUI RS does not provide embedded video/chat, arbitrary chat applications, advanced Streamlink transports, an automatic updater, or legacy configuration import. Monitoring stops when the application is fully quit. Active sessions and logs are not persisted. See [architecture](docs/architecture.md) for the detailed contracts.
 
 ## Building from source
 
