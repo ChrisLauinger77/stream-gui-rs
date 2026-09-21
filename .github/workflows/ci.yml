@@ -78,7 +78,9 @@ jobs:
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD || 'ciCompileOnlyPublicClient123' }}
         run: npm run tauri build -- --debug --no-bundle --features custom-protocol --ci
       - name: Require registered ID for acceptance packages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # Internal PRs need installable artifacts for native acceptance before merge.
+        # Fork and Dependabot PRs retain compilation checks without packaging secrets.
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
         shell: bash
         env:
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
@@ -92,14 +94,14 @@ jobs:
             exit 1
           fi
       - name: Build native notification acceptance package
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
         env:
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
         # Rebuild with the opt-in feature; the normal build above must omit it.
         # --bundles selects packaging even with bundle.active=false.
         run: npm run tauri build -- --debug --bundles ${{ matrix.bundles }} --features custom-protocol,notification-acceptance --ci
       - name: Verify macOS app bundle signature
-        if: runner.os == 'macOS' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: runner.os == 'macOS' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))
         run: |
           codesign --verify --deep --strict --verbose=2 'src-tauri/target/debug/bundle/macos/Stream GUI RS.app'
           codesign --display --verbose=2 'src-tauri/target/debug/bundle/macos/Stream GUI RS.app'
@@ -118,7 +120,7 @@ jobs:
             throw 'The packaged application must use the Windows GUI subsystem.'
           }
       - name: Upload native notification acceptance package
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: stream-gui-rs-notification-acceptance-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}

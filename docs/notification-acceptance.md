@@ -6,7 +6,9 @@ Each **Send test notification** queues fixed, clearly labeled test content throu
 
 ## CI acceptance packages
 
-After a successful **Desktop checks** run for a push to `main`, download the matching `stream-gui-rs-notification-acceptance-<OS>-<architecture>-<commit>` artifact: Linux `.deb`, Windows NSIS installer, or macOS `.dmg`. These debug packages include the test action and require the repository's registered public client ID during packaging. Pull requests run checks without uploading packages; the normal packaged-mode build is still checked without the acceptance feature.
+After a successful **Desktop checks** run for a push to `main` or a same-repository pull request, download the matching `stream-gui-rs-notification-acceptance-<OS>-<architecture>-<commit>` artifact: Linux `.deb`, Windows NSIS installer, or macOS `.dmg`. These debug packages include the test action and require the repository's registered public client ID during packaging. Fork and Dependabot pull requests run compilation checks without uploading acceptance packages; the normal packaged-mode build is still checked without the acceptance feature.
+
+For a pull request, the artifact commit and About commit identify GitHub's tested merge commit, not just the branch head. Record the workflow run, artifact name and About version/commit when reporting native results. Building these packages does not merge the pull request or publish a release.
 
 The macOS CI artifact targets the runner's native architecture, recorded in its name; it is not the universal release image. Install the matching package and use the manual checks below. CI creation does not prove notification behavior on the target desktop. Artifacts request 14-day retention, but the repository's weekly cleanup can remove them once they are more than 24 hours old; download the intended build promptly. These artifacts are development builds, not GitHub Releases.
 
