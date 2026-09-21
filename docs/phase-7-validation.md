@@ -305,6 +305,8 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
   that player profiles work. Both are recorded as PASS for the reported behavior.
   Specific player coverage, profile mutation/Restart scenarios and notification
   activation/background lifecycle were not detailed in that report.
+- The user also confirmed that the native update check and View release button
+  work. Both Linux acceptance checks are PASS.
 - The isolated graphical harness passed profile create/select/delete with active
   deletion falling back to Default, initial editor focus, Chatterino controls and
   Updates rendering without HTTP on navigation. It paired 100% text with System,
@@ -333,7 +335,8 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
 - A separate, temporary manual backend invocation contacted the real fixed GitHub
   endpoint: current `0.3.0` returned **Current**, latest `0.3.0`, and the reconstructed
   destination matched the official v0.3.0 release. The temporary network example
-  was removed. This does **not** prove native View release browser activation.
+  was removed. The subsequent user acceptance above separately confirms native
+  update checking and View release browser activation.
 
 | Acceptance area | Linux | macOS | Windows |
 | --- | --- | --- | --- |
@@ -342,8 +345,8 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
 | Player profile use | PASS, user confirmed profiles work; specific players not recorded | NOT TESTED | NOT TESTED |
 | Real Twitch browsing/video/audio across mpv/VLC/custom players | NOT CONFIRMED in detail; native fake-process contracts pass | NOT TESTED | NOT TESTED |
 | Profile switch/edit/delete with real player, two sessions and Restart | NOT TESTED; deterministic native executable fixtures pass | NOT TESTED | NOT TESTED |
-| Official live update response | PASS, backend manual check | NOT TESTED | NOT TESTED |
-| View release opens official page | NOT TESTED; fixed destination and browser adapter covered separately | NOT TESTED | NOT TESTED |
+| Manual update check | PASS, user confirmed native UI; earlier live backend check also passed | NOT TESTED | NOT TESTED |
+| View release opens official page | PASS, user confirmed View release works | NOT TESTED | NOT TESTED |
 | Actual Chatterino discovery/manual/automatic chat | System Flathub 2.5.5 discovery and channel launch PASS through production launcher, user confirmed; authenticated manual/automatic IPC NOT TESTED | NOT TESTED | NOT TESTED |
 | Actual Chatterino new-window/process behavior | PASS, user confirmed a new window/process on channel opening, including while already running; accepted behavior, no reuse/IPC control attempted | NOT TESTED | NOT TESTED |
 | Actual Chatterino repeated same-channel requests and Stop/Quit | NOT TESTED; independent native fixture lifetime/reaping pass | NOT TESTED | NOT TESTED |
@@ -352,11 +355,12 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
 
 Remaining manual acceptance must use the Phase 7 build: preserve an existing
 login/profile, browse and play real video/audio, exercise representative mpv/VLC
-profiles and Restart, open the release page, and verify notification activation/background lifecycle,
+profiles and Restart, and verify notification activation/background lifecycle,
 About and Quit. Complete Chatterino checks for repeated same-channel requests,
-explicit native paths and real Stop/Quit. macOS/Windows also need discovery and
-launch checks from stopped and running states; record actual process behavior
-separately on each OS. macOS also needs app-bundle/GUI-PATH discovery and Command-Q;
+explicit native paths and real Stop/Quit. macOS/Windows also need update checking,
+release-page opening, and Chatterino discovery and launch from stopped and running
+states; record actual process behavior separately on each OS. macOS also needs
+app-bundle/GUI-PATH discovery and Command-Q;
 Windows needs `.exe` discovery, spaces/Unicode, no console flashes and Job Object
 cleanup. Previous v0.3.0 acceptance is historical evidence, not a Phase 7 pass.
 
