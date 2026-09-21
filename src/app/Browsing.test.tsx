@@ -1667,6 +1667,82 @@ test("update refresh and duplicate clicks cannot be overwritten by a late initia
   await click("Refresh update check"); expect(text()).toContain("Version 0.4.0 is available");
 });
 
+function updateAnnouncement() { return container.querySelector('[aria-label="Update awareness"] [role="status"]')!; }
+test.each([
+  ["current", "0.3.0", "Stream GUI RS is up to date"],
+  ["unavailable", null, "Unable to check for updates"],
+] as const)("pending update check announces progress immediately before %s", async (phase, latestVersion, message) => {
+  const pending = deferred<Awaited<ReturnType<typeof api.checkUpdates>>>();
+  vi.mocked(api.updateStatus).mockResolvedValue({ phase: "not_checked", latestVersion: null });
+  vi.mocked(api.checkUpdates).mockReturnValue(pending.promise);
+  await render(); await openUpdates();
+  const announcement = updateAnnouncement(); const check = button("Check for updates"); check.focus();
+  await act(async () => { check.click(); check.click(); });
+  expect(announcement.textContent).toBe("Checking for updates…");
+  expect(updateAnnouncement()).toBe(announcement);
+  expect(container.querySelectorAll('[aria-label="Update awareness"] [role="status"]')).toHaveLength(1);
+  expect(document.activeElement).toBe(check); expect(check.disabled).toBe(true);
+  expect(api.checkUpdates).toHaveBeenCalledOnce();
+  await act(async () => pending.resolve({ phase, latestVersion }));
+  expect(announcement.textContent).toBe(message); expect(check.disabled).toBe(false);
+});
+test.each(["current", "unavailable"] as const)("pending update refresh replaces the previous %s announcement and blocks duplicate requests", async phase => {
+  const pending = deferred<Awaited<ReturnType<typeof api.refreshUpdates>>>();
+  vi.mocked(api.updateStatus).mockResolvedValue({ phase, latestVersion: phase === "current" ? "0.3.0" : null });
+  vi.mocked(api.refreshUpdates).mockReturnValue(pending.promise);
+  await render(); await openUpdates();
+  expect(updateAnnouncement().textContent).toBe(phase === "current" ? "Stream GUI RS is up to date" : "Unable to check for updates");
+  await act(async () => { button("Refresh update check").click(); button("Refresh update check").click(); button("Check for updates").click(); });
+  expect(updateAnnouncement().textContent).toBe("Checking for updates…");
+  expect(button("Refresh update check").disabled).toBe(true); expect(button("Check for updates").disabled).toBe(true);
+  expect(api.refreshUpdates).toHaveBeenCalledOnce(); expect(api.checkUpdates).not.toHaveBeenCalled();
+  await act(async () => pending.resolve({ phase: "available", latestVersion: "0.4.0" }));
+  expect(updateAnnouncement().textContent).toBe("Version 0.4.0 is available");
+  expect(button("Refresh update check").disabled).toBe(false);
+});
+test("rejected update requests replace progress with one safe failure announcement", async () => {
+  const pending = deferred<Awaited<ReturnType<typeof api.refreshUpdates>>>();
+  vi.mocked(api.updateStatus).mockResolvedValue({ phase: "current", latestVersion: "0.3.0" });
+  vi.mocked(api.refreshUpdates).mockReturnValue(pending.promise);
+  await render(); await openUpdates(); await click("Refresh update check");
+  expect(updateAnnouncement().textContent).toBe("Checking for updates…");
+  await act(async () => pending.reject({ message: "untrusted update response" }));
+  expect(updateAnnouncement().textContent).toBe("Unable to check for updates");
+  expect(container.querySelector('[aria-label="Update awareness"] [role="alert"]')).toBeNull();
+  expect(text()).not.toContain("untrusted update response"); expect(button("Check for updates").disabled).toBe(false);
+});
+test.each(["resolve", "reject"] as const)("reopened update status settles independently of an old request that will %s", async outcome => {
+  const old = deferred<Awaited<ReturnType<typeof api.checkUpdates>>>();
+  const poll = deferred<Awaited<ReturnType<typeof api.updateStatus>>>();
+  vi.mocked(api.updateStatus).mockResolvedValueOnce({ phase: "not_checked", latestVersion: null })
+    .mockResolvedValueOnce({ phase: "checking", latestVersion: null }).mockReturnValueOnce(poll.promise);
+  vi.mocked(api.checkUpdates).mockReturnValue(old.promise);
+  await render(); await openUpdates(); await click("Check for updates");
+  expect(updateAnnouncement().textContent).toBe("Checking for updates…");
+  await click("Close Settings"); await openUpdates();
+  expect(updateAnnouncement().textContent).toBe("Checking for updates…");
+  await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+  await act(async () => poll.resolve({ phase: "available", latestVersion: "0.4.0" }));
+  expect(updateAnnouncement().textContent).toBe("Version 0.4.0 is available");
+  await act(async () => { if (outcome === "resolve") old.resolve({ phase: "unavailable", latestVersion: null }); else old.reject({ message: "old private response" }); });
+  expect(updateAnnouncement().textContent).toBe("Version 0.4.0 is available");
+  expect(container.querySelector('[aria-label="Update awareness"] [role="alert"]')).toBeNull();
+  expect(button("Check for updates").disabled).toBe(false); expect(api.checkUpdates).toHaveBeenCalledOnce();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(api.updateStatus).toHaveBeenCalledTimes(3);
+});
+test("pending or failed release opening preserves the update result without announcing a check", async () => {
+  const opening = deferred<null>();
+  vi.mocked(api.updateStatus).mockResolvedValue({ phase: "available", latestVersion: "0.4.0" });
+  vi.mocked(api.openUpdateRelease).mockReturnValue(opening.promise);
+  await render(); await openUpdates(); await click("View release");
+  expect(updateAnnouncement().textContent).toBe("Version 0.4.0 is available"); expect(button("View release").disabled).toBe(true);
+  await act(async () => opening.reject({ message: "private browser error" }));
+  expect(updateAnnouncement().textContent).toBe("Version 0.4.0 is available"); expect(button("View release").disabled).toBe(false);
+  expect(container.querySelector('[aria-label="Update awareness"] [role="alert"]')?.textContent).toBe("The update action could not be completed. Try again later.");
+  expect(text()).not.toContain("private browser error"); expect(api.checkUpdates).not.toHaveBeenCalled(); expect(api.refreshUpdates).not.toHaveBeenCalled();
+});
+
 test("an unavailable unselected profile can be edited or deleted without activating it", async () => {
   const store = profilesPersistence();
   store.acceptGlobal({ ...playbackSettings, profiles: [{ id: "missing", name: "Disconnected player", player: { mode: "custom", executable: "/missing/player", arguments: [] }, quality: null, lowLatency: null }] });
