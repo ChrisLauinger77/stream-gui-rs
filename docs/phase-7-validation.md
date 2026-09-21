@@ -338,6 +338,31 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
   or a verified fix. This cleanup neither suppresses the diagnostic nor changes
   allocator/teardown behavior. The diagnostic did not recur in the cleanup's
   graphical logs; its earlier occurrence still requires attribution.
+- Follow-up Linux teardown investigation on source commit `44e4939`: twelve
+  isolated Phase 7 graphical repetitions passed (six with per-process syscall
+  tracing, six without tracing). Twenty additional traced desktop-portal
+  startup/shutdown probes, without Stream GUI RS, also completed without the
+  allocator message. Each probe used a separate session bus and temporary
+  config/data/cache directories. Core capture was enabled only for these test
+  processes; no core was produced and no allocator backtrace was obtained.
+  Tracing recorded executable identity, stderr writes and process exits, including
+  descendants that outlived the test runner. No `SIGABRT`, `SIGSEGV`, `SIGBUS` or
+  `SIGILL` appeared in the captured traces.
+  A subsequent traced full-suite attempt passed background and titlebar checks,
+  then hit the Phase 7 scenario's 45-second timeout with its marker still
+  `restored; requesting close`. The diagnostic wrapper's initial 75-second
+  overall limit interrupted Phase 6; that attempt is **not a suite pass**.
+  The full suite was then repeated without tracing and with a 250-second wrapper
+  allowance: all four tests passed in 53.50 seconds, without the allocator
+  message or a core dump. The existing per-scenario deadlines were unchanged.
+  Separate WebKit loading warnings were attributed to `WebKitWebProcess`
+  children of earlier scenarios; those children exited with status 0. These
+  warnings do not identify the source of the original allocator diagnostic.
+  Desktop interaction can disturb UI/focus timing, but there is no evidence
+  attributing the memory-corruption message to the user's concurrent PC use.
+  No application, allocator or shutdown behavior was changed, and no stderr was
+  suppressed. The original finding remains **unresolved and not reproduced**;
+  clean repeats do not establish either a fix or a harmless cause.
 - A separate, temporary manual backend invocation contacted the real fixed GitHub
   endpoint: current `0.3.0` returned **Current**, latest `0.3.0`, and the reconstructed
   destination matched the official v0.3.0 release. The temporary network example
