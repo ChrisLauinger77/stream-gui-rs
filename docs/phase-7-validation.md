@@ -8,7 +8,9 @@ Work started from clean `main` at `40652131014287c752e371a30a161b1faf8ee005`
 update was already complete and is not part of this feature change.
 
 Implementation commit: `a2f5dc2` (`feat(prefs): add profiles, Chatterino and release awareness`).
-The following documentation commit records contracts, validation and native gaps.
+Documentation commit: `a5de364`. Focused cleanup commits preserve both original
+commits: `36716c7` (`fix: announce update checks in progress`) and `0a728a9`
+(`fix: report Chatterino capacity clearly`).
 
 This phase implements manual release awareness, independent Chatterino chat and
 reusable player profiles. Application/package versions remain **0.3.0**. No tag,
@@ -117,13 +119,14 @@ wrappers are not integrated; native executables/AppImages may use the override.
 ## Automated validation
 
 All standard tests use synthetic credentials, local HTTP and native fixtures;
-they do not require real Twitch, GitHub or Chatterino.
+they do not require real Twitch, GitHub or Chatterino. Results below include the
+cleanup rerun unless explicitly marked historical.
 
 | Check | Local Linux result |
 | --- | --- |
 | Generated bindings (`npm run bindings`) | PASS; generated DTOs committed with Rust changes |
 | TypeScript and production frontend (`npm run build`) | PASS |
-| Frontend (`npm test`) | **191 passed**, 3 files |
+| Frontend (`npm test`) | **201 passed**, 3 files; 191 before cleanup |
 | Candidate promotion guards | PASS |
 | Rust formatting | PASS |
 | Backend unit tests, no desktop | **169 passed** |
@@ -135,8 +138,8 @@ they do not require real Twitch, GitHub or Chatterino.
 | Native debug desktop build, no bundle | PASS; synthetic compile-only public ID |
 | Linux browser dispatch/reaping | **2 passed** |
 | Linux startup | **1 passed** |
-| Linux graphical background/titlebar/Phase 6/Phase 7 | **4 passed** |
-| Final Phase 7 graphical layout scenario | **1 passed**, after long-name/overflow checks |
+| Linux graphical background/titlebar/Phase 6/Phase 7 | **4 passed** on serial rerun; initial parallel run **3 passed / 1 failed** (Phase 6 incomplete) |
+| Original final Phase 7 graphical layout scenario | **1 passed**, after long-name/overflow checks; historical targeted run |
 | Whitespace/diff review | PASS |
 | Hosted Linux/macOS/Windows CI | **NOT RUN** for this change yet |
 
@@ -158,6 +161,9 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_browser_op
 cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_startup --features test-support -- --ignored
 # In a graphical session, with npm run dev -- --strictPort serving the frontend:
 cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_background --features test-support -- --ignored
+# Cleanup follow-up after an incomplete Phase 6 scenario in the parallel run:
+cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_background --features test-support phase_six_about_support_and_text_scale_use_the_native_webview -- --ignored
+cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_background --features test-support -- --ignored --test-threads=1
 git diff --check
 ```
 
@@ -173,6 +179,57 @@ semver/body/deadline/cache/cancellation/header bounds; manual and automatic chat
 hostile logins, Unicode/spaced paths, missing/spawn failures, child environment,
 reaping, capacity recovery, independent lifetime, and support-report privacy.
 
+## Adversarial review cleanup
+
+The subsequent adversarial review confirmed two LOW application defects. The
+cleanup changes only update-request presentation and the Chatterino capacity
+error classification/mapping; the reviewed settings, process ownership, update
+HTTP/cache policy and security boundaries remain unchanged.
+
+- **Update progress:** Check/Refresh immediately render `Checking for updates…`
+  in the existing, stable `role="status"` element. Local request state distinguishes
+  checks from release-page opening. The accepted result or a fixed unavailable
+  message replaces progress; a rejected check does not produce a duplicate alert.
+  Existing request guards, unmount guards and reopened-status polling remain in
+  place. Release opening retains the accepted result and its separate safe error.
+- **Chatterino capacity:** the seventeenth tracked launcher returns
+  `ErrorCode::ChatterinoCapacity`, serialized as `chatterino_capacity`, rather than
+  generic `capacity`. The fixed frontend message is: “Too many Chatterino instances
+  are active. Close a Chatterino window or use browser chat.” Explicit browser chat
+  remains usable, with no automatic fallback. Missing/invalid executable and spawn
+  failures retain their existing categories; no raw backend text is displayed.
+
+Ten frontend cases were added in `src/app/Browsing.test.tsx`, using deferred
+promises and fake timers rather than sleeps:
+
+1. Initial Check immediately announces progress and settles to current/unavailable
+   (two cases), preserving one status element and focus and rejecting duplicate clicks.
+2. Refresh replaces current/unavailable results immediately and settles to an
+   available release (two cases); repeated Refresh/Check cannot issue extra requests.
+3. A rejected refresh replaces progress with one fixed failure announcement and
+   hides the untrusted error message.
+4. Navigation/reopen settles through the new status poll; a late old request's
+   resolution/rejection cannot overwrite it (two cases), and polling then stops.
+5. Pending/failed release opening leaves the update result intact, never announces
+   a check, and displays only the fixed browser-action error.
+6. Chatterino capacity displays the specific guidance, hides raw/generic text and
+   permits a subsequent explicit browser-chat action.
+7. Unrelated browsing capacity retains its existing busy message.
+
+The existing native process regression
+`chatterino_waiter_capacity_is_bounded_and_released_after_short_lived_clients`
+now asserts 16 tracked launchers before/after rejecting the seventeenth with the
+new typed error. Its existing exit/reaping checks prove capacity is restored and
+a subsequent launch succeeds. The bound and child ownership are unchanged.
+
+The new progress tests first produced seven expected failures against the old
+implementation; the separate capacity test also failed before its mapping fix.
+Both focused groups then passed. Cleanup totals are **201 frontend, 169 backend
+and 36 process tests**, all passing. Bindings were regenerated and regenerated
+again with a byte-for-byte consistency check. No dependencies, command shapes,
+command registrations or permissions changed; the sole IPC DTO addition is the
+new error-code variant. Application versions remain 0.3.0.
+
 ## Native observations and remaining acceptance
 
 Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
@@ -186,12 +243,22 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
   Existing background close/restore/reload/Quit, titlebar and synthetic notification
   fixtures passed, including owned playback cleanup. Real notification service,
   user credentials and user settings were not used.
-- One final targeted run emitted an unattributed allocator diagnostic after its
+- The cleanup's first parallel graphical run passed three scenarios and failed
+  Phase 6: the scenario exited without reaching its final assertion (marker remained
+  `restored; requesting close`). A subsequent isolated Phase 6 rerun and a full
+  serial rerun (four scenarios) passed.
+  The first run also logged desktop portal/accessibility/socket warnings; the
+  cause of the incomplete scenario has not been established. No test or
+  application behavior was changed to obtain a passing rerun.
+- One original final targeted run emitted `free(): corrupted unsorted chunks` after its
   successful test summary. Both the application scenario and test runner exited
   successfully; the preceding full four-scenario run passed without that message.
   Isolated desktop portal/accessibility teardown also emits host warnings. The
-  allocator diagnostic's originating process was not established; it is not
-  evidence of a verified application crash or a verified fix.
+  allocator diagnostic's originating process was not established; it remains an
+  **unresolved verification gap**, not evidence of a verified application crash
+  or a verified fix. This cleanup neither suppresses the diagnostic nor changes
+  allocator/teardown behavior. The diagnostic did not recur in the cleanup's
+  graphical logs; its earlier occurrence still requires attribution.
 - A separate, temporary manual backend invocation contacted the real fixed GitHub
   endpoint: current `0.3.0` returned **Current**, latest `0.3.0`, and the reconstructed
   destination matched the official v0.3.0 release. The temporary network example
@@ -220,11 +287,15 @@ cleanup. Previous v0.3.0 acceptance is historical evidence, not a Phase 7 pass.
 
 ## Adversarial review and boundaries
 
-The complete implementation diff was reviewed read-only after the fixes and tests.
+The complete implementation diff was reviewed read-only after implementation.
 Review covered settings ordering/references, precedence, immutable snapshots,
 process ownership/reaping, child credentials, fixed update destinations/bounds,
 shutdown, support-report allowlisting, IPC permissions, About and accessibility.
-No remaining confirmed application correctness/security finding was identified.
+The subsequent adversarial review's two confirmed findings are addressed in the
+cleanup above. The cumulative Phase 7 diff was reviewed again with focus on
+update-request state, typed chat errors, fixed frontend messages, accessibility
+announcements and credential boundaries. No further confirmed application defect
+was identified within that focused review.
 Hosted CI and the native gaps above remain open validation gates.
 
 Confirmed issues addressed during implementation include the Unix ENOEXEC shell
