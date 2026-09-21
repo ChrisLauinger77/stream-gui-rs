@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-discover-chatterino"
+description = "Enables the discover_chatterino command without any pre-configured scope."
+commands.allow = ["discover_chatterino"]
+
+[[permission]]
+identifier = "deny-discover-chatterino"
+description = "Denies the discover_chatterino command without any pre-configured scope."
+commands.deny = ["discover_chatterino"]

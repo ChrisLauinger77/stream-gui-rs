@@ -1,4 +1,4 @@
-//! Restricted browser chat: no frontend URL or executable crosses this boundary.
+//! Restricted browser/Chatterino chat: no frontend URL or executable crosses this boundary.
 use super::{AppError, ErrorCode, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::{
@@ -17,17 +17,23 @@ pub struct ChatRequest {
 }
 
 #[derive(Clone, Debug)]
-pub struct ChatTarget(String);
+pub struct ChatTarget {
+    url: String,
+    login: String,
+}
 impl ChatTarget {
     pub(crate) fn for_login(login: &str) -> Result<Self> {
         crate::streamlink::playback::channel_url(login)?;
-        Ok(Self(format!(
-            "https://www.twitch.tv/popout/{}/chat",
-            login.to_ascii_lowercase()
-        )))
+        Ok(Self {
+            url: format!(
+                "https://www.twitch.tv/popout/{}/chat",
+                login.to_ascii_lowercase()
+            ),
+            login: login.to_ascii_lowercase(),
+        })
     }
     pub fn url(&self) -> &str {
-        &self.0
+        &self.url
     }
 }
 
@@ -50,6 +56,7 @@ pub fn open_error() -> AppError {
 
 pub struct BrowserChat {
     opener: Arc<dyn ChatOpener>,
+    chatterino: crate::chatterino::Chatterino,
     operation: Arc<Mutex<()>>,
     closing: Arc<AtomicBool>,
     slots: Arc<Semaphore>,
@@ -63,12 +70,23 @@ impl BrowserChat {
     pub fn new(opener: Arc<dyn ChatOpener>) -> Self {
         Self {
             opener,
+            chatterino: Default::default(),
             operation: Arc::new(Mutex::new(())),
             closing: Arc::new(AtomicBool::new(false)),
             slots: Arc::new(Semaphore::new(4)),
         }
     }
     pub async fn open(&self, target: ChatTarget, cancel: CancellationToken) -> Result<()> {
+        self.open_configured(target, crate::config::ChatProvider::Browser, None, cancel)
+            .await
+    }
+    pub async fn open_configured(
+        &self,
+        target: ChatTarget,
+        provider: crate::config::ChatProvider,
+        path: Option<String>,
+        cancel: CancellationToken,
+    ) -> Result<()> {
         let permit = self.slots.clone().try_acquire_owned().map_err(|_| {
             AppError::new(
                 ErrorCode::Capacity,
@@ -78,6 +96,7 @@ impl BrowserChat {
         let operation = self.operation.clone();
         let closing = self.closing.clone();
         let opener = self.opener.clone();
+        let chatterino = self.chatterino.clone();
         // The task owns the blocking native call even if the IPC caller disappears.
         tokio::spawn(async move {
             let _permit = permit;
@@ -90,7 +109,14 @@ impl BrowserChat {
                         "Browser chat request was cancelled.",
                     ));
                 }
-                opener.open(&target).map_err(|_| open_error())
+                match provider {
+                    crate::config::ChatProvider::Browser => {
+                        opener.open(&target).map_err(|_| open_error())
+                    }
+                    crate::config::ChatProvider::Chatterino => {
+                        chatterino.open(path.as_deref(), &target.login)
+                    }
+                }
             })
             .await
             .map_err(|_| open_error())?

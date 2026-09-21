@@ -3,6 +3,7 @@ use super::*;
 use crate::{domain::LaunchRequest, streamlink::SessionPhase};
 use std::{path::Path, time::Duration};
 mod notification_server;
+mod phase_seven;
 mod phase_six;
 mod titlebar;
 
@@ -12,7 +13,8 @@ pub fn run(
     marker: &Path,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     let phase_six = action == "phase6";
-    let quit = action == "quit" || phase_six;
+    let phase_seven = action == "phase7";
+    let quit = action == "quit" || phase_six || phase_seven;
     let titlebar_only = action == "titlebar";
     let directory = tempfile::tempdir()?;
     // No client ID: this fixture cannot open any production credential entry.
@@ -45,6 +47,9 @@ pub fn run(
                         scenario(&check_app, &check_marker, &notifications, titlebar_only).await?;
                         if phase_six {
                             phase_six::check(&check_app).await;
+                        }
+                        if phase_seven {
+                            phase_seven::check(&check_app).await;
                         }
                         Ok::<(), crate::domain::AppError>(())
                     }),
@@ -166,7 +171,9 @@ async fn scenario(
     assert!(sessions.iter().all(|s| s.phase == SessionPhase::Running));
     check_notifications(app, server).await?;
     // A webview reload reconstructs from the same Supervisor snapshots.
-    window.eval("location.reload()").unwrap();
+    window
+        .eval("window.__streamGuiSmokeReload = true; location.reload()")
+        .unwrap();
     assert_eq!(services.sessions.sessions().await.len(), 2);
     Ok(())
 }

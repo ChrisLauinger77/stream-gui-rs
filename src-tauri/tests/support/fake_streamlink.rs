@@ -18,6 +18,35 @@ fn main() {
             "Streamlink child unexpectedly has a console window"
         );
     }
+    if args.first().is_some_and(|arg| arg == "--chatterino-parent") {
+        let chat = stream_gui_rs::chatterino::Chatterino::default();
+        chat.open(Some(&args[1]), "short").unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while chat.active_launchers() != 0 && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(chat.active_launchers(), 0);
+        return;
+    }
+    if args.first().is_some_and(|arg| arg == "--channels") {
+        assert_eq!(args.len(), 2);
+        assert!(args[1].starts_with("t:"));
+        assert!(std::env::var_os("STREAM_GUI_RS_SYNTHETIC_TOKEN").is_none());
+        std::fs::write(
+            executable.with_extension("chat.json"),
+            serde_json::to_vec(&(std::process::id(), &args)).unwrap(),
+        )
+        .unwrap();
+        if args[1] == "t:hold" {
+            let deadline = std::time::Instant::now() + Duration::from_secs(15);
+            while !executable.with_extension("release").exists()
+                && std::time::Instant::now() < deadline
+            {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+        return;
+    }
     if args.first().is_some_and(|arg| arg == "--browser-probe") {
         std::fs::write(
             &args[1],

@@ -87,6 +87,13 @@ fn build_app() -> tauri::Result<tauri::App> {
             commands::quit_application,
             commands::backend_diagnostics,
             commands::open_repository,
+            commands::update_status,
+            commands::check_updates,
+            commands::refresh_updates,
+            commands::open_update_release,
+            commands::modify_player_profile,
+            commands::discover_chatterino,
+            commands::open_browser_chat,
             commands::show_about,
             commands::app_info,
             commands::support_report,
@@ -343,6 +350,13 @@ mod tests {
             "app_info",
             "show_about",
             "open_repository",
+            "update_status",
+            "check_updates",
+            "refresh_updates",
+            "open_update_release",
+            "modify_player_profile",
+            "discover_chatterino",
+            "open_browser_chat",
         ] {
             assert!(
                 authority

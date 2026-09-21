@@ -195,3 +195,12 @@ button, select { max-width:100%; overflow-wrap:anywhere; }
 .about-dialog img { display: block; margin: 12px auto; }
 .about-dialog .dialog-actions { justify-content: center; }
 .dialog-fallback { display: block; position: fixed; inset: 16px; margin: auto; z-index: 100; width: min(38rem, calc(100vw - 32px)); height: max-content; box-shadow: 0 0 0 100vmax rgb(0 0 0 / 55%); }
+
+.player-profiles, .playback-settings .profile-editor { display:grid; gap:10px; min-width:0; }
+.player-profiles h3 { margin:0; }
+.playback-settings .profile-editor { padding:12px; border:1px solid var(--line); border-radius:6px; }
+.player-profiles p, .update-awareness p { overflow-wrap:anywhere; }
+@media(max-width:480px) {
+  .settings-content { grid-template-columns:minmax(0,1fr); }
+  .settings-nav { flex-direction:row; flex-wrap:wrap; }
+}

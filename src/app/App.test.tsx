@@ -43,7 +43,7 @@ beforeEach(async () => {
   vi.resetAllMocks();
   vi.mocked(api.diagnostics).mockResolvedValue({
     name: "Stream GUI RS", version: "0.1.0", commit: "a1b2c3d", platform: "test", settingsPath: "settings.json",
-    settings: { discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" }, authConfigured: true,
+    settings: { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" }, authConfigured: true,
   });
   vi.mocked(api.playbackSettings).mockImplementation(async () => (await api.diagnostics()).settings);
   vi.mocked(api.authStatus).mockResolvedValue(signedOut);

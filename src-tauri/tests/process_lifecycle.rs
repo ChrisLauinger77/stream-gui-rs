@@ -486,6 +486,9 @@ fn production_spec(channel: &str) -> LaunchSpec {
         executable: helper().to_path_buf(),
         player: None,
         settings: stream_gui_rs::config::EffectivePlaybackSettings {
+            profile_id: None,
+            chat_provider: stream_gui_rs::config::ChatProvider::Browser,
+            chatterino_path: None,
             low_latency: false,
             streamlink_path: None,
             player: PlayerSettings::default(),
@@ -1313,4 +1316,369 @@ async fn support_report_reuses_validated_version_without_spawning_the_custom_exe
             .contains("Streamlink: not checked")
     );
     assert_eq!(std::fs::read_to_string(&marker).unwrap(), "1");
+}
+
+async fn chat_fixture_result(executable: &Path) -> (u32, Vec<String>) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Ok(data) = std::fs::read(executable.with_extension("chat.json")) {
+                if let Ok(result) = serde_json::from_slice(&data) {
+                    return result;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap()
+}
+#[tokio::test]
+async fn chatterino_launchers_are_reaped_and_independent_apps_survive_playback_shutdown() {
+    use stream_gui_rs::{chatterino::Chatterino, config::ChatProvider};
+    let directory = helper_directory();
+    let chat_path = renamed_helper(directory.path(), "Chatterino 空 格");
+    let chat = Chatterino::default();
+    chat.open(chat_path.to_str(), "short").unwrap();
+    let (pid, args) = chat_fixture_result(&chat_path).await;
+    assert_eq!(args, ["--channels", "t:short"]);
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while chat.active_launchers() != 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_process_exited(pid);
+    std::fs::remove_file(chat_path.with_extension("chat.json")).unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let services = std::sync::Arc::new(Services::new(root.path(), None).unwrap());
+    let mut settings = services.settings.snapshot();
+    settings.streamlink_path = Some(helper().to_string_lossy().into_owned());
+    settings.automatic_chat = true;
+    settings.chat_provider = ChatProvider::Chatterino;
+    settings.chatterino_path = Some(chat_path.to_string_lossy().into_owned());
+    services.save_settings(settings).await.unwrap();
+    let initial = services
+        .sessions
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let restarted = services
+        .restart_playback(RestartRequest {
+            session_id: initial.id,
+            generation: 1,
+            quality: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(restarted.phase, SessionPhase::Running);
+    assert_eq!(restarted.chat_error, None);
+    let (chat_pid, _) = chat_fixture_result(&chat_path).await;
+    services.sessions.stop(&restarted.id).await.unwrap();
+    services.shutdown().await.unwrap();
+    #[cfg(unix)]
+    {
+        // SAFETY: signal zero only checks the fixture PID, without sending a signal.
+        assert_eq!(unsafe { libc::kill(chat_pid as i32, 0) }, 0);
+        // Chat starts a separate session, outside all playback-owned process groups.
+        assert_eq!(unsafe { libc::getsid(chat_pid as i32) }, chat_pid as i32);
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::{
+            Foundation::{CloseHandle, WAIT_TIMEOUT},
+            System::Threading::*,
+        };
+        // SAFETY: query-only handle for the known fixture; closed once.
+        unsafe {
+            let handle = OpenProcess(PROCESS_SYNCHRONIZE, 0, chat_pid);
+            assert!(!handle.is_null());
+            let state = WaitForSingleObject(handle, 0);
+            CloseHandle(handle);
+            assert_eq!(state, WAIT_TIMEOUT);
+        }
+    }
+    std::fs::write(chat_path.with_extension("release"), "done").unwrap();
+    #[cfg(unix)]
+    tokio::time::timeout(Duration::from_secs(3), async {
+        // SAFETY: signal zero queries only the known fixture process.
+        while unsafe { libc::kill(chat_pid as i32, 0) } == 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_process_exited(chat_pid);
+}
+#[tokio::test]
+async fn chatterino_missing_and_spawn_failure_do_not_fail_playback_or_open_browser() {
+    use stream_gui_rs::{
+        config::ChatProvider,
+        domain::chat::{ChatOpener, ChatTarget},
+    };
+    struct NoBrowser;
+    impl ChatOpener for NoBrowser {
+        fn open(&self, _: &ChatTarget) -> stream_gui_rs::domain::Result<()> {
+            panic!("no silent fallback")
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let services = std::sync::Arc::new(
+        Services::new(root.path(), None)
+            .unwrap()
+            .with_chat_opener(std::sync::Arc::new(NoBrowser)),
+    );
+    let mut settings = services.settings.snapshot();
+    settings.streamlink_path = Some(helper().to_string_lossy().into_owned());
+    settings.automatic_chat = true;
+    settings.chat_provider = ChatProvider::Chatterino;
+    settings.chatterino_path = Some(
+        root.path()
+            .join("absent.exe")
+            .to_string_lossy()
+            .into_owned(),
+    );
+    services.save_settings(settings.clone()).await.unwrap();
+    let initial = services
+        .sessions
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let restarted = services
+        .restart_playback(RestartRequest {
+            session_id: initial.id,
+            generation: 1,
+            quality: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(restarted.phase, SessionPhase::Running);
+    assert_eq!(restarted.chat_error, Some(ErrorCode::ChatterinoNotFound));
+    let invalid = root
+        .path()
+        .join(format!("invalid{}", std::env::consts::EXE_SUFFIX));
+    std::fs::write(&invalid, "not a native executable").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&invalid, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    settings.chatterino_path = Some(invalid.to_string_lossy().into_owned());
+    services.save_settings(settings).await.unwrap();
+    let failed_chat = services
+        .restart_playback(RestartRequest {
+            session_id: restarted.id,
+            generation: restarted.generation,
+            quality: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(failed_chat.phase, SessionPhase::Running);
+    assert_eq!(failed_chat.chat_error, Some(ErrorCode::ChatLaunch));
+    services.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn profile_mutations_and_stale_global_drafts_preserve_sessions_and_restart_resolves_current_selection()
+ {
+    use stream_gui_rs::config::profiles::{ProfileDraft, ProfileMutation::*};
+    let root = tempfile::tempdir().unwrap();
+    let services = std::sync::Arc::new(Services::new(root.path(), None).unwrap());
+    services
+        .settings
+        .set_streamlink_path(Some(helper().to_string_lossy().into_owned()))
+        .unwrap();
+    let first = services
+        .sessions
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let second = services
+        .sessions
+        .launch_spec(production_spec("holdb"))
+        .await
+        .unwrap();
+    let draft = ProfileDraft {
+        name: "Desk".into(),
+        player: PlayerSettings {
+            arguments: vec!["--volume=23".into()],
+            ..Default::default()
+        },
+        quality: Some(QualityPolicy::High),
+        low_latency: Some(true),
+    };
+    let created = services
+        .modify_profile(Create {
+            profile: draft.clone(),
+        })
+        .await
+        .unwrap();
+    let id = created.profiles[0].id.clone();
+    services
+        .modify_profile(Select {
+            id: Some(id.clone()),
+        })
+        .await
+        .unwrap();
+    let stale = services.settings.snapshot();
+    let restarted = services
+        .restart_playback(RestartRequest {
+            session_id: first.id.clone(),
+            generation: 1,
+            quality: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        restarted
+            .effective_settings
+            .as_ref()
+            .unwrap()
+            .profile_id
+            .as_ref(),
+        Some(&id)
+    );
+    assert_eq!(restarted.quality_policy, Some(QualityPolicy::High));
+    assert!(restarted.effective_settings.as_ref().unwrap().low_latency);
+    let changed = ProfileDraft {
+        name: "Renamed".into(),
+        quality: Some(QualityPolicy::Low),
+        ..draft
+    };
+    services
+        .modify_profile(Update {
+            id: id.clone(),
+            profile: changed,
+        })
+        .await
+        .unwrap();
+    let second_run = services
+        .restart_playback(RestartRequest {
+            session_id: second.id.clone(),
+            generation: 1,
+            quality: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(second_run.quality_policy, Some(QualityPolicy::Low));
+    assert_eq!(
+        services.sessions.sessions().await[0].effective_settings,
+        restarted.effective_settings
+    );
+    services.modify_profile(Delete { id }).await.unwrap();
+    let mut stale = stale;
+    stale.text_scale = stream_gui_rs::config::TextScale::Largest;
+    let accepted = services.save_settings(stale).await.unwrap();
+    assert!(accepted.profiles.is_empty());
+    assert!(accepted.selected_profile_id.is_none());
+    let default = services
+        .restart_playback(RestartRequest {
+            session_id: first.id,
+            generation: restarted.generation,
+            quality: None,
+        })
+        .await
+        .unwrap();
+    assert!(
+        default
+            .effective_settings
+            .as_ref()
+            .unwrap()
+            .profile_id
+            .is_none()
+    );
+    assert_eq!(default.quality_policy, Some(QualityPolicy::Source));
+    assert_eq!(
+        services.sessions.sessions().await[1].effective_settings,
+        second_run.effective_settings
+    );
+    services.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn chatterino_waiter_capacity_is_bounded_and_released_after_short_lived_clients() {
+    let directory = helper_directory();
+    let executable = renamed_helper(directory.path(), "bounded-chat");
+    let chat = stream_gui_rs::chatterino::Chatterino::default();
+    for _ in 0..16 {
+        chat.open(executable.to_str(), "hold").unwrap();
+    }
+    assert_eq!(
+        chat.open(executable.to_str(), "hold").unwrap_err().code,
+        ErrorCode::Capacity
+    );
+    std::fs::write(executable.with_extension("release"), "done").unwrap();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while chat.active_launchers() != 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    chat.open(executable.to_str(), "short").unwrap();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while chat.active_launchers() != 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn chatterino_child_does_not_inherit_a_synthetic_token_from_its_parent_environment() {
+    let directory = helper_directory();
+    let executable = renamed_helper(directory.path(), "environment-chat");
+    let mut command = std::process::Command::new(helper());
+    command
+        .arg("--chatterino-parent")
+        .arg(&executable)
+        .env("STREAM_GUI_RS_SYNTHETIC_TOKEN", "oauth:synthetic-test-only");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW);
+    }
+    assert!(command.status().unwrap().success());
+    let (pid, args) = chat_fixture_result(&executable).await;
+    assert_process_exited(pid);
+    assert_eq!(args, ["--channels", "t:short"]);
+}
+
+#[tokio::test]
+async fn selected_profile_support_report_exposes_mode_without_name_path_or_arguments() {
+    use stream_gui_rs::config::profiles::{ProfileDraft, ProfileMutation::*};
+    let root = tempfile::tempdir().unwrap();
+    let services = Services::new(root.path(), None).unwrap();
+    let created = services
+        .modify_profile(Create {
+            profile: ProfileDraft {
+                name: "Private living room name".into(),
+                player: PlayerSettings {
+                    mode: stream_gui_rs::streamlink::playback::PlayerMode::Custom,
+                    executable: Some(helper().to_string_lossy().into_owned()),
+                    arguments: vec!["--private-device-name".into()],
+                },
+                quality: None,
+                low_latency: None,
+            },
+        })
+        .await
+        .unwrap();
+    services
+        .modify_profile(Select {
+            id: Some(created.profiles[0].id.clone()),
+        })
+        .await
+        .unwrap();
+    let report = services.support_report().await.text;
+    assert!(report.contains("custom"));
+    for forbidden in [
+        "Private living room name",
+        "--private-device-name",
+        &created.profiles[0].id,
+        helper().to_str().unwrap(),
+    ] {
+        assert!(!report.contains(forbidden));
+    }
+    services.shutdown().await.unwrap();
 }

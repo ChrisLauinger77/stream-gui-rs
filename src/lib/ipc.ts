@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  DesktopStatus, MonitorStatus, AcknowledgeDesktopAction, NotificationTestAction,
+  ProfileMutation, UpdateStatus, DesktopStatus, MonitorStatus, AcknowledgeDesktopAction, NotificationTestAction,
   ChatRequest, ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
   LookupChannelRequest, ChannelIdentity, StreamLanguage, StreamBrowseRequest, CategoryStreamsRequest, BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
   Account, AppError, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
@@ -27,6 +27,13 @@ type Commands = {
   lookup_channel: [LookupChannelRequest, ChannelIdentity];
   get_channel: [EntityRequest, ChannelDetails];
 
+  update_status: [undefined, UpdateStatus];
+  check_updates: [undefined, UpdateStatus];
+  refresh_updates: [undefined, UpdateStatus];
+  open_update_release: [undefined, null];
+  modify_player_profile: [ProfileMutation, Settings];
+  discover_chatterino: [undefined, string | null];
+  open_browser_chat: [ChatRequest, null];
   app_info: [undefined, AppInfo];
   show_about: [undefined, null];
   open_repository: [undefined, null];
@@ -79,6 +86,13 @@ export const api = {
   lookupChannel: (request: LookupChannelRequest) => call("lookup_channel", request),
   channel: (request: EntityRequest) => call("get_channel", request),
 
+  updateStatus: () => call("update_status"),
+  checkUpdates: () => call("check_updates"),
+  refreshUpdates: () => call("refresh_updates"),
+  openUpdateRelease: () => call("open_update_release"),
+  modifyPlayerProfile: (request: ProfileMutation) => call("modify_player_profile", request),
+  discoverChatterino: () => call("discover_chatterino"),
+  openBrowserChat: (request: ChatRequest) => call("open_browser_chat", request),
   appInfo: () => call("app_info"),
   showAbout: () => call("show_about"),
   openRepository: () => call("open_repository"),
