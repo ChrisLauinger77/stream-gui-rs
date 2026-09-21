@@ -59,8 +59,8 @@ fs2 = "0.4"
 objc2 = { version = "0.6", optional = true }
 block2 = { version = "0.6", optional = true }
 # Tauri's string-only About credits cannot carry a clickable macOS link.
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSAttributedString"], optional = true }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSAttributedString", "NSBundle", "NSDictionary", "NSError", "NSObject", "NSString"], optional = true }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSAttributedString", "NSColor"], optional = true }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSAttributedString", "NSBundle", "NSDictionary", "NSError", "NSObject", "NSString", "NSURL", "NSValue"], optional = true }
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSettings", "UNNotificationTrigger"], optional = true }
 keyring = { version = "3.6.3", features = ["apple-native"] }
 
