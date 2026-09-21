@@ -280,8 +280,8 @@ was removed afterward. Follow-up user acceptance confirmed discovery and launch
 as PASS and observed a new Chatterino window/process on opening a channel,
 including when Chatterino was already running. This behavior is accepted; process
 reuse and IPC control of Chatterino are outside the integration's scope.
-End-to-end authenticated manual/automatic chat IPC, repeated same-channel requests
-and real Stop/Quit behavior remain separate checks below.
+The later Linux smoke-checklist report below also covers automatic chat,
+browser fallback, repeated same-channel requests and Stop/Quit behavior.
 
 No dependencies, settings schema, generated bindings, IPC command shapes or
 permissions changed. Version remains 0.3.0; no publication or Phase 8 work is part
@@ -303,10 +303,16 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
 
 - Follow-up Linux native acceptance: the user observed notifications and confirmed
   that player profiles work. Both are recorded as PASS for the reported behavior.
-  Specific player coverage, profile mutation/Restart scenarios and notification
-  activation/background lifecycle were not detailed in that report.
 - The user also confirmed that the native update check and View release button
   work. Both Linux acceptance checks are PASS.
+- After receiving the remaining five-item Linux checklist, the user reported
+  “all seems to work”. Record this as a user-reported smoke PASS for real
+  playback/profile changes and Restart, independent concurrent streams,
+  automatic chat/repeated channel requests/browser fallback, notification
+  activation/background restore/Quit, and saved login/settings/profile restore.
+  This follows the ongoing Linux test session; macOS/Windows are not inferred
+  to have passed. Exact player coverage and tested package/build identity were
+  not supplied, so this is not an exhaustive per-player or release-candidate gate.
 - The isolated graphical harness passed profile create/select/delete with active
   deletion falling back to Default, initial editor focus, Chatterino controls and
   Updates rendering without HTTP on navigation. It paired 100% text with System,
@@ -340,29 +346,32 @@ Local host: **Debian forky/sid, GNOME, Wayland, WebKitGTK**.
 
 | Acceptance area | Linux | macOS | Windows |
 | --- | --- | --- | --- |
-| Existing real login/settings restore | NOT TESTED for Phase 7; synthetic migrations pass | NOT TESTED | NOT TESTED |
+| Existing real login/settings/profile restore | PASS, user-reported Linux smoke checklist | NOT TESTED | NOT TESTED |
 | Real desktop notification delivery | PASS, user observed notifications | NOT TESTED | NOT TESTED |
 | Player profile use | PASS, user confirmed profiles work; specific players not recorded | NOT TESTED | NOT TESTED |
-| Real Twitch browsing/video/audio across mpv/VLC/custom players | NOT CONFIRMED in detail; native fake-process contracts pass | NOT TESTED | NOT TESTED |
-| Profile switch/edit/delete with real player, two sessions and Restart | NOT TESTED; deterministic native executable fixtures pass | NOT TESTED | NOT TESTED |
+| Real playback video/audio with profiles | PASS, user-reported Linux smoke checklist; exact player coverage not recorded | NOT TESTED | NOT TESTED |
+| Profile switch/edit/delete with real player, two sessions and Restart | PASS, user-reported Linux smoke checklist; deterministic native fixtures also pass | NOT TESTED | NOT TESTED |
 | Manual update check | PASS, user confirmed native UI; earlier live backend check also passed | NOT TESTED | NOT TESTED |
 | View release opens official page | PASS, user confirmed View release works | NOT TESTED | NOT TESTED |
-| Actual Chatterino discovery/manual/automatic chat | System Flathub 2.5.5 discovery and channel launch PASS through production launcher, user confirmed; authenticated manual/automatic IPC NOT TESTED | NOT TESTED | NOT TESTED |
+| Actual Chatterino discovery/manual/automatic chat and browser fallback | PASS, system Flathub 2.5.5 discovery/channel launch confirmed; subsequent chat checks covered by user-reported Linux smoke checklist | NOT TESTED | NOT TESTED |
 | Actual Chatterino new-window/process behavior | PASS, user confirmed a new window/process on channel opening, including while already running; accepted behavior, no reuse/IPC control attempted | NOT TESTED | NOT TESTED |
-| Actual Chatterino repeated same-channel requests and Stop/Quit | NOT TESTED; independent native fixture lifetime/reaping pass | NOT TESTED | NOT TESTED |
+| Actual Chatterino repeated same-channel requests and Stop/Quit | PASS, user-reported Linux smoke checklist; independent native fixture lifetime/reaping also pass | NOT TESTED | NOT TESTED |
+| Notification activation, background restore and Quit | PASS, user-reported Linux smoke checklist | NOT TESTED | NOT TESTED |
 | Native UI/scaling/About/background/Quit | Isolated WebKitGTK fixtures PASS as described above | NOT TESTED on WKWebView | NOT TESTED on WebView2 |
 | Screen reader / OS high-DPI / packaged console behavior | Screen reader/OS scaling NOT TESTED; webview zoom checked | VoiceOver NOT TESTED | Narrator/high-DPI/console NOT TESTED |
 
-Remaining manual acceptance must use the Phase 7 build: preserve an existing
-login/profile, browse and play real video/audio, exercise representative mpv/VLC
-profiles and Restart, and verify notification activation/background lifecycle,
-About and Quit. Complete Chatterino checks for repeated same-channel requests,
-explicit native paths and real Stop/Quit. macOS/Windows also need update checking,
-release-page opening, and Chatterino discovery and launch from stopped and running
-states; record actual process behavior separately on each OS. macOS also needs
-app-bundle/GUI-PATH discovery and Command-Q;
-Windows needs `.exe` discovery, spaces/Unicode, no console flashes and Job Object
-cleanup. Previous v0.3.0 acceptance is historical evidence, not a Phase 7 pass.
+The requested Linux smoke checklist is now recorded as passing. Native screen
+reader/OS high-DPI checks, explicit native Chatterino overrides, exhaustive player
+coverage and the allocator diagnostic remain unverified. Release-candidate
+acceptance will still need an exact tested package/build identity.
+
+macOS/Windows still need Phase 7 native acceptance for login/settings restore,
+real playback/profiles/Restart/concurrent sessions, chat and browser fallback,
+update checking/release-page opening, notifications/background/About and Quit.
+Record Chatterino behavior from stopped and running states separately on each OS.
+macOS also needs app-bundle/GUI-PATH discovery and Command-Q; Windows needs `.exe`
+discovery, spaces/Unicode, no console flashes and Job Object cleanup. Previous
+v0.3.0 acceptance is historical evidence, not a Phase 7 pass.
 
 ## Adversarial review and boundaries
 
