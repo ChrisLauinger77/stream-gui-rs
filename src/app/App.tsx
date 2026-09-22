@@ -49,7 +49,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const settingsPanel = useRef<HTMLElement>(null);
   const settingsHeading = useRef<HTMLHeadingElement>(null);
   const watchingPanel = useRef<HTMLDivElement>(null);
-  const shortcuts = shortcutLabels();
+  const shortcuts = shortcutLabels(undefined, playback.settings?.shortcuts);
   const closeSettings = () => { restore("settings", settingsPanel.current, settingsButton.current); setSettings(false); };
   const closeWatching = () => { restore("watching", watchingPanel.current, watchingButton.current); setWatching(false); };
   useEffect(() => {
@@ -96,11 +96,12 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
     setSettings(false); setWatching(false); workspace.current?.navigate(section);
   };
   useShortcuts({
+    home: () => navigate("following"), forward: () => { setSettings(false); setWatching(false); workspace.current?.forward(); },
     search: () => navigate("search"), following: () => navigate("following"), live: () => navigate("live"), categories: () => navigate("categories"),
     watching: () => { if (!watching) capture("watching"); setWatching(true); setSettings(false); }, settings: () => { if (!settings) capture("settings"); setSettings(true); setWatching(false); },
     back: () => { if (settings) closeSettings(); else if (watching) closeWatching(); else if (notificationTest) setNotificationTest(false); else workspace.current?.back(); },
     refresh: () => { if (!settings) workspace.current?.refresh(); },
-  });
+  }, playback.settings?.shortcuts);
   const watch = useCallback((broadcasterId: string) => {
     if (!auth.sessionId) return;
     capture("watching"); setWatching(true); setSettings(false);

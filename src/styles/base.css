@@ -210,3 +210,8 @@ button, select { max-width:100%; overflow-wrap:anywhere; }
 .saved-items { display: grid; gap: .65rem; }
 .saved-item > :first-child { min-width: 0; overflow-wrap: anywhere; }
 .saved-item > button:last-child { margin-left: auto; }
+
+.shortcut-editor { display: grid; gap: .5rem; }
+.shortcut-row { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.shortcut-row > span { flex: 1 1 8rem; }
+.shortcut-row > kbd { min-width: 6rem; overflow-wrap: anywhere; }
