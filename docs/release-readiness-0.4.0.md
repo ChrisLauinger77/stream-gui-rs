@@ -161,3 +161,28 @@ annotated `v0.4.0` tag must retain the candidate commit and
 `Candidate-Run: 35756564645`; this documentation-only acceptance record is a
 separate follow-up and does not change or rebuild the candidate. No Phase 8 work
 is included.
+
+## Publication verification — 2026-09-22
+
+[Stream GUI RS v0.4.0](https://github.com/ChrisLauinger77/stream-gui-rs/releases/tag/v0.4.0)
+was published at 17:20:58 UTC under the exception above. The annotated tag points
+to `05729fe5c090cc8d5589019c7b3b44fe92ec0b2e` and records
+`Candidate-Run: 35756564645`, together with the accepted evidence limitations.
+[Promotion run 35760000126](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35760000126)
+passed; all platform build jobs were skipped and the accepted candidate files
+were promoted without rebuilding.
+
+An independent download of all ten public assets matched the candidate files
+byte-for-byte, and all three SHA-256 manifests passed. The published release body
+matches the tagged release notes and its headings/lists render on the public
+release page. The unauthenticated official latest-release endpoint returns
+stable `v0.4.0` and its expected fixed repository release URL. Equal/older/newer
+version fixtures passed during validation; a post-publication native update UI
+check was not performed.
+
+`PACKAGE_REPOSITORIES_TOKEN` is absent, so the established workflow selected its
+daily Scoop/Homebrew fallback. At verification, both package repositories still
+referenced 0.3.0; their next existing updater runs and native installation checks
+remain follow-ups. The initial
+[WinGet submission](https://github.com/microsoft/winget-pkgs/pull/437560) remained
+open and does not block this release. No new package-manager automation was added.
