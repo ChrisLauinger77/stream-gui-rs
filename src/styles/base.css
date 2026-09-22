@@ -204,3 +204,9 @@ button, select { max-width:100%; overflow-wrap:anywhere; }
   .settings-content { grid-template-columns:minmax(0,1fr); }
   .settings-nav { flex-direction:row; flex-wrap:wrap; }
 }
+
+.local-item-actions, .saved-item { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.local-item-actions > p { flex-basis: 100%; margin: 0; }
+.saved-items { display: grid; gap: .65rem; }
+.saved-item > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.saved-item > button:last-child { margin-left: auto; }

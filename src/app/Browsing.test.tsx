@@ -1783,3 +1783,61 @@ test("Enter in the profile editor saves only that profile and leaves global draf
   await act(async () => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
   expect(api.modifyPlayerProfile).toHaveBeenCalledOnce(); expect(api.savePlaybackSettings).not.toHaveBeenCalled();
 });
+
+function localPreferences(initial = playbackSettings) {
+  let saved = structuredClone(initial);
+  vi.mocked(api.playbackSettings).mockImplementation(async () => saved);
+  vi.mocked(api.modifyDiscovery).mockImplementation(async ({ list, item, present }) => {
+    const items = saved.discovery[list].filter(value => value.kind !== item.kind || value.id !== item.id);
+    saved = { ...saved, discovery: { ...saved.discovery, [list]: present ? [...items, item] : items } };
+    return saved;
+  });
+  return () => saved;
+}
+
+test("channel bookmarks remain reachable while hidden and are independent of Twitch follows", async () => {
+  const saved = localPreferences();
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await click("Bookmark channel"); await click("Hide channel from discovery");
+  expect(saved().discovery.bookmarks).toHaveLength(1); expect(saved().discovery.hidden).toHaveLength(1);
+  await click("Go back"); expect(container.querySelector(".stream-card")).toBeNull();
+  await click("Bookmarks"); await click("Example Channel"); expect(text()).toContain("Offline — no current live stream");
+  await click("Remove bookmark"); expect(saved().discovery.bookmarks).toHaveLength(0);
+  await click("Following"); await click("All channels"); expect(text()).toContain("Example Channel");
+  await click("Settings"); await click("Hidden items", ".settings-nav"); await click("Restore Example Channel");
+  expect(saved().discovery.hidden).toHaveLength(0);
+  await click("Close Settings"); await click("Live"); expect(container.querySelector(".stream-card")).not.toBeNull();
+});
+
+test("category hides filter passive discovery while search and saved categories stay reachable", async () => {
+  const saved = localPreferences();
+  await render(); await click("Categories"); await click("Open category Example Game");
+  await click("Bookmark category"); await click("Hide category from discovery");
+  await click("Go back"); expect(container.querySelector(".category-card")).toBeNull();
+  expect(document.activeElement).toBe(container.querySelector("h1"));
+  await click("Live"); expect(container.querySelector(".stream-card")).toBeNull();
+  await click("Bookmarks"); await click("Example Game"); expect(container.querySelector(".stream-card")).not.toBeNull();
+  await click("Search"); await type("Example"); await click("Categories", ".tabs");
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+  expect(container.querySelector(".category-card")).not.toBeNull();
+  expect(saved().discovery.hidden[0].kind).toBe("category");
+});
+
+test("stale bookmarks can be removed without resolving Twitch and restore keyboard focus", async () => {
+  const saved = localPreferences({ ...playbackSettings, discovery: { hidden: [], bookmarks: [{ kind: "channel", id: "999", name: "Deleted channel" }] } });
+  await render(); await click("Bookmarks"); button("Remove bookmark Deleted channel").focus(); await click("Remove bookmark Deleted channel");
+  expect(saved().discovery.bookmarks).toHaveLength(0); expect(api.channel).not.toHaveBeenCalled();
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Local bookmarks");
+});
+
+test("a bookmark save survives navigation and a failed mutation permits a later successful save", async () => {
+  const saved = localPreferences();
+  const pending = deferred<import("../lib/generated").Settings>();
+  vi.mocked(api.modifyDiscovery).mockReturnValueOnce(pending.promise);
+  await render(); await click("Live"); await click("Open channel Example Channel"); await click("Bookmark channel"); await click("Go back");
+  await act(async () => pending.resolve({ ...saved(), discovery: { hidden: [], bookmarks: [{ kind: "channel", id: channel.broadcasterId, name: channel.displayName }] } }));
+  await click("Bookmarks"); expect(text()).toContain("Example Channel");
+  vi.mocked(api.modifyDiscovery).mockRejectedValueOnce({ code: "settings" });
+  await click("Remove bookmark Example Channel"); expect(text()).toContain("Example Channel");
+  await click("Remove bookmark Example Channel"); expect(text()).toContain("No bookmarks yet");
+});

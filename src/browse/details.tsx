@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { LocalItemActions } from "../features/DiscoveryPreferences";
 import { ChannelPreferences } from "../features/ChannelPreferences";
 import { api } from "../lib/ipc";
 import type { CategorySummary, ChannelDetails, ChannelSummary } from "../lib/generated";
@@ -37,6 +38,7 @@ export function ChannelView({ id, context, links }: { id: string; context: Query
   return <PageFrame query={query} detail empty="Channel unavailable">{details && <article className="channel-detail">
     <div className="channel-identity"><Media retryGeneration={query.imageRetryGeneration} src={details.channel.imageUrl} shape="avatar" /><div><h2>{details.channel.displayName}</h2><p className="muted">@{details.channel.login}</p><p className={details.channel.liveState === "live" ? "live-tag" : "muted"}>{details.channel.liveState === "live" ? "LIVE NOW" : details.channel.liveState === "offline" ? "Offline — no current live stream" : "Live status unavailable"}</p></div></div>
     {details.channel.liveState === "live" && details.stream && <WatchButton id={details.channel.broadcasterId} name={details.channel.displayName} watch={links.watch} pending={links.pending} />}
+    <LocalItemActions kind="channel" id={id} name={details.channel.displayName} />
     <ChannelPreferences key={`${context.sessionId}:${id}`} broadcasterId={id} sessionId={context.sessionId} />
     {details.description && <p className="channel-description">{details.description}</p>}
     {details.stream ? <div className="channel-stream"><StreamPreview retryGeneration={query.imageRetryGeneration} stream={details.stream} /><h3>{details.stream.title}</h3><p className="stream-meta">{details.stream.categoryId && <button className="text-button" onClick={() => links.category(details.stream!.categoryId!, details.stream!.categoryName ?? "Category")}>{details.stream.categoryName ?? "Category"}</button>}{details.stream.language?.toUpperCase()}</p>{details.stream.startedAt && <p className="muted">Started <time dateTime={details.stream.startedAt}>{dateLabel(details.stream.startedAt)}</time></p>}</div> : <div><h3>{details.channel.title ?? "No stream information available"}</h3><p className="muted">{details.channel.categoryName}{details.channel.language && ` · ${details.channel.language.toUpperCase()}`}</p></div>}

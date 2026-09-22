@@ -3,17 +3,18 @@ import { api } from "../lib/ipc";
 import type { Settings, StreamLanguage, BrowseRequest, CategorySummary, ChannelSummary, StreamSummary } from "../lib/generated";
 import { ViewMemory, usePage } from "./usePage";
 import { CategoryList, ChannelList, Media, PageFrame, StreamList } from "./components";
+import { LocalItemActions, SavedItems } from "../features/DiscoveryPreferences";
 import { ExactChannelLookup } from "./ExactChannelLookup";
 import { LanguageFilter } from "./LanguageFilter";
 import { SearchView, ChannelView } from "./details";
 
-type Section = "following" | "live" | "categories" | "search" | "lookup";
+type Section = "following" | "live" | "categories" | "search" | "lookup" | "bookmarks";
 export type BrowserActions = { channel: (id: string, name: string) => void; navigate: (section: Section) => void; back: () => void; refresh: () => void; focus: () => void };
 type Route = ({ kind: Section } | { kind: "category" | "channel"; id: string; name: string }) & { language?: StreamLanguage | null };
 type Visit = { route: Route; section: Section; scroll: number; focus?: string;
   lookup: string; search: string; searchType: "channels" | "categories"; following: "live" | "channels" };
 const routeKey = (route: Route) => route.kind + ("id" in route ? `:${route.id}` : "") + (route.kind === "live" || route.kind === "category" ? `:${route.language ?? "any"}` : "");
-export type QueryContext = { sessionId: string; memory: ViewMemory; onAuthLost: () => void };
+export type QueryContext = { sessionId: string; memory: ViewMemory; hidden?: Settings["discovery"]["hidden"]; onAuthLost: () => void };
 export type Watch = { watch: (id: string) => void; pending: ReadonlySet<string> };
 export type Links = Watch & { channel: (id: string, name: string) => void; category: (id: string, name: string) => void };
 export const pageRequest = (sessionId: string, cursor: string | null, refresh: boolean): BrowseRequest => ({ sessionId, cursor, refresh });
@@ -63,13 +64,13 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
     if (content.current) content.current.scrollTop = target?.scroll ?? 0;
     if (focusSearch.current && route.kind === "search") { content.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus(); focusSearch.current = false; }
   }, [route]);
-  const context = { sessionId, memory, onAuthLost };
+  const context = { sessionId, memory, onAuthLost, hidden: preferences?.discovery.hidden };
   const language = route.language ?? null;
   const links: Links = { watch, pending, channel: (id, name) => navigate({ kind: "channel", id, name }), category: (id, name) => navigate({ kind: "category", id, name }) };
-  const title = "name" in route ? route.name : ({ following: "Following", live: "Live now", categories: "Categories", search: "Search", lookup: "Open channel" }[route.kind]);
-  const subtitle = { following: "The channels you choose to keep up with.", live: "Popular streams, happening right now.", categories: "Find a game. Find your community.", search: "Discover channels and categories on Twitch.", category: "Live streams in this category.", lookup: "Go directly to a known Twitch login.", channel: "Channel details" }[route.kind];
+  const title = "name" in route ? route.name : ({ following: "Following", live: "Live now", categories: "Categories", search: "Search", lookup: "Open channel", bookmarks: "Bookmarks" }[route.kind]);
+  const subtitle = { following: "The channels you choose to keep up with.", live: "Popular streams, happening right now.", categories: "Find a game. Find your community.", search: "Discover channels and categories on Twitch.", category: "Live streams in this category.", lookup: "Go directly to a known Twitch login.", channel: "Channel details", bookmarks: "Your saved channels and categories, on this device." }[route.kind];
   return <div className="workspace">
-    <nav className="side-nav" aria-label="Main navigation"><p className="nav-label">BROWSE</p>{([['following','Following','♡'],['live','Live','◉'],['categories','Categories','▦'],['search','Search','⌕'],['lookup','Open channel','→']] as const).map(([kind, label, symbol]) => <button key={kind} aria-label={label} aria-current={section === kind ? "page" : undefined} onClick={() => navigate({ kind })}><span className="nav-symbol" aria-hidden="true">{symbol}</span>{label}</button>)}</nav>
+    <nav className="side-nav" aria-label="Main navigation"><p className="nav-label">BROWSE</p>{([['following','Following','♡'],['live','Live','◉'],['categories','Categories','▦'],['search','Search','⌕'],['lookup','Open channel','→'],['bookmarks','Bookmarks','☆']] as const).map(([kind, label, symbol]) => <button key={kind} aria-label={label} aria-current={section === kind ? "page" : undefined} onClick={() => navigate({ kind })}><span className="nav-symbol" aria-hidden="true">{symbol}</span>{label}</button>)}</nav>
     <main className="browse-content" ref={content}>
       <div className="view-top"><button className="quiet" disabled={!history.length} onClick={back} aria-label="Go back">← Back</button><span className="muted">{section === "following" ? "Your Twitch" : "Explore Twitch"}</span></div>
       <div className="view-heading"><div><h1 tabIndex={-1}>{title}</h1><p>{subtitle}</p></div></div>
@@ -85,6 +86,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
       {route.kind === "live" && <Streams key={`live:${language}`} mode="live" language={language} context={context} links={links} />}
       {route.kind === "categories" && <Categories context={context} links={links} />}
       {route.kind === "category" && <Category key={`${route.id}:${language}`} id={route.id} language={language} context={context} links={links} />}
+      {route.kind === "bookmarks" && <SavedItems list="bookmarks" open={(kind, id, name) => navigate({ kind, id, name })} />}
       {route.kind === "lookup" && <ExactChannelLookup sessionId={sessionId} login={lookup} change={setLookup} open={links.channel} onAuthLost={onAuthLost} />}
       {route.kind === "search" && <SearchView context={context} links={links} draft={search} setDraft={setSearch} type={searchType} setType={setSearchType} />}
       {route.kind === "channel" && <ChannelView key={route.id} id={route.id} context={context} links={links} />}
@@ -95,7 +97,8 @@ function Streams({ mode, context, links, language = null }: { language?: StreamL
   const query = usePage<StreamSummary>({ ...context, viewKey: mode === "live" ? `live:${language ?? "any"}` : mode,
     identify: stream => stream.streamId,
     load: (cursor, refresh) => mode === "followed" ? api.followedStreams(pageRequest(context.sessionId, cursor, refresh)) : api.streams({ page: pageRequest(context.sessionId, cursor, refresh), language }) });
-  return <PageFrame query={query} empty={mode === "followed" ? "No followed channels are live right now" : language ? "No streams in this language" : "No live streams found"}><StreamList retryGeneration={query.imageRetryGeneration} items={query.page?.items ?? []} {...links} /></PageFrame>;
+  const visible = mode === "live" ? filtered(query, stream => !context.hidden?.some(item => item.kind === "channel" ? item.id === stream.broadcasterId : item.id === stream.categoryId)) : query;
+  return <PageFrame query={visible} empty={mode === "followed" ? "No followed channels are live right now" : language ? "No streams in this language" : "No live streams found"}><StreamList retryGeneration={query.imageRetryGeneration} items={visible.page?.items ?? []} {...links} /></PageFrame>;
 }
 function Follows({ context, links }: { context: QueryContext; links: Links }) {
   const query = usePage<ChannelSummary>({ ...context, viewKey: "followed-channels", identify: channel => channel.broadcasterId,
@@ -105,10 +108,16 @@ function Follows({ context, links }: { context: QueryContext; links: Links }) {
 function Categories({ context, links }: { context: QueryContext; links: Links }) {
   const query = usePage<CategorySummary>({ ...context, viewKey: "categories", identify: category => category.id,
     load: (cursor, refresh) => api.categories(pageRequest(context.sessionId, cursor, refresh)) });
-  return <PageFrame query={query} empty="No categories found"><CategoryList retryGeneration={query.imageRetryGeneration} items={query.page?.items ?? []} open={links.category} /></PageFrame>;
+  const visible = filtered(query, category => !context.hidden?.some(item => item.kind === "category" && item.id === category.id));
+  return <PageFrame query={visible} empty="No visible categories found"><CategoryList retryGeneration={query.imageRetryGeneration} items={visible.page?.items ?? []} open={links.category} /></PageFrame>;
 }
 function Category({ id, context, links, language }: { language: StreamLanguage | null; id: string; context: QueryContext; links: Links }) {
   const query = usePage<StreamSummary>({ ...context, viewKey: `category:${id}:${language ?? "any"}`, identify: stream => stream.streamId,
     load: async (cursor, refresh) => { const result = await api.category({ id, page: { page: pageRequest(context.sessionId, cursor, refresh), language } }); return { ...result.streams, label: result.category.name, imageUrl: result.category.imageUrl }; } });
-  return <><div className="category-identity">{query.page && <><Media retryGeneration={query.imageRetryGeneration} src={query.page.imageUrl ?? null} shape="artwork" /><span>{query.page.label}</span></>}</div><PageFrame query={query} empty={language ? "No streams in this language" : "No streams are live in this category"}><StreamList retryGeneration={query.imageRetryGeneration} items={query.page?.items ?? []} {...links} /></PageFrame></>;
+  const visible = filtered(query, stream => !context.hidden?.some(item => item.kind === "channel" && item.id === stream.broadcasterId));
+  return <><div className="category-identity">{query.page && <><Media retryGeneration={query.imageRetryGeneration} src={query.page.imageUrl ?? null} shape="artwork" /><span>{query.page.label}</span></>}</div>{query.page?.label && <LocalItemActions kind="category" id={id} name={query.page.label} />}<PageFrame query={visible} empty={language ? "No streams in this language" : "No streams are live in this category"}><StreamList retryGeneration={query.imageRetryGeneration} items={visible.page?.items ?? []} {...links} /></PageFrame></>;
+}
+
+function filtered<T>(query: ReturnType<typeof usePage<T>>, keep: (item: T) => boolean) {
+  return { ...query, page: query.page ? { ...query.page, items: query.page.items.filter(keep) } : undefined };
 }

@@ -5,13 +5,14 @@ import { QualitySelect } from "../playback/QualitySelect";
 import { playbackError } from "../playback/usePlayback";
 import { shortcutLabels } from "../app/shortcuts";
 
+import { SavedItems } from "./DiscoveryPreferences";
 import { PlayerFields } from "./PlayerFields";
 import { PlayerProfiles } from "./PlayerProfiles";
 import { UpdateAwareness } from "./UpdateAwareness";
 import { BackgroundSettings } from "./BackgroundSettings";
 import type { useDesktop } from "../app/useDesktop";
 
-const sections = ["Playback", "Streamlink", "Player", "Appearance", "Background", "Updates", "Shortcuts"] as const;
+const sections = ["Playback", "Streamlink", "Player", "Appearance", "Background", "Updates", "Shortcuts", "Hidden items"] as const;
 type Section = typeof sections[number];
 type SettingsProps = { desktop: ReturnType<typeof useDesktop>; saved: Settings | null; saving: boolean; commit: (action: () => Promise<Settings>) => Promise<Settings> };
 type DraftEdits = Omit<Partial<Settings>, "player" | "background" | "profiles" | "selectedProfileId"> & {
@@ -103,6 +104,7 @@ function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { save
         <div hidden={section !== "Background"} className="setting-group">
           <BackgroundSettings value={draft.background} change={background => edit({ background })} desktop={desktop} />
         </div>
+        {section === "Hidden items" && <SavedItems list="hidden" />}
         {section === "Updates" && <UpdateAwareness />}
         <div hidden={section !== "Shortcuts"}>
           <p className="muted">Available while this app is focused. Shortcuts pause while typing, choosing an input value, or using a modal dialog.</p>
