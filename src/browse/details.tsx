@@ -8,14 +8,14 @@ import { CategoryList, ChannelList, dateLabel, Media, PageFrame, StreamPreview, 
 import { pageRequest, type Links, type QueryContext } from "./Workspace";
 export function SearchView({ context, links, draft, setDraft, type, setType }: {
   context: QueryContext; links: Links; draft: string; setDraft: (value: string) => void;
-  type: "channels" | "categories"; setType: (value: "channels" | "categories") => void;
+  type: "channels" | "categories" | "teams"; setType: (value: "channels" | "categories" | "teams") => void;
 }) {
   const [settled, setSettled] = useState(draft.trim());
   useEffect(() => { const timer = setTimeout(() => setSettled(draft.trim()), 350); return () => clearTimeout(timer); }, [draft]);
-  return <><form className="search-form" role="search" onSubmit={e => { e.preventDefault(); setSettled(draft.trim()); }}>
-    <label>Search Twitch<input type="search" name="query" maxLength={100} autoComplete="off" placeholder="Channel or category name" value={draft} onChange={e => setDraft(e.target.value)} /></label></form>
-    <div className="tabs" aria-label="Search result type"><button aria-pressed={type === "channels"} onClick={() => setType("channels")}>Channels</button><button aria-pressed={type === "categories"} onClick={() => setType("categories")}>Categories</button></div>
-    {!draft.trim() ? <div className="empty-state"><h2>What are you looking for?</h2><p>Enter a channel or category name to get started.</p></div> : settled !== draft.trim() ? <p role="status" className="loading">Waiting for your search…</p> : type === "channels" ? <ChannelSearch key={`channels:${settled}`} search={settled} context={context} links={links} /> : <CategorySearch key={`categories:${settled}`} search={settled} context={context} links={links} />}
+  return <><form className="search-form" role="search" onSubmit={e => { e.preventDefault(); if (type === "teams") { if (draft.trim()) links.team(draft.trim()); } else setSettled(draft.trim()); }}>
+    <label>Search Twitch<input type="search" name="query" maxLength={100} autoComplete="off" placeholder={type === "teams" ? "Exact team name, not a URL" : "Channel or category name"} value={draft} onChange={e => setDraft(e.target.value)} /></label>{type === "teams" && <button type="submit" disabled={!draft.trim()}>Open team</button>}</form>
+    <div className="tabs" aria-label="Search result type"><button aria-pressed={type === "channels"} onClick={() => setType("channels")}>Channels</button><button aria-pressed={type === "categories"} onClick={() => setType("categories")}>Categories</button><button aria-pressed={type === "teams"} onClick={() => setType("teams")}>Teams</button></div>
+    {type === "teams" ? <p className="muted">Enter the exact team name from its Twitch team address. Team lookup opens members without starting playback.</p> : !draft.trim() ? <div className="empty-state"><h2>What are you looking for?</h2><p>Enter a channel or category name to get started.</p></div> : settled !== draft.trim() ? <p role="status" className="loading">Waiting for your search…</p> : type === "channels" ? <ChannelSearch key={`channels:${settled}`} search={settled} context={context} links={links} /> : <CategorySearch key={`categories:${settled}`} search={settled} context={context} links={links} />}
   </>;
 }
 function ChannelSearch({ search, context, links }: { search: string; context: QueryContext; links: Links }) {

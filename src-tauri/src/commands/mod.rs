@@ -414,3 +414,15 @@ pub async fn save_shortcuts(
 ) -> Result<Settings> {
     services.save_shortcuts(request).await
 }
+
+#[tauri::command]
+pub async fn get_team(
+    services: State<'_, Arc<Services>>,
+    request: TeamRequest,
+) -> Result<TeamDetails> {
+    let _permit = services.browse_permit()?;
+    services
+        .helix
+        .browse_team(request, &tokio_util::sync::CancellationToken::new())
+        .await
+}

@@ -1,9 +1,11 @@
 //! Application queries: bounded pages, intentional public DTOs, one auth
 //! session for every primary request and its metadata enrichment.
 mod dto;
+mod teams;
 use super::*;
 pub use dto::*;
 use std::collections::HashMap;
+pub use teams::*;
 
 const PAGE_SIZE: u8 = 30;
 

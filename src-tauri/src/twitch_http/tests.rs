@@ -31,6 +31,7 @@ async fn terminal_http_errors_are_redacted_and_not_retried() {
         (403, ErrorCode::Unauthorized),
         (429, ErrorCode::RateLimited),
         (400, ErrorCode::InvalidInput),
+        (404, ErrorCode::NotFound),
         (501, ErrorCode::TwitchServer),
     ] {
         let server = Server::new(vec![Reply::json(status, r#"{"message":"secret-token"}"#)]).await;

@@ -39,6 +39,7 @@
     "allow-search-channels",
     "allow-search-categories",
     "allow-get-channel",
+    "allow-get-team",
     "allow-lookup-channel",
     "allow-desktop-status",
     "allow-pause-monitor",

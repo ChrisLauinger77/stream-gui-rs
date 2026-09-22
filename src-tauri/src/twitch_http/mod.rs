@@ -103,7 +103,8 @@ impl TwitchHttp {
                             403 => ErrorCode::Unauthorized,
                             429 => ErrorCode::RateLimited,
                             500..=599 => ErrorCode::TwitchServer,
-                            400 | 404 => ErrorCode::InvalidInput,
+                            400 => ErrorCode::InvalidInput,
+                            404 => ErrorCode::NotFound,
                             _ => ErrorCode::InvalidResponse,
                         }))
                     }

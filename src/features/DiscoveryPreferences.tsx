@@ -27,8 +27,8 @@ export function LocalItemActions({ kind, id, name }: SavedItem) {
   const item = { kind, id, name };
   const has = (list: DiscoveryList) => settings?.discovery[list].some(entry => entry.kind === kind && entry.id === id) ?? false;
   return <div className="local-item-actions">
-    <button type="button" disabled={!settings || pending} aria-pressed={has("bookmarks")} onClick={() => { void change("bookmarks", item, !has("bookmarks")); }}>{has("bookmarks") ? "Remove bookmark" : `Bookmark ${kind}`}</button>
-    <button type="button" disabled={!settings || pending} aria-pressed={has("hidden")} onClick={() => { void change("hidden", item, !has("hidden")); }}>{has("hidden") ? "Restore to discovery" : `Hide ${kind} from discovery`}</button>
+    <button type="button" disabled={!settings || pending} data-focus={`bookmark:${kind}:${id}`} aria-pressed={has("bookmarks")} onClick={() => { void change("bookmarks", item, !has("bookmarks")); }}>{has("bookmarks") ? "Remove bookmark" : `Bookmark ${kind}`}</button>
+    <button type="button" disabled={!settings || pending} data-focus={`hide:${kind}:${id}`} aria-pressed={has("hidden")} onClick={() => { void change("hidden", item, !has("hidden")); }}>{has("hidden") ? "Restore to discovery" : `Hide ${kind} from discovery`}</button>
     {feedback}
   </div>;
 }

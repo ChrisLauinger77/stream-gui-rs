@@ -150,6 +150,7 @@ fn main() {
             "search_channels",
             "search_categories",
             "get_channel",
+            "get_team",
             "lookup_channel",
         ]),
     ))
