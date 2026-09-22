@@ -13,6 +13,7 @@ export function useDesktop() {
   const mounted = useRef(false);
   const revision = useRef(0);
   // Keep consumption guards across the developer-tools/application switch.
+  const navigationActions = useRef({ handled: null as string | null, acknowledged: null as string | null, acknowledging: false });
   const actions = useRef({ handled: null as string | null, acknowledged: null as string | null, acknowledging: false });
   useEffect(() => {
     mounted.current = true;
@@ -41,5 +42,5 @@ export function useDesktop() {
     } catch (error) { if (mounted.current) setError(friendlyError(error)); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   };
-  return { status, busy, error, run, actions };
+  return { status, busy, error, run, actions, navigationActions };
 }

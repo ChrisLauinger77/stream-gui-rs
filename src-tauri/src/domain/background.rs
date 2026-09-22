@@ -49,6 +49,7 @@ impl DesktopAction {
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopStatus {
+    pub navigation: Option<crate::navigation::PendingNavigation>,
     pub monitor: crate::monitor::MonitorStatus,
     pub notification_permission: NotificationPermission,
     pub notification_click_supported: bool,

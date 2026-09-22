@@ -17,6 +17,7 @@ type Commands = {
   pause_monitor: [undefined, MonitorStatus];
   resume_monitor: [undefined, MonitorStatus];
   request_notification_permission: [undefined, null];
+  acknowledge_navigation_intent: [AcknowledgeDesktopAction, null];
   acknowledge_desktop_action: [AcknowledgeDesktopAction, null];
   quit_application: [undefined, null];
   list_followed_streams: [BrowseRequest, PagedResult<StreamSummary>];
@@ -79,6 +80,7 @@ export const api = {
   pauseMonitor: () => call("pause_monitor"),
   resumeMonitor: () => call("resume_monitor"),
   requestNotificationPermission: () => call("request_notification_permission"),
+  acknowledgeNavigationIntent: (id: string) => call("acknowledge_navigation_intent", { id }),
   acknowledgeDesktopAction: (id: string) => call("acknowledge_desktop_action", { id }),
   quit: () => call("quit_application"),
   followedStreams: (request: BrowseRequest) => call("list_followed_streams", request),

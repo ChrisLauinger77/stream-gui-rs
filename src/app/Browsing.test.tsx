@@ -667,7 +667,7 @@ async function toggleControl(label: string) {
 }
 const desktopSnapshot: import("../lib/generated").DesktopStatus = {
   monitor: { phase: "running", paused: false, liveCount: 3, stale: false, error: null, retryInSeconds: 60, notificationError: false },
-  notificationPermission: "not_requested", notificationClickSupported: true, notificationTestAvailable: false, trayAvailable: true, action: null,
+  notificationPermission: "not_requested", notificationClickSupported: true, notificationTestAvailable: false, navigation: null, trayAvailable: true, action: null,
 };
 const testNotification = {
   kind: "channel" as const, id: "native-test", authSessionId: "notification-acceptance", broadcasterId: "0", displayName: "TEST notification: Synthetic channel",
@@ -1949,4 +1949,93 @@ test("a reopened shortcut editor waits for the previous full draft before editin
   expect(container.querySelector('[aria-label="Focus Search binding: Unassigned"]')).not.toBeNull();
   await click("Unassign Refresh shortcut"); await click("Save shortcuts");
   expect(api.saveShortcuts).toHaveBeenLastCalledWith(expect.objectContaining({ search: null, refresh: null }));
+});
+
+function deliverNavigation(intent: import("../lib/generated").NavigationIntent, id = "link-1") {
+  vi.mocked(api.desktopStatus).mockImplementation(async () => ({ ...desktopSnapshot, navigation: { id, intent } }));
+  vi.mocked(api.acknowledgeNavigationIntent).mockResolvedValue(null);
+}
+test("cold-start deep links wait for settings and authentication, navigate once, and never autoplay", async () => {
+  const settings = deferred<import("../lib/generated").Settings>();
+  vi.mocked(api.playbackSettings).mockReturnValue(settings.promise);
+  vi.mocked(api.authStatus).mockResolvedValue({ ...signedOut, phase: "restoring" });
+  deliverNavigation({ kind: "channel", login: "example" });
+  vi.mocked(api.lookupChannel).mockResolvedValue({ broadcasterId: channel.broadcasterId, displayName: channel.displayName });
+  await render(); expect(api.lookupChannel).not.toHaveBeenCalled(); expect(api.acknowledgeNavigationIntent).not.toHaveBeenCalled();
+  await act(async () => settings.resolve(playbackSettings));
+  vi.mocked(api.authStatus).mockResolvedValue(signedIn);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(api.lookupChannel).toHaveBeenCalledOnce(); expect(text()).toContain("An example description"); expect(api.launch).not.toHaveBeenCalled();
+  expect(api.acknowledgeNavigationIntent).toHaveBeenCalledWith("link-1");
+  await act(async () => { await vi.advanceTimersByTimeAsync(4000); }); expect(api.lookupChannel).toHaveBeenCalledOnce();
+});
+test("new deep links supersede pending resolution and late results cannot navigate over them", async () => {
+  const pending = deferred<import("../lib/generated").ChannelIdentity>();
+  vi.mocked(api.lookupChannel).mockReturnValue(pending.promise);
+  deliverNavigation({ kind: "channel", login: "old" }); await render();
+  deliverNavigation({ kind: "team", name: "synthetic-team" }, "link-2"); vi.mocked(api.team).mockResolvedValue(teamDetails);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); expect(text()).toContain("Synthetic Team");
+  await act(async () => pending.resolve({ broadcasterId: channel.broadcasterId, displayName: "Obsolete link" }));
+  expect(api.channel).not.toHaveBeenCalled(); expect(text()).not.toContain("Obsolete link"); expect(api.launch).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(container.querySelector("h1"));
+});
+test("deep links during logout wait for a new session and category links override passive hides", async () => {
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, discovery: { bookmarks: [], hidden: [{ kind: "category", id: category.id, name: category.name }] } });
+  deliverNavigation({ kind: "category", id: category.id }); await render();
+  expect(text()).toContain("Connect to Twitch to open"); expect(api.category).not.toHaveBeenCalled();
+  vi.mocked(api.authStatus).mockResolvedValue({ ...signedIn, sessionId: "2" });
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(api.category).toHaveBeenCalledWith({ id: category.id, page: { page: { sessionId: "2", cursor: null, refresh: false }, language: null } });
+  expect(container.querySelector(".stream-card")).not.toBeNull(); expect(api.launch).not.toHaveBeenCalled();
+});
+test("a failed navigation acknowledgement retries without replaying the navigation", async () => {
+  deliverNavigation({ kind: "team", name: "synthetic-team" }); vi.mocked(api.team).mockResolvedValue(teamDetails);
+  vi.mocked(api.acknowledgeNavigationIntent).mockRejectedValueOnce({ code: "internal" }).mockResolvedValue(null);
+  await render(); await click("Live");
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(api.acknowledgeNavigationIntent).toHaveBeenCalledTimes(2); expect(api.team).toHaveBeenCalledOnce(); expect(button("Live").getAttribute("aria-current")).toBe("page");
+});
+
+test("hide completion filters an in-flight page without losing its cursor or restoring hidden results", async () => {
+  const saved = localPreferences();
+  const mutation = deferred<import("../lib/generated").Settings>();
+  const more = deferred<PagedResult<StreamSummary>>();
+  vi.mocked(api.streams).mockResolvedValueOnce(page([stream], "next")).mockReturnValueOnce(more.promise);
+  vi.mocked(api.modifyDiscovery).mockReturnValueOnce(mutation.promise);
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await click("Hide channel from discovery"); await click("Go back"); await click("Load more");
+  await act(async () => mutation.resolve({ ...saved(), discovery: { bookmarks: [], hidden: [{ kind: "channel", id: channel.broadcasterId, name: channel.displayName }] } }));
+  expect(container.querySelector(".stream-card")).toBeNull();
+  await act(async () => more.resolve(page([stream, { ...stream, streamId: "other-stream", broadcasterId: "other-channel", displayName: "Visible channel" }], "last")));
+  expect(container.querySelectorAll(".stream-card")).toHaveLength(1);
+  expect(text()).toContain("Visible channel"); expect(text()).not.toContain("Example Channel");
+  expect(button("Load more").disabled).toBe(false);
+  vi.mocked(api.streams).mockResolvedValueOnce(page([])); await click("Load more");
+  expect(api.streams).toHaveBeenLastCalledWith({ page: { sessionId: "1", cursor: "last", refresh: false }, language: null });
+});
+
+test("bookmark mutations and a failing channel refresh preserve independent accepted state", async () => {
+  const saved = localPreferences(); const refresh = deferred<ChannelDetails>();
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  vi.mocked(api.channel).mockReturnValueOnce(refresh.promise); await click("Refresh"); await click("Bookmark channel");
+  await act(async () => refresh.reject({ code: "network" }));
+  expect(saved().discovery.bookmarks).toHaveLength(1); expect(text()).toContain("Previous results");
+  await click("Remove bookmark"); expect(saved().discovery.bookmarks).toHaveLength(0);
+});
+
+test("local bookmarks, hides and shortcuts survive logout while navigation history resets", async () => {
+  const saved = localPreferences({ ...playbackSettings, shortcuts: { ...defaultBindings(false), search: null } });
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await click("Bookmark channel"); await click("Hide channel from discovery");
+  vi.mocked(api.logout).mockResolvedValue(signedOut); vi.mocked(api.authStatus).mockResolvedValue(signedOut); await click("Sign out");
+  vi.mocked(api.authStatus).mockResolvedValue({ ...signedIn, sessionId: "new-account", user: { ...signedIn.user!, id: "another-viewer" } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(button("Go back").disabled).toBe(true); expect(button("Go forward").disabled).toBe(true);
+  await click("Live"); expect(container.querySelector(".stream-card")).toBeNull();
+  await click("Bookmarks"); await click("Example Channel");
+  expect(api.channel).toHaveBeenLastCalledWith({ id: channel.broadcasterId, page: { sessionId: "new-account", cursor: null, refresh: false } });
+  expect(saved().shortcuts.search).toBeNull();
+  await click("Settings"); await click("Shortcuts", ".settings-nav");
+  expect(container.querySelector('[aria-label="Focus Search binding: Unassigned"]')).not.toBeNull();
 });

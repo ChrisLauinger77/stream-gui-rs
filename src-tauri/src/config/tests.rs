@@ -966,8 +966,14 @@ fn discovery_mutations_are_idempotent_bounded_and_independent_of_global_drafts()
         })
         .unwrap();
     store.update(draft).unwrap();
-    assert_eq!(store.snapshot().discovery.bookmarks, [item.clone()]);
-    assert_eq!(store.snapshot().discovery.hidden, [item.clone()]);
+    assert_eq!(
+        store.snapshot().discovery.bookmarks.as_slice(),
+        std::slice::from_ref(&item)
+    );
+    assert_eq!(
+        store.snapshot().discovery.hidden.as_slice(),
+        std::slice::from_ref(&item)
+    );
     for id in 1..200 {
         store
             .modify_discovery(DiscoveryMutation {

@@ -11,7 +11,8 @@ fn malformed_settings_exit_cleanly_without_overwriting_or_panicking() {
         fs::create_dir(&config).unwrap();
         let path = config.join("settings.json");
         fs::write(&path, contents).unwrap();
-        let result = Command::new(env!("CARGO_BIN_EXE_stream-gui-rs"))
+        let result = Command::new("dbus-run-session")
+            .args(["--", env!("CARGO_BIN_EXE_stream-gui-rs")])
             .env("XDG_CONFIG_HOME", directory.path())
             .env("TWITCH_CLIENT_ID", "syntheticConfigValidation123")
             .output()

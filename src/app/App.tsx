@@ -25,7 +25,7 @@ export function App() {
 function AppContent() {
   const [developer, setDeveloper] = useState(false);
   const desktop = useDesktop();
-  useEffect(() => { if (desktop.status?.action) setDeveloper(false); }, [desktop.status?.action?.id]);
+  useEffect(() => { if (desktop.status?.action || desktop.status?.navigation) setDeveloper(false); }, [desktop.status?.action?.id, desktop.status?.navigation?.id]);
   if (developer) return <><div className="developer-banner"><button onClick={() => setDeveloper(false)}>← Back to browsing</button><span>Developer tools · backend diagnostics</span></div><NotificationAcceptance desktop={desktop} /><DeveloperTools /></>;
   return <Application desktop={desktop} developer={() => setDeveloper(true)} />;
 }
@@ -83,6 +83,24 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       .finally(() => { actionState.acknowledging = false; });
   }, [desktop.status, auth.sessionId, notificationTest, actionState]);
   useEffect(() => {
+    const pending = desktop.status?.navigation;
+    const state = desktop.navigationActions.current;
+    if (!pending || !playback.settings || !auth.status || auth.status.phase === "restoring") return;
+    if (state.handled !== pending.id) {
+      if (pending.intent.kind !== "show" && (!auth.sessionId || !workspace.current)) return;
+      setSettings(false); setWatching(false); setNotificationTest(false); setAbout(null); setSupport(false);
+      if (pending.intent.kind !== "show") workspace.current!.intent(pending.intent);
+      setNavigationFocus({ id: pending.id, target: "channel" });
+      state.handled = pending.id;
+    }
+    if (state.acknowledged === pending.id || state.acknowledging) return;
+    state.acknowledging = true;
+    void api.acknowledgeNavigationIntent(pending.id)
+      .then(() => { state.acknowledged = pending.id; })
+      .catch(() => { /* Retry only the acknowledgement on the next native snapshot. */ })
+      .finally(() => { state.acknowledging = false; });
+  }, [desktop.status?.navigation, auth.sessionId, auth.status, playback.settings, desktop.navigationActions]);
+  useEffect(() => {
     // Passive unmount cleanup closes the modal (including native opener focus)
     // before this effect focuses the accepted destination, even on the same route.
     if (navigationFocus?.target === "channel") workspace.current?.focus();
@@ -127,6 +145,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       isStopping={id => playback.pending.has(`stop:${id}`)} isRestarting={id => playback.pending.has(`restart:${id}`)}
       stop={id => { void playback.run(`stop:${id}`, () => api.stop(id), "Playback stopped."); }}
       restart={(session, quality) => { void playback.run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), "Streamlink process restarted."); }} /></div>}
+    {desktop.status?.navigation && !auth.sessionId && desktop.status.navigation.intent.kind !== "show" && <p className="notice" role="status">Connect to Twitch to open the requested destination.</p>}
     {auth.error && <p className="error" role="alert">{auth.error}</p>}
     {notificationTest ? <main className="settings-panel">
       <h1 tabIndex={-1} ref={testHeading}>TEST notification · Synthetic channel</h1>

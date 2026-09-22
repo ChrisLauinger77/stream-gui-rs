@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-acknowledge-navigation-intent"
+description = "Enables the acknowledge_navigation_intent command without any pre-configured scope."
+commands.allow = ["acknowledge_navigation_intent"]
+
+[[permission]]
+identifier = "deny-acknowledge-navigation-intent"
+description = "Denies the acknowledge_navigation_intent command without any pre-configured scope."
+commands.deny = ["acknowledge_navigation_intent"]

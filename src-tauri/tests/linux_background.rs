@@ -28,6 +28,12 @@ fn phase_seven_profiles_chat_and_updates_use_the_native_webview() {
     run_scenarios(&["phase7"]);
 }
 
+#[test]
+#[ignore = "requires a graphical Linux session and frontend dev server; isolated Phase 8 fixtures"]
+fn phase_eight_navigation_preferences_and_native_links() {
+    run_scenarios(&["phase8"]);
+}
+
 fn run_scenarios(actions: &[&str]) {
     for action in actions {
         let directory = tempfile::tempdir().unwrap();

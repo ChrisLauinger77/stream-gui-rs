@@ -1,17 +1,17 @@
 import { memo, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { api } from "../lib/ipc";
-import type { Settings, StreamLanguage, BrowseRequest, CategorySummary, ChannelSummary, StreamSummary } from "../lib/generated";
+import type { NavigationIntent, Settings, StreamLanguage, BrowseRequest, CategorySummary, ChannelSummary, StreamSummary } from "../lib/generated";
 import { ViewMemory, usePage } from "./usePage";
 import { CategoryList, ChannelList, Media, PageFrame, StreamList } from "./components";
 import { LocalItemActions, SavedItems } from "../features/DiscoveryPreferences";
 import { TeamView } from "./TeamView";
 import { ExactChannelLookup } from "./ExactChannelLookup";
 import { LanguageFilter } from "./LanguageFilter";
-import { SearchView, ChannelView } from "./details";
+import { SearchView, ChannelView, LoginChannelView } from "./details";
 
 type Section = "following" | "live" | "categories" | "search" | "lookup" | "bookmarks";
-export type BrowserActions = { channel: (id: string, name: string) => void; navigate: (section: Section) => void; back: () => void; forward: () => void; refresh: () => void; focus: () => void };
-type Route = ({ kind: Section } | { kind: "category" | "channel" | "team"; id: string; name: string }) & { language?: StreamLanguage | null };
+export type BrowserActions = { intent: (intent: NavigationIntent) => void; channel: (id: string, name: string) => void; navigate: (section: Section) => void; back: () => void; forward: () => void; refresh: () => void; focus: () => void };
+type Route = ({ kind: Section } | { kind: "category" | "channel" | "team" | "login"; id: string; name: string }) & { language?: StreamLanguage | null };
 type Visit = { route: Route; section: Section; scroll: number; focus?: string;
   lookup: string; search: string; searchType: "channels" | "categories" | "teams"; following: "live" | "channels" };
 const routeKey = (route: Route) => route.kind + ("id" in route ? `:${route.id}` : "") + (route.kind === "live" || route.kind === "category" ? `:${route.language ?? "any"}` : "");
@@ -42,7 +42,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
     if (next.kind === "live" || next.kind === "category") next = { ...next, language: preferences?.discoveryLanguage ?? null };
     if (routeKey(next) === routeKey(route)) return;
     setHistory(items => [...items, visit()].slice(-12)); setFuture([]);
-    if (next.kind !== "category" && next.kind !== "channel" && next.kind !== "team") setSection(next.kind);
+    if (next.kind !== "category" && next.kind !== "channel" && next.kind !== "team" && next.kind !== "login") setSection(next.kind);
     restore.current = null; setRoute(next);
   };
   const back = () => {
@@ -56,6 +56,11 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
     setHistory(items => [...items, visit()].slice(-12)); setFuture(future.slice(0, -1)); acceptVisit(next);
   };
   useImperativeHandle(actionsRef, () => ({
+    intent: intent => {
+      if (intent.kind === "channel") navigate({ kind: "login", id: intent.login, name: intent.login });
+      else if (intent.kind === "category") navigate({ kind: "category", id: intent.id, name: "Category" });
+      else if (intent.kind === "team") navigate({ kind: "team", id: intent.name, name: intent.name });
+    },
     channel: (id, name) => navigate({ kind: "channel", id, name }),
     navigate: next => {
       focusSearch.current = next === "search";
@@ -78,7 +83,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
   const language = route.language ?? null;
   const links: Links = { watch, pending, team: name => navigate({ kind: "team", id: name.toLowerCase(), name }), channel: (id, name) => navigate({ kind: "channel", id, name }), category: (id, name) => navigate({ kind: "category", id, name }) };
   const title = "name" in route ? route.name : ({ following: "Following", live: "Live now", categories: "Categories", search: "Search", lookup: "Open channel", bookmarks: "Bookmarks" }[route.kind]);
-  const subtitle = { following: "The channels you choose to keep up with.", live: "Popular streams, happening right now.", categories: "Find a game. Find your community.", search: "Discover channels and categories on Twitch.", category: "Live streams in this category.", lookup: "Go directly to a known Twitch login.", team: "Twitch team members", channel: "Channel details", bookmarks: "Your saved channels and categories, on this device." }[route.kind];
+  const subtitle = { following: "The channels you choose to keep up with.", live: "Popular streams, happening right now.", categories: "Find a game. Find your community.", search: "Discover channels and categories on Twitch.", category: "Live streams in this category.", lookup: "Go directly to a known Twitch login.", login: "Channel details", team: "Twitch team members", channel: "Channel details", bookmarks: "Your saved channels and categories, on this device." }[route.kind];
   return <div className="workspace">
     <nav className="side-nav" aria-label="Main navigation"><p className="nav-label">BROWSE</p>{([['following','Following','♡'],['live','Live','◉'],['categories','Categories','▦'],['search','Search','⌕'],['lookup','Open channel','→'],['bookmarks','Bookmarks','☆']] as const).map(([kind, label, symbol]) => <button key={kind} aria-label={label} aria-current={section === kind ? "page" : undefined} onClick={() => navigate({ kind })}><span className="nav-symbol" aria-hidden="true">{symbol}</span>{label}</button>)}</nav>
     <main className="browse-content" ref={content}>
@@ -101,6 +106,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
       {route.kind === "lookup" && <ExactChannelLookup sessionId={sessionId} login={lookup} change={value => { setFuture([]); setLookup(value); }} open={links.channel} onAuthLost={onAuthLost} />}
       {route.kind === "search" && <SearchView context={context} links={links} draft={search} setDraft={value => { setFuture([]); setSearch(value); }} type={searchType} setType={value => { setFuture([]); setSearchType(value); }} />}
       {route.kind === "team" && <TeamView key={route.id} name={route.id} context={context} links={links} />}
+      {route.kind === "login" && <LoginChannelView key={route.id} login={route.id} context={context} links={links} />}
       {route.kind === "channel" && <ChannelView key={route.id} id={route.id} context={context} links={links} />}
     </main>
   </div>;

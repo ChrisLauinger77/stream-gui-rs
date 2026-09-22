@@ -103,6 +103,8 @@ pub fn typescript_bindings() -> String {
     let config = Config::default();
     let declarations = [
         ErrorCode::decl(&config),
+        crate::navigation::NavigationIntent::decl(&config),
+        crate::navigation::PendingNavigation::decl(&config),
         background::NotificationPermission::decl(&config),
         background::NotificationTestAction::decl(&config),
         background::DesktopAction::decl(&config),

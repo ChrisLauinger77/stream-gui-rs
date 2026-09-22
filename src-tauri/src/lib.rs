@@ -6,6 +6,7 @@ pub mod diagnostics;
 pub mod domain;
 pub mod helix;
 pub mod monitor;
+pub mod navigation;
 pub mod platform;
 pub mod streamlink;
 mod time;

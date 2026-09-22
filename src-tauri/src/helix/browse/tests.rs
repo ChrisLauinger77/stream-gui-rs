@@ -917,6 +917,7 @@ async fn team_lookup_does_not_cross_logout_or_replacement_session() {
     let gate = Arc::new(tokio::sync::Notify::new());
     let (server, client, page) = client(vec![
         Reply::json(200, team_fixture(1).to_string()).gated(gate.clone()),
+        Reply::json(200, team_fixture(0).to_string()),
     ])
     .await;
     let request = TeamRequest {
@@ -924,9 +925,35 @@ async fn team_lookup_does_not_cross_logout_or_replacement_session() {
         page,
     };
     let cancel = CancellationToken::new();
-    let task = client.browse_team(request, &cancel);
+    let task = client.browse_team(request.clone(), &cancel);
     tokio::pin!(task);
     tokio::select! { _ = &mut task => panic!("request should be gated"), _ = server.wait_for_requests(1) => {} }
     client.auth.logout().await.unwrap();
+    client.auth.login().await.unwrap();
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    client.auth.tick().await.unwrap();
+    let replacement = client.auth.status().await.session_id.unwrap();
+    assert_ne!(replacement, request.page.session_id);
+    gate.notify_one();
     assert_eq!(task.await.unwrap_err().code, ErrorCode::Unauthenticated);
+    assert_eq!(
+        client
+            .browse_team(request.clone(), &cancel)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::Unauthenticated
+    );
+    assert_eq!(server.requests().len(), 1);
+    let mut next = request;
+    next.page.session_id = replacement;
+    assert_eq!(
+        client
+            .browse_team(next, &cancel)
+            .await
+            .unwrap()
+            .member_count,
+        0
+    );
+    assert_eq!(server.requests().len(), 2);
 }

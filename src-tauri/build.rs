@@ -107,6 +107,7 @@ fn main() {
             "resume_monitor",
             "request_notification_permission",
             "acknowledge_desktop_action",
+            "acknowledge_navigation_intent",
             "quit_application",
             "backend_diagnostics",
             "open_repository",

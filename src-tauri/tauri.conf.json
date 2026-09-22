@@ -28,6 +28,9 @@
       ]
     }
   },
+  "plugins": {
+    "deep-link": { "desktop": { "schemes": ["stream-gui-rs"] } }
+  },
   "bundle": {
     "active": false,
     "macOS": {

@@ -426,3 +426,13 @@ pub async fn get_team(
         .browse_team(request, &tokio_util::sync::CancellationToken::new())
         .await
 }
+
+#[tauri::command]
+pub fn acknowledge_navigation_intent(
+    app: tauri::AppHandle,
+    request: crate::domain::background::AcknowledgeDesktopAction,
+) {
+    use tauri::Manager;
+    app.state::<crate::navigation::NavigationInbox>()
+        .acknowledge(&request.id);
+}

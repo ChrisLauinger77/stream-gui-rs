@@ -3,6 +3,7 @@ use super::*;
 use crate::{domain::LaunchRequest, streamlink::SessionPhase};
 use std::{path::Path, time::Duration};
 mod notification_server;
+mod phase_eight;
 mod phase_seven;
 mod phase_six;
 mod titlebar;
@@ -14,7 +15,8 @@ pub fn run(
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     let phase_six = action == "phase6";
     let phase_seven = action == "phase7";
-    let quit = action == "quit" || phase_six || phase_seven;
+    let phase_eight = action == "phase8";
+    let quit = action == "quit" || phase_six || phase_seven || phase_eight;
     let titlebar_only = action == "titlebar";
     let directory = tempfile::tempdir()?;
     // No client ID: this fixture cannot open any production credential entry.
@@ -27,7 +29,9 @@ pub fn run(
     // The parent launches this executable under dbus-run-session. Never register
     // a fixture on the user's desktop bus or deliver a real desktop notification.
     let notifications = Arc::new(notification_server::Server::start());
-    let app = build_app()?;
+    let initial = phase_eight
+        .then(|| crate::navigation::parse_link("stream-gui-rs://team/synthetic-team").unwrap());
+    let app = build_app(initial)?;
     install_services(&app, services.clone());
     let outcome = Arc::new(Mutex::new(None));
     let result = outcome.clone();
@@ -47,6 +51,9 @@ pub fn run(
                         scenario(&check_app, &check_marker, &notifications, titlebar_only).await?;
                         if phase_six {
                             phase_six::check(&check_app).await;
+                        }
+                        if phase_eight {
+                            phase_eight::check(&check_app).await;
                         }
                         if phase_seven {
                             phase_seven::check(&check_app).await;

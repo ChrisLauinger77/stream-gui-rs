@@ -7,6 +7,7 @@ use tauri::Manager;
 #[cfg(target_os = "macos")]
 mod about;
 pub(crate) mod browser;
+mod navigation;
 mod notifications;
 #[cfg(target_os = "linux")]
 mod titlebar;
@@ -60,8 +61,18 @@ pub(crate) fn show_about(app: &tauri::AppHandle) {
     }
 }
 
-fn build_app() -> tauri::Result<tauri::App> {
-    let builder = tauri::Builder::default();
+fn build_app(initial: Option<crate::navigation::NavigationIntent>) -> tauri::Result<tauri::App> {
+    let inbox = crate::navigation::NavigationInbox::default();
+    if let Some(intent) = initial {
+        inbox.receive(intent);
+    }
+    let builder = tauri::Builder::default().manage(inbox);
+    // macOS routes installed bundle activations through LaunchServices/Opened.
+    // Avoid the plugin's additional, unbounded Unix socket receiver there.
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+        navigation::receive_arguments(app, &args);
+    }));
     #[cfg(target_os = "linux")]
     let builder = builder.setup(|app| {
         // Configured windows exist only once Tauri enters setup. A decoration
@@ -84,6 +95,7 @@ fn build_app() -> tauri::Result<tauri::App> {
             commands::resume_monitor,
             commands::request_notification_permission,
             commands::acknowledge_desktop_action,
+            commands::acknowledge_navigation_intent,
             commands::quit_application,
             commands::backend_diagnostics,
             commands::open_repository,
@@ -134,7 +146,19 @@ fn build_app() -> tauri::Result<tauri::App> {
 }
 
 pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let app = build_app()?;
+    let args = std::env::args_os()
+        .take(3)
+        .map(|arg| {
+            arg.into_string().map_err(|_| {
+                crate::domain::AppError::new(
+                    crate::domain::ErrorCode::InvalidInput,
+                    "Invalid application arguments.",
+                )
+            })
+        })
+        .collect::<crate::domain::Result<Vec<_>>>()?;
+    let initial = crate::navigation::parse_arguments(&args)?;
+    let app = build_app(initial)?;
     // Tauri panics when a setup hook returns an error. Validate and install our
     // services before entering its event loop so malformed settings fail cleanly.
     let directory = app.path().app_config_dir()?;
@@ -178,6 +202,26 @@ fn install_services(app: &tauri::App, services: Arc<Services>) {
 
 fn handle_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
     match event {
+        tauri::RunEvent::Ready
+            if app
+                .state::<crate::navigation::NavigationInbox>()
+                .snapshot()
+                .is_some() =>
+        {
+            show_window(app);
+        }
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { .. } => navigation::receive(app, None),
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Opened { urls } => {
+            // AppKit supplies parsed URLs. Process a bounded batch, retaining only
+            // the last accepted typed intent; never retain a link history.
+            for url in urls.iter().take(16) {
+                if let Ok(intent) = crate::navigation::parse_link(url.as_str()) {
+                    navigation::receive(app, Some(intent));
+                }
+            }
+        }
         tauri::RunEvent::ExitRequested { api, .. } => {
             if app
                 .state::<Arc<Lifecycle>>()
@@ -297,6 +341,7 @@ pub(crate) fn status(app: &tauri::AppHandle) -> crate::domain::background::Deskt
         state.action = None;
     }
     crate::domain::background::DesktopStatus {
+        navigation: app.state::<crate::navigation::NavigationInbox>().snapshot(),
         monitor: services.monitor.snapshot(),
         notification_permission: state.permission,
         notification_click_supported: state.clicks,
@@ -347,6 +392,10 @@ mod tests {
         let mut context = super::app_context();
         let authority = context.runtime_authority_mut();
         for command in [
+            "modify_discovery",
+            "save_shortcuts",
+            "get_team",
+            "acknowledge_navigation_intent",
             "save_discovery_language",
             "lookup_channel",
             "support_report",

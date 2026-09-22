@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { LocalItemActions } from "../features/DiscoveryPreferences";
 import { ChannelPreferences } from "../features/ChannelPreferences";
 import { api } from "../lib/ipc";
-import type { CategorySummary, ChannelDetails, ChannelSummary } from "../lib/generated";
+import type { ChannelIdentity, CategorySummary, ChannelDetails, ChannelSummary } from "../lib/generated";
 import { usePage } from "./usePage";
 import { CategoryList, ChannelList, dateLabel, Media, PageFrame, StreamPreview, WatchButton } from "./components";
 import { pageRequest, type Links, type QueryContext } from "./Workspace";
@@ -43,4 +43,13 @@ export function ChannelView({ id, context, links }: { id: string; context: Query
     {details.description && <p className="channel-description">{details.description}</p>}
     {details.stream ? <div className="channel-stream"><StreamPreview retryGeneration={query.imageRetryGeneration} stream={details.stream} /><h3>{details.stream.title}</h3><p className="stream-meta">{details.stream.categoryId && <button className="text-button" onClick={() => links.category(details.stream!.categoryId!, details.stream!.categoryName ?? "Category")}>{details.stream.categoryName ?? "Category"}</button>}{details.stream.language?.toUpperCase()}</p>{details.stream.startedAt && <p className="muted">Started <time dateTime={details.stream.startedAt}>{dateLabel(details.stream.startedAt)}</time></p>}</div> : <div><h3>{details.channel.title ?? "No stream information available"}</h3><p className="muted">{details.channel.categoryName}{details.channel.language && ` · ${details.channel.language.toUpperCase()}`}</p></div>}
   </article>}</PageFrame>;
+}
+
+// Resolution belongs to this keyed visit. A late lookup cannot navigate over a
+// newer route, and session replacement unmounts both resolution and details.
+export function LoginChannelView({ login, context, links }: { login: string; context: QueryContext; links: Links }) {
+  const query = usePage<ChannelIdentity>({ ...context, viewKey: `login:${login}`, identify: channel => channel.broadcasterId,
+    load: async () => ({ items: [await api.lookupChannel({ sessionId: context.sessionId, login })], cursor: null, freshness: "network", ageSeconds: 0, warnings: [] }) });
+  const channel = query.page?.items[0];
+  return channel ? <ChannelView key={channel.broadcasterId} id={channel.broadcasterId} context={context} links={links} /> : <PageFrame query={query} detail empty="Channel unavailable"><span /></PageFrame>;
 }
