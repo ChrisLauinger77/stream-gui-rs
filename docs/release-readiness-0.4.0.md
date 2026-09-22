@@ -123,3 +123,41 @@ is part of preparation. It is not included in the user-facing release notes.
 Existing Scoop/Homebrew update notifications and daily fallback remain in place.
 The initial WinGet review is a separate follow-up and does not block this release;
 no new WinGet automation is added.
+
+## Maintainer-approved release-procedure exception — 2026-09-22
+
+The maintainer explicitly accepted a release-procedure exception for **v0.4.0**
+on the basis that its runtime code is the already native-validated Phase 7 code.
+Relative to the merged Phase 7 baseline
+`cc74e13f0ebe19f374e39aa6815bfa0b0064dbdf`, preparation commit
+`05729fe5c090cc8d5589019c7b3b44fe92ec0b2e` changes version/release metadata and
+documentation, plus one non-runtime test case for equal 0.4.0 versions. It changes
+no application behavior, dependencies, packaging policy or credential identity.
+
+This exception accepts the existing Linux, macOS and Windows Phase 7 native
+results without repeating acceptance on the exact 0.4.0 packages. Those package
+checks, including fresh About observations and stored-login/settings restoration,
+are **not newly tested**. The untouched released v0.3.0/schema-5 upgrade check is
+also **unavailable** because only Phase 7 test profiles remain. Automated schema-5
+migration coverage passed; it is not recorded as a real stored-credential upgrade.
+The limitations in the earlier native record remain unchanged. This is a specific
+maintainer acceptance decision for this release, not a general relaxation of
+[the release procedure](releasing.md).
+
+The accepted candidate is first-attempt
+[Release run 35756564645](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35756564645),
+built from the exact preparation commit above. Full local validation passed;
+[Desktop checks](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35754721200)
+passed on Linux, macOS and Windows, and
+[CodeQL](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35754720976)
+passed on that same commit. All three candidate builds and the complete artifact
+check passed. Independent inspection verified all ten files and their checksums,
+Windows packaging, Linux package metadata/AppImage host-library exclusions, and
+the actual macOS DMG's Intel/Apple Silicon slices and minimum version 11.0.
+The macOS runner also verified the complete ad-hoc bundle signature.
+
+The exception authorizes promotion of that candidate's existing bytes. The
+annotated `v0.4.0` tag must retain the candidate commit and
+`Candidate-Run: 35756564645`; this documentation-only acceptance record is a
+separate follow-up and does not change or rebuild the candidate. No Phase 8 work
+is included.
