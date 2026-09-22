@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  ProfileMutation, UpdateStatus, DesktopStatus, MonitorStatus, AcknowledgeDesktopAction, NotificationTestAction,
+  DiscoveryMutation, ShortcutBindings, ProfileMutation, UpdateStatus, DesktopStatus, MonitorStatus, AcknowledgeDesktopAction, NotificationTestAction,
   ChatRequest, ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
   LookupChannelRequest, ChannelIdentity, StreamLanguage, StreamBrowseRequest, CategoryStreamsRequest, BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
   Account, AppError, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
@@ -9,6 +9,8 @@ import type {
 
 // Only these named operations are available. DTOs are generated from Rust.
 type Commands = {
+  modify_discovery: [DiscoveryMutation, Settings];
+  save_shortcuts: [ShortcutBindings, Settings];
   desktop_status: [undefined, DesktopStatus];
   dev_notification_test: [NotificationTestAction, null];
   pause_monitor: [undefined, MonitorStatus];
@@ -68,6 +70,8 @@ async function call<K extends keyof Commands>(
 }
 
 export const api = {
+  modifyDiscovery: (request: DiscoveryMutation) => call("modify_discovery", request),
+  saveShortcuts: (request: ShortcutBindings) => call("save_shortcuts", request),
   desktopStatus: () => call("desktop_status"),
   devNotificationTest: (action: NotificationTestAction) => call("dev_notification_test", action),
   pauseMonitor: () => call("pause_monitor"),

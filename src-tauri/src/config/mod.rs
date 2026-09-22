@@ -1,4 +1,6 @@
+pub mod discovery;
 pub mod profiles;
+pub mod shortcuts;
 use profiles::{PlayerProfile, ProfileMutation};
 #[cfg(any(feature = "desktop", test))]
 mod client_id_value;
@@ -19,7 +21,7 @@ use std::{
 };
 use ts_rs::TS;
 
-pub const SETTINGS_VERSION: u32 = 6;
+pub const SETTINGS_VERSION: u32 = 7;
 const MAX_SETTINGS_BYTES: u64 = 256 * 1024;
 const MAX_CHANNEL_OVERRIDES: usize = 1000;
 
@@ -122,6 +124,8 @@ pub enum ChatProvider {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Settings {
+    pub discovery: discovery::DiscoveryPreferences,
+    pub shortcuts: shortcuts::ShortcutBindings,
     pub streamlink_path: Option<String>,
     pub player: PlayerSettings,
     pub default_quality: QualityPolicy,
@@ -157,6 +161,8 @@ impl Settings {
                 "Chatterino path must be an absolute executable path.",
             ));
         }
+        self.discovery.validate()?;
+        self.shortcuts.validate()?;
         self.validate_profiles()?;
         self.player.validate()
     }
@@ -445,7 +451,30 @@ impl SettingsDocument {
                     channel_overrides: old.channel_overrides,
                 }
             }
-            Some(6) => serde_json::from_value(value).map_err(|_| {
+            Some(6) => {
+                let mut value = value;
+                let fields = value
+                    .get_mut("settings")
+                    .and_then(|s| s.as_object_mut())
+                    .ok_or_else(|| settings_error("Invalid version 6 settings."))?;
+                if fields.contains_key("discovery") || fields.contains_key("shortcuts") {
+                    return Err(settings_error("Invalid version 6 settings."));
+                }
+                fields.insert(
+                    "discovery".into(),
+                    serde_json::to_value(discovery::DiscoveryPreferences::default())
+                        .expect("discovery defaults"),
+                );
+                fields.insert(
+                    "shortcuts".into(),
+                    serde_json::to_value(shortcuts::ShortcutBindings::default())
+                        .expect("shortcut defaults"),
+                );
+                value["version"] = SETTINGS_VERSION.into();
+                serde_json::from_value(value)
+                    .map_err(|_| settings_error("Invalid version 6 settings."))?
+            }
+            Some(7) => serde_json::from_value(value).map_err(|_| {
                 settings_error("Settings schema is invalid; the file was not changed.")
             })?,
             _ => {
@@ -620,6 +649,8 @@ impl SettingsStore {
         let mut value = self.value.lock().expect("settings mutex poisoned");
         // These collections/references are read-only in global settings IPC.
         // Preserve them at the write boundary too, including cancelled callers.
+        settings.discovery = value.settings.discovery.clone();
+        settings.shortcuts = value.settings.shortcuts.clone();
         settings.profiles = value.settings.profiles.clone();
         settings.selected_profile_id = value.settings.selected_profile_id.clone();
         settings.validate()?;

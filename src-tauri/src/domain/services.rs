@@ -326,6 +326,38 @@ impl Services {
         .map_err(|_| AppError::new(ErrorCode::Settings, "Settings operation failed."))?
     }
 
+    pub async fn modify_discovery(
+        &self,
+        request: crate::config::discovery::DiscoveryMutation,
+    ) -> Result<Settings> {
+        self.ensure_open()?;
+        let operation = self.streamlink_operation.clone().lock_owned().await;
+        self.ensure_open()?;
+        let store = self.settings.clone();
+        tokio::task::spawn_blocking(move || {
+            let _operation = operation;
+            store.modify_discovery(request)
+        })
+        .await
+        .map_err(|_| AppError::new(ErrorCode::Settings, "Settings operation failed."))?
+    }
+    pub async fn save_shortcuts(
+        &self,
+        request: crate::config::shortcuts::ShortcutBindings,
+    ) -> Result<Settings> {
+        request.validate()?;
+        self.ensure_open()?;
+        let operation = self.streamlink_operation.clone().lock_owned().await;
+        self.ensure_open()?;
+        let store = self.settings.clone();
+        tokio::task::spawn_blocking(move || {
+            let _operation = operation;
+            store.set_shortcuts(request)
+        })
+        .await
+        .map_err(|_| AppError::new(ErrorCode::Settings, "Settings operation failed."))?
+    }
+
     pub async fn save_discovery_language(
         &self,
         language: Option<crate::config::StreamLanguage>,

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { api } from "../lib/ipc";
-import type { SaveChannelSettingsRequest, Settings, StreamLanguage } from "../lib/generated";
+import type { DiscoveryMutation, ShortcutBindings, SaveChannelSettingsRequest, Settings, StreamLanguage } from "../lib/generated";
 
 function useSettingsCoordinator() {
   const [settings, updateSettings] = useState<Settings | null>(null);
@@ -44,6 +44,8 @@ function useSettingsCoordinator() {
       if (mounted.current) setSavingSettings(false);
     }
   }, [mutateSettings]);
+  const modifyDiscovery = useCallback((request: DiscoveryMutation) => mutateSettings(() => api.modifyDiscovery(request)), [mutateSettings]);
+  const saveShortcuts = useCallback((request: ShortcutBindings) => mutateSettings(() => api.saveShortcuts(request)), [mutateSettings]);
   const saveLanguage = useCallback((language: StreamLanguage | null) =>
     mutateSettings(() => api.saveDiscoveryLanguage(language)), [mutateSettings]);
   const saveChannel = useCallback((request: SaveChannelSettingsRequest) => {
@@ -81,7 +83,7 @@ function useSettingsCoordinator() {
     });
     return () => { cancelled = true; mounted.current = false; };
   }, []);
-  return { settings, error, dismiss: () => setError(null), savingSettings, commitSettings, saveLanguage, saveChannel, readChannel };
+  return { settings, error, dismiss: () => setError(null), savingSettings, commitSettings, modifyDiscovery, saveShortcuts, saveLanguage, saveChannel, readChannel };
 }
 
 const SettingsContext = createContext<ReturnType<typeof useSettingsCoordinator> | null>(null);

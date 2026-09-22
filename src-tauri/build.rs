@@ -115,6 +115,8 @@ fn main() {
             "refresh_updates",
             "open_update_release",
             "modify_player_profile",
+            "modify_discovery",
+            "save_shortcuts",
             "discover_chatterino",
             "open_browser_chat",
             "show_about",

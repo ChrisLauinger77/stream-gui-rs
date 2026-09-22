@@ -51,6 +51,8 @@
     "allow-refresh-updates",
     "allow-open-update-release",
     "allow-modify-player-profile",
+    "allow-modify-discovery",
+    "allow-save-shortcuts",
     "allow-discover-chatterino",
     "allow-open-browser-chat"
   ]

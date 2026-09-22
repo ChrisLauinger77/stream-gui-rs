@@ -92,6 +92,8 @@ fn build_app() -> tauri::Result<tauri::App> {
             commands::refresh_updates,
             commands::open_update_release,
             commands::modify_player_profile,
+            commands::modify_discovery,
+            commands::save_shortcuts,
             commands::discover_chatterino,
             commands::open_browser_chat,
             commands::show_about,
