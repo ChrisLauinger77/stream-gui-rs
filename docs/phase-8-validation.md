@@ -201,7 +201,7 @@ unsupported serde attributes remain; Rust serde validation still applies.
 | Linux background, explicitly `--ignored --test-threads=1` | **5 passed**, including Phase 6/7/8 and Wayland titlebar |
 | Non-publishing Tauri custom-protocol debug build | Passed using `ciCompileOnlyPublicClient123` |
 | Final generated-file/permission consistency and `git diff --check` | Passed; regeneration is byte-for-byte stable |
-| Hosted Linux/macOS/Windows Desktop checks and CodeQL | Not run for this branch yet |
+| Hosted Linux/macOS/Windows Desktop checks and CodeQL | Not run; the user requested that this branch remain local |
 
 ## Native evidence and remaining acceptance
 
@@ -238,7 +238,8 @@ Outstanding evidence required before declaring cross-platform Phase 8 complete:
   no-console behavior, tray/background and Quit cleanup. No Windows runtime is
   available on this host.
 - Hosted checks on the implementation commit. Baseline hosted success is not evidence
-  for this branch. No branch push or pull request has yet been made.
+  for this branch. The user explicitly chose to keep this branch local after the
+  implementation was committed and reviewed; no push or pull request was made.
 
 ## Commit and scope record
 
@@ -249,7 +250,8 @@ Outstanding evidence required before declaring cross-platform Phase 8 complete:
 - `c29f438` — shortcut pending-save guard across editor remounts.
 - `232abbf` — bound development file watching so native build output cannot exhaust Vite watchers.
 - `088c866` — typed deep links, native activation, generated permissions and native/adversarial acceptance.
-- The documentation commit updates README, architecture, durable AGENTS invariants and this report.
+- `186c5a5` — README, architecture, durable AGENTS invariants and this validation report.
+- A final documentation-only follow-up records the decision to keep the branch local.
 
 Versions in package metadata, lockfiles and Tauri configuration remain **0.4.0**.
 No release/version-preparation command, release tag, merge or publication was run.
