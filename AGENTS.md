@@ -34,6 +34,8 @@ authoritative Twitch state, it probably belongs in Rust. Theme preference also p
 | Shared HTTP / rate budget | `src-tauri/src/twitch_http/` |
 | Helix models, cache and pagination | `src-tauri/src/helix/` |
 | Application browsing and launch identity | `src-tauri/src/helix/browse/` |
+| Bounded bookmarks/hides and local shortcut bindings | `src-tauri/src/config/discovery.rs`, `src-tauri/src/config/shortcuts.rs` |
+| Typed external navigation and native delivery | `src-tauri/src/navigation.rs`, `src-tauri/src/desktop/navigation.rs` |
 | Manual fixed-source release checks | `src-tauri/src/updates/` |
 | Independent Chatterino launch/reaping | `src-tauri/src/chatterino/` |
 | Settings and public client-ID validation | `src-tauri/src/config/` |
@@ -159,9 +161,9 @@ user.
 
 ## Settings and launch configuration
 
-- `SettingsStore` owns strict version 6 settings: global Streamlink/player/quality/low-latency/chat/theme/background/language/text-scale preferences
+- `SettingsStore` owns strict version 7 settings: global Streamlink/player/quality/low-latency/chat/theme/background/language/text-scale preferences
   and sparse channel overrides, under Tauri's app config directory. Preserve atomic replacement, in-memory
-  migrations from this app's versions 1, 2, 3, 4 and 5, and rejection of malformed/unknown schemas without overwrite.
+  migrations from this app's versions 1, 2, 3, 4, 5 and 6, and rejection of malformed/unknown schemas without overwrite.
   Files are bounded to 256 KiB and channel overrides to 1,000 records.
 - Precedence is global defaults → selected player profile → optional channel overrides → optional request quality → immutable
   effective snapshot in `LaunchSpec` and the session. `quality: null` inherits; resolve only in Rust.
@@ -176,6 +178,8 @@ user.
   probes update only the path. React holds editable drafts and displays Rust effective previews.
 
 - Profiles have Rust-assigned stable UUIDs; at most 16, with unique trimmed names up to 64 characters/128 UTF-8 bytes. Reuse `PlayerSettings`; no Streamlink argument editor. There are no channel profile references. Delete clears an active selection; running snapshots remain immutable. Profile mutations share the existing global settings coordinator and backend operation lock. Global saves must preserve profiles/selection atomically, including stale/cancelled callers.
+- Local bookmarks and hidden items are independent 200-record lists of stable channel/category IDs and bounded labels. Shortcuts contain ten typed application-local actions only. All mutations reuse the settings coordinator and atomic store; stale global saves preserve these fields. Direct navigation/bookmarks bypass passive hide filters. No Twitch follow mutation, arbitrary shortcut command or OS hotkey is permitted.
+- External navigation accepts only bounded Show/Channel/Category/Team intents. Parse strictly in Rust, never autoplay, and retain only the latest pending intent until frontend readiness/authentication. Preserve UUID-matched acknowledgement, single-instance forwarding and native hidden-window activation. No external URL, process argument or credential may enter the intent model or support report.
 - Chatterino gets only typed channel arguments and a fixed desktop-environment allowlist, never this app's credentials. Linux Flatpak support is restricted to the fixed `app/com.chatterino.chatterino` reference after native discovery; preserve bounded probes, explicit native override precedence and cancellation checks after probing. Its children are independent of Streamlink groups/jobs and survive Stop/Quit. Keep launcher wait/reaping bounded; never claim native instance reuse from source alone. Browser fallback is an explicit user action.
 - Update awareness is manual-only. Keep the fixed unauthenticated GitHub source separate from Twitch HTTP, reject redirects/untrusted release URLs, bound body/time/cache and never download or execute installers. Update failure must not affect startup or other services. About remains network-independent.
 
@@ -305,7 +309,7 @@ cross-compilation or process status does not prove native behavior.
   `docs/phase-6-validation.md`, `docs/phase-7-validation.md`: historical evidence and manual gaps, not proof of a current run. Use current
   README/CI build commands.
 
-The current tree implements Phase 7 on the v0.3.0 baseline: browsing/playback/settings and Rust followed-live monitoring, plus
+The current tree includes Phase 8 development on the v0.4.0 baseline: browsing/playback/settings and Rust followed-live monitoring, plus
 server-side discovery language filtering, exact-login lookup, opt-in low latency, persisted text size, safe
 support-report previews and cross-platform About. Preserve quiet baselines on startup,
 resume and recovery, session cancellation, bounded stream-ID deduplication and foreground rate priority.
