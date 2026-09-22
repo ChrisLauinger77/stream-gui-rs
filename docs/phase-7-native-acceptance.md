@@ -1,7 +1,9 @@
 # Phase 7 macOS and Windows native acceptance
 
-Current status: **macOS PASS**, reported by the user on 2026-09-22 with Homebrew
-Chatterino; **Windows pending**. See the [validation record](phase-7-validation.md#native-observations-and-remaining-acceptance)
+Current status: **macOS PASS** with Homebrew Chatterino and **Windows PASS** with
+WinGet Chatterino, both reported by the user on 2026-09-22. Focused Phase 7 native
+acceptance is complete across Linux, macOS and Windows.
+See the [validation record](phase-7-validation.md#native-observations-and-remaining-acceptance)
 for the reported scope and build-identity details. The checklist below remains
 the reference for both platforms.
 
