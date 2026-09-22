@@ -31,7 +31,7 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
 - About on every desktop platform and a previewable support report
 
-The list describes the development tree including Phase 7. The released baseline remains v0.3.0; these additions have not been released. See [v0.3.0 release notes](docs/release-notes-0.3.0.md) and [Phase 7 validation](docs/phase-7-validation.md) for their separate validation scope.
+The list describes the 0.4.0 source tree. See [release notes](docs/release-notes-0.4.0.md) for changes and upgrade guidance, and [Phase 7 validation](docs/phase-7-validation.md) for feature acceptance. Candidate builds are not published releases.
 
 Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. Background features are available in 0.2.0 and later; v0.1.0 packages retain their original close-to-exit behavior.
 
@@ -115,7 +115,7 @@ The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectiv
 
 **Settings → Prepare support report** shows selectable text for manual copying. Rust includes only build/platform metadata, a previously validated numeric Streamlink version (or “not checked”), player mode, and up to sixteen anonymous process phases/failure codes/exit codes. It excludes account/channel identities, credentials, paths, arguments, environment, raw logs and arbitrary error messages. Opening it performs no probe, credential access, upload, clipboard write, or Twitch request. Review the preview before sharing; the full local Developer tools diagnostics are a different, more detailed surface.
 
-## Profiles, external chat and update checks (Phase 7 development)
+## Profiles, external chat and update checks
 
 In **Settings → Player → Profiles**, choose a configuration and press **Use profile**. Add, edit/rename or delete profiles there; names are unique and limited to 64 characters / 128 UTF-8 bytes, with at most 16 profiles. The separate Default configuration remains available. A profile contains the existing player mode, optional executable override and literal argument rows, plus optional quality and low latency. Select a profile in the management list to repair or delete it even if its executable has disappeared.
 
@@ -141,7 +141,7 @@ Notification clicks restore the app and select the channel while the original si
 - **Windows:** native toast notifications use the application's installed identity. After a banner times out, its Notification Center entry remains actionable for up to 15 minutes while the app and original monitoring/sign-in session remain active. Pause, logout and Quit retire those entries; notification clicks cannot reopen the app after Quit. Use the installer and its Start-menu shortcut for notification testing; an unregistered portable executable may not support delivery/activation. Installed Notification Center behavior still needs the [native acceptance checks](docs/release-smoke-test.md#windows-notification-center-acceptance).
 - **macOS:** allow notifications explicitly in Settings, then manage denial in macOS System Settings. Notifications require an installed, correctly signed app bundle; a bare development executable reports unavailable. Authorization failures remain visible and can be retried after correcting the installation. See the [notification acceptance guide](docs/notification-acceptance.md) if no permission prompt appears.
 
-See the [0.3.0 release checks](docs/release-readiness-0.3.0.md) for validation scope and native acceptance requirements.
+See the [0.4.0 release checks](docs/release-readiness-0.4.0.md) for validation scope and native acceptance requirements.
 
 ## Current limitations
 

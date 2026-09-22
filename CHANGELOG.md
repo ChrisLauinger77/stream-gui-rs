@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.4.0 - 2026-09-22
+
+### Added
+
+- Manual update checks against the official GitHub release source, with safe release-page opening and no automatic downloads or installation.
+- External Chatterino chat with native discovery, an explicit executable override and Linux support for the official Flatpak; browser chat remains available.
+- Up to 16 reusable player profiles with optional quality and low-latency preferences. Running streams keep their settings; Restart applies the selected profile.
+- Settings schema 6 migration preserves existing preferences and starts with browser chat and no selected profile.
+
+### Improved
+
+- Update checks announce progress immediately and retain clear failure/retry states.
+- Player-profile editing supports keyboard save and focus restoration, including profiles whose player is temporarily unavailable.
+- Chatterino capacity errors explain how to continue; independent chat windows remain open after playback stops or Stream GUI RS quits.
+- Coordinated settings saves preserve profile changes when requests overlap or Settings is reopened.
+
 ## 0.3.0 - 2026-09-20
 
 ### Added

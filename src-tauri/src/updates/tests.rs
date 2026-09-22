@@ -8,6 +8,7 @@ fn semantic_comparison_and_untrusted_release_fields() {
     for (current, latest, phase) in [
         ("0.3.0", "v0.4.0", UpdatePhase::Available),
         ("0.3.0", "v0.3.0", UpdatePhase::Current),
+        ("0.4.0", "v0.4.0", UpdatePhase::Current),
         ("0.4.0", "v0.3.0", UpdatePhase::Development),
         ("0.4.0-dev", "v0.3.0", UpdatePhase::Development),
         ("0.9.0", "v0.10.0", UpdatePhase::Available),

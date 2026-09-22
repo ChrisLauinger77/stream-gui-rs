@@ -2,9 +2,9 @@
 
 Before publication, use only files downloaded from one successful manual Release candidate run. Record its URL, run ID, exact 40-character commit SHA, SHA-256 files, artifact names, tester, date, OS version/architecture, Linux distribution/desktop/session, Streamlink version and player version. After publication, verify that downloads have those same checksums. Do not rebuild or substitute files after testing.
 
-## Scope for 0.3.0
+## Scope for 0.4.0
 
-Complete the integrity, focused 0.3.0 and relevant platform checks on Windows, Linux (prefer DEB) and macOS using the same candidate run. Perform the real 0.2.0 upgrade below on at least one platform **before** any logout, reset or uninstall. Preserve an existing profile on the other platforms where available; mark fresh-install credential checks separately.
+Complete the integrity, focused 0.4.0 and relevant platform checks on Windows, Linux (prefer DEB) and macOS using the same candidate run. Perform the real 0.3.0 upgrade below on at least one platform **before** any logout, reset or uninstall. Preserve an existing profile on the other platforms where available; mark fresh-install credential checks separately. If only Phase 7 test profiles remain, preserve them and record their starting build/schema; their upgrade checks do not establish an untouched released-schema migration. Record that limitation explicitly for candidate acceptance rather than downgrading or resetting a user's profile.
 
 The detailed historical background/Notification Center stress scenarios remain a reference for changes affecting those areas; they are not all repeated for this release. Record untested Linux formats, Intel/Apple Silicon execution, high-DPI and screen-reader coverage explicitly. Metadata/architecture checks still cover every package. An incomplete exhaustive screen-reader audit alone is not a blocker; a keyboard trap, unreachable action, invisible focus, unusable 150% layout or false status is.
 
@@ -46,7 +46,7 @@ Artifacts: `Stream-GUI-RS_X.Y.Z_windows_x86_64-setup.exe`, `Stream-GUI-RS_X.Y.Z_
 
 Artifacts: `Stream-GUI-RS_X.Y.Z_linux_x86_64.AppImage`, `Stream-GUI-RS_X.Y.Z_linux_amd64.deb`, and `Stream-GUI-RS_X.Y.Z_linux_x86_64.rpm`
 
-Record each format separately on matching desktop sessions; 0.3.0 requires a native Linux candidate smoke test, preferably DEB. Content/metadata checks cover all three formats; do not infer RPM/AppImage execution from DEB success.
+Record each format separately on matching desktop sessions; 0.4.0 requires a native Linux candidate smoke test, preferably DEB. Content/metadata checks cover all three formats; do not infer RPM/AppImage execution from DEB success.
 
 - [ ] AppImage is executable and starts from the desktop environment.
 - [ ] AppImage startup emits no GVFS `undefined symbol` error and no `EGL_BAD_PARAMETER` abort.
@@ -117,30 +117,33 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --features test-s
 
 These helper tests do not replace the installed-artifact checks above. macOS bundle permission, denial/re-enable, notification focus, menu-bar controls and Command-Q acceptance remain separate pending checks on both supported native architectures.
 
-## Upgrade from 0.2.0 and result record
+## Upgrade from 0.3.0 and result record
 
-At least one real native upgrade is required before approval. Quit 0.2.0 normally with a stored Twitch login and representative Streamlink/player paths (including spaces where available), arguments, quality, automatic browser chat, theme, monitoring/notification/close settings and channel quality/chat/notification overrides. Install the exact candidate over it without logout, reset, uninstall or clearing native credentials. Never inspect, copy or print token values.
+At least one real native upgrade is required before approval. Quit 0.3.0 normally with a stored Twitch login and representative Streamlink/player paths (including spaces where available), arguments, quality, automatic browser chat, theme, monitoring/notification/close settings, language, low latency, text size and channel quality/chat/notification/low-latency overrides. Install the exact candidate over it without logout, reset, uninstall or clearing native credentials. Never inspect, copy or print token values.
 
-Confirm startup without migration errors, automatic sign-in and unchanged old preferences. New defaults must be Any language, low latency Off, channel low latency Inherit and 100% text. Confirm no unnecessary fully inherited channel records. Migration remains in memory until a settings save writes schema 5; save once, Quit/relaunch and verify settings/login/playback again. Downgrading to 0.2.0 after a schema 5 save is unsupported. Automated migrations 1–4 complement this real-profile check.
+Confirm startup without migration errors, automatic sign-in and unchanged old preferences. New defaults are Browser chat, no Chatterino override, an empty profile list and Default configuration selected; update awareness starts unchecked and makes no startup request. Migration remains in memory until a settings save writes schema 6; save once, Quit/relaunch and verify settings/login/playback again. Downgrading to 0.3.0 after a schema 6 save is unsupported. Automated migrations 1–5 complement this real-profile check; credentials remain in native storage and are not part of the settings fixture.
 
-## Focused 0.3.0 candidate checks
+## Focused 0.4.0 candidate checks
 
 Run on each of Linux, Windows and macOS and record PASS, FAIL or NOT TESTED with the exact artifact/hash and environment:
 
-- [ ] Real Twitch browsing works. Live/category language selection changes the results, survives navigation, and Back restores the earlier selection; Following remains unfiltered. Errors are not presented as empty results.
-- [ ] Exact Twitch login lookup opens the expected channel without autoplay; invalid, not-found and offline/error states remain distinct.
-- [ ] Real playback works with low latency Off and On. Changing a global/channel preference leaves a running stream unchanged; Restart uses the current effective preference. Exercise Inherit/On/Off, Stop and independent sessions where practical. No exact latency measurement is required or claimed.
+- [ ] Check for updates and Refresh show immediate progress and the correct result. Before publication, 0.4.0 is newer than stable 0.3.0; after publication it is up to date. View release opens only the official page and leaves the accepted update status unchanged. Check quiet failure/recovery where practical.
+- [ ] Start real playback with profile A, select profile B and verify the running stream stays unchanged. Restart applies B; Stop cleans up only that session. Delete the selected profile and confirm future launches use Default. Record player/profile settings and independent-session behavior.
+- [ ] If installed, select Chatterino and open the requested channel from stopped and running states. Record its installation method and actual window/process behavior. Automatic chat and explicit browser fallback work; Stop/Quit leave Chatterino independent. If unavailable, record Chatterino as untested and verify browser chat.
+- [ ] Real Twitch browsing, language selection, exact lookup and saved channel overrides still work. Errors remain distinct from empty results. Scrolling stays inside the results pane with header/footer fixed.
 - [ ] 100/125/150% text remains usable; primary actions, Settings, support report and About are keyboard accessible with visible/restored focus and truthful states. Record high-DPI checks and Orca/Narrator/VoiceOver separately without claiming certification.
 - [ ] Preview a real support report. Visually verify absence of username, profile/drive/path, executable paths, player arguments, Twitch account/channel/title, OAuth data and raw logs. Preview performs no automatic upload/copy/save. Copy only deliberately after review.
-- [ ] Main-interface and tray/status About agree with diagnostics/report: `0.3.0 (<candidate SHA first seven characters>)`, icon/name and the fixed repository link. Repeated activation reuses the dialog; hidden-window activation restores access; closing About leaves playback/monitoring running. macOS app/menu-bar entries invoke the same native AppKit panel.
+- [ ] Main-interface and tray/status About agree with diagnostics/report: `0.4.0 (<candidate SHA first seven characters>)`, icon/name and the fixed repository link. Repeated activation reuses the dialog; hidden-window activation restores access; closing About leaves playback/monitoring running. macOS app/menu-bar entries invoke the same native AppKit panel.
 - [ ] Existing background monitoring remains healthy; test notification activation where practical. Close-to-background preserves playback, restored Watching reconstructs state, and explicit Quit (including tray Quit/Command-Q) cleans up owned playback. Relaunch preserves login/settings. Windows startup/probes/playback produce no unwanted console.
 
 | Native gate | Windows | Linux | macOS |
 | --- | --- | --- | --- |
 | Exact package install/startup, signing behavior and build identity | NOT TESTED | NOT TESTED | NOT TESTED |
-| Existing login and v4 → v5 settings upgrade (at least one required) | NOT TESTED | NOT TESTED | NOT TESTED |
-| Discovery language and exact lookup | NOT TESTED | NOT TESTED | NOT TESTED |
-| Real playback, low latency Off/On, unchanged active run, Restart/Stop | NOT TESTED | NOT TESTED | NOT TESTED |
+| Existing login and v5 → v6 settings upgrade (at least one required; record unavailable profiles) | NOT TESTED | NOT TESTED | NOT TESTED |
+| Manual update check/Refresh/progress and official release-page opening | NOT TESTED | NOT TESTED | NOT TESTED |
+| Chatterino discovery/chat, browser fallback and independent lifetime | NOT TESTED | NOT TESTED | NOT TESTED |
+| Real player profiles, unchanged active run, Restart/Stop and Default fallback | NOT TESTED | NOT TESTED | NOT TESTED |
+| Browsing/language/lookup, channel preferences and scrolling regression | NOT TESTED | NOT TESTED | NOT TESTED |
 | Text sizes, keyboard/focus and status feedback | NOT TESTED | NOT TESTED | NOT TESTED |
 | Support report privacy preview | NOT TESTED | NOT TESTED | NOT TESTED |
 | About, hidden/repeated activation, identity and repository link | NOT TESTED | NOT TESTED | NOT TESTED |
