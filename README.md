@@ -4,6 +4,7 @@
 [![Version](https://img.shields.io/github/v/release/ChrisLauinger77/stream-gui-rs)](<>)
 [![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/stream-gui-rs/total.svg)](<>)
 [![GPL-3.0](https://img.shields.io/github/license/ChrisLauinger77/stream-gui-rs)](LICENSE)
+![Static Badge](https://img.shields.io/badge/Linux%20%7C%20MacOS%20%7C%20Windows-blue)
 
 <img src="src/assets/app-icon.svg" alt="Stream GUI RS application icon" width="128">
 
