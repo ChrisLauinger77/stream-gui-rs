@@ -5,21 +5,20 @@ import { actionLabel, bindingError, bindingLabel, capturedBinding, defaultBindin
 import { friendlyError } from "../browse/errors";
 
 export function ShortcutEditor() {
-  const { settings, saveShortcuts } = useSettings();
+  const { settings, saveShortcuts, savingShortcuts: pending } = useSettings();
   const [edits, setEdits] = useState<ShortcutBindings | null>(null);
   const [capture, setCapture] = useState<ShortcutAction | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
   const busy = useRef(false);
   const draft = edits ?? settings?.shortcuts ?? defaultBindings();
   const errors = shortcutErrors(draft);
   const save = async () => {
     if (busy.current || errors.length) return;
-    busy.current = true; setPending(true); setError(null);
+    busy.current = true; setError(null);
     try { await saveShortcuts(draft); setEdits(null); setFeedback("Shortcuts saved."); }
     catch (failure) { setError(friendlyError(failure)); }
-    finally { busy.current = false; setPending(false); }
+    finally { busy.current = false; }
   };
   return <div className="shortcut-editor">
     <p className="muted">Application-local shortcuts pause in text inputs and modal dialogs. Primary means Command on macOS and Ctrl on Windows/Linux. Changes apply after Save shortcuts.</p>

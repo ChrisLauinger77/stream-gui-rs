@@ -1932,3 +1932,21 @@ test("shortcut mutations serialize with global saves and accepted state survives
   expect(api.savePlaybackSettings).toHaveBeenCalledOnce(); expect(settings.shortcuts.search).toBeNull(); expect(settings.theme).toBe("dark");
   await click("Shortcuts", ".settings-nav"); expect(container.querySelector('[aria-label="Focus Search binding: Unassigned"]')).not.toBeNull();
 });
+
+test("a reopened shortcut editor waits for the previous full draft before editing", async () => {
+  const pending = deferred<import("../lib/generated").Settings>();
+  const settings = { ...playbackSettings, shortcuts: defaultBindings(false) };
+  vi.mocked(api.playbackSettings).mockResolvedValue(settings);
+  vi.mocked(api.saveShortcuts).mockReturnValueOnce(pending.promise);
+  await render(); await click("Settings"); await click("Shortcuts", ".settings-nav");
+  await click("Unassign Focus Search shortcut"); await click("Save shortcuts");
+  await click("Close Settings"); await click("Settings"); await click("Shortcuts", ".settings-nav");
+  expect(button("Change Refresh shortcut").disabled).toBe(true);
+  expect(button("Unassign Refresh shortcut").disabled).toBe(true);
+  expect(button("Save shortcuts").disabled).toBe(true);
+  await act(async () => pending.resolve({ ...settings, shortcuts: { ...settings.shortcuts, search: null } }));
+  expect(button("Change Refresh shortcut").disabled).toBe(false);
+  expect(container.querySelector('[aria-label="Focus Search binding: Unassigned"]')).not.toBeNull();
+  await click("Unassign Refresh shortcut"); await click("Save shortcuts");
+  expect(api.saveShortcuts).toHaveBeenLastCalledWith(expect.objectContaining({ search: null, refresh: null }));
+});
