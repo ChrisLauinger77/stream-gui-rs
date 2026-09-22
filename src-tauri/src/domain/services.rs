@@ -28,12 +28,13 @@ use tokio::sync::Mutex;
 
 pub struct Services {
     pub settings: Arc<SettingsStore>,
+    pub updates: Arc<crate::updates::Updates>,
     pub sessions: Supervisor,
     pub auth: Arc<AuthService>,
     pub helix: Arc<HelixClient>,
     pub monitor: Arc<crate::monitor::Monitor>,
     chat: super::chat::BrowserChat,
-    streamlink_operation: Mutex<()>,
+    streamlink_operation: Arc<Mutex<()>>,
     known_streamlink: std::sync::Mutex<Option<(Option<String>, [u32; 3])>>,
     closing: AtomicBool,
     auth_configured: bool,
@@ -79,12 +80,13 @@ impl Services {
         ));
         Ok(Self {
             settings: Arc::new(SettingsStore::open(settings_directory)?),
+            updates: Arc::default(),
             sessions: Supervisor::default(),
             helix: Arc::new(HelixClient::new(http, auth.clone())),
             monitor: Arc::default(),
             auth,
             chat: super::chat::BrowserChat::default(),
-            streamlink_operation: Mutex::new(()),
+            streamlink_operation: Arc::new(Mutex::new(())),
             known_streamlink: std::sync::Mutex::new(None),
             closing: AtomicBool::new(false),
             auth_configured,
@@ -99,6 +101,16 @@ impl Services {
     }
 
     pub async fn open_chat(&self, request: super::chat::ChatRequest) -> Result<()> {
+        self.open_chat_using(request, false).await
+    }
+    pub async fn open_browser_chat(&self, request: super::chat::ChatRequest) -> Result<()> {
+        self.open_chat_using(request, true).await
+    }
+    async fn open_chat_using(
+        &self,
+        request: super::chat::ChatRequest,
+        browser: bool,
+    ) -> Result<()> {
         let _permit = self.browse_permit()?;
         let login = self
             .helix
@@ -113,8 +125,18 @@ impl Services {
         })?;
         let lease = self.auth.lease_for_session(session).await?;
         self.ensure_open()?;
+        let settings = self.settings.snapshot();
         self.chat
-            .open(super::chat::ChatTarget::for_login(&login)?, lease.cancel)
+            .open_configured(
+                super::chat::ChatTarget::for_login(&login)?,
+                if browser {
+                    crate::config::ChatProvider::Browser
+                } else {
+                    settings.chat_provider
+                },
+                settings.chatterino_path,
+                lease.cancel,
+            )
             .await
     }
 
@@ -134,7 +156,20 @@ impl Services {
             return snapshot;
         };
         let result = match super::chat::ChatTarget::for_login(&stream.login) {
-            Ok(target) => self.chat.open(target, cancel).await,
+            Ok(target) => {
+                let settings = snapshot
+                    .effective_settings
+                    .as_ref()
+                    .expect("effective automatic chat");
+                self.chat
+                    .open_configured(
+                        target,
+                        settings.chat_provider,
+                        settings.chatterino_path.clone(),
+                        cancel,
+                    )
+                    .await
+            }
             Err(error) => Err(error),
         };
         self.sessions
@@ -175,7 +210,10 @@ impl Services {
             .filter(|(path, _)| path == &settings.streamlink_path)
             .map(|(_, version)| *version);
         crate::diagnostics::support_report(
-            settings.player.mode,
+            settings
+                .selected_profile()
+                .map(|p| p.player.mode)
+                .unwrap_or(settings.player.mode),
             version,
             &self.sessions.sessions().await,
         )
@@ -218,7 +256,12 @@ impl Services {
         let _operation = self.streamlink_operation.lock().await;
         self.ensure_open()?;
         // Discovery has its own narrow update; a stale playback draft cannot undo it.
-        settings.discovery_language = self.settings.snapshot().discovery_language;
+        let current = self.settings.snapshot();
+        settings.discovery_language = current.discovery_language;
+        // Profiles have narrow mutations under this same operation lock. A reopened
+        // global draft must never restore a deleted profile or an old selection.
+        settings.profiles = current.profiles;
+        settings.selected_profile_id = current.selected_profile_id;
         if let Some(path) = &settings.streamlink_path {
             let probe = streamlink::probe(Some(path), Duration::from_secs(5)).await?;
             check_version(&probe.version)?;
@@ -235,6 +278,52 @@ impl Services {
             self.monitor.reconfigure();
         }
         Ok(result)
+    }
+
+    pub async fn modify_profile(
+        &self,
+        request: crate::config::profiles::ProfileMutation,
+    ) -> Result<Settings> {
+        use crate::config::profiles::ProfileMutation;
+        self.ensure_open()?;
+        let operation = self.streamlink_operation.clone().lock_owned().await;
+        self.ensure_open()?;
+        let player = match &request {
+            ProfileMutation::Create { profile } | ProfileMutation::Update { profile, .. } => {
+                Some(profile.player.clone())
+            }
+            ProfileMutation::Select { id: Some(id) } => Some(
+                self.settings
+                    .snapshot()
+                    .profiles
+                    .iter()
+                    .find(|p| &p.id == id)
+                    .ok_or_else(|| {
+                        AppError::new(ErrorCode::Settings, "The player profile no longer exists.")
+                    })?
+                    .player
+                    .clone(),
+            ),
+            _ => None,
+        };
+        if let Some(player) = player {
+            tokio::task::spawn_blocking(move || {
+                resolve_player(&player, &SearchLocations::system())
+            })
+            .await
+            .map_err(|_| {
+                AppError::new(ErrorCode::InvalidPlayer, "Could not validate the player.")
+            })??;
+        }
+        self.ensure_open()?;
+        let store = self.settings.clone();
+        tokio::task::spawn_blocking(move || {
+            // Keep ordering through the atomic write even if the IPC caller leaves.
+            let _operation = operation;
+            store.modify_profile(request)
+        })
+        .await
+        .map_err(|_| AppError::new(ErrorCode::Settings, "Settings operation failed."))?
     }
 
     pub async fn save_discovery_language(
@@ -386,6 +475,7 @@ impl Services {
 
     pub async fn shutdown(&self) -> Result<()> {
         self.closing.store(true, Ordering::SeqCst);
+        self.updates.shutdown();
         // Probe owns its child until it exits or its five-second timeout kills
         // and reaps it. Wait for that ownership to end before Tauri exits, while
         // stopping playback immediately. Queued operations recheck closing.

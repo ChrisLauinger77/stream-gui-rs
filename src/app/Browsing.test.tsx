@@ -39,8 +39,8 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
   vi.mocked(api.sessions).mockResolvedValue([]);
   vi.mocked(api.acknowledgeDesktopAction).mockResolvedValue(null);
-  vi.mocked(api.playbackSettings).mockResolvedValue({ discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
-  vi.mocked(api.channelSettings).mockImplementation(async broadcasterId => ({ broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: "source", defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false, effective: { lowLatency: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, quality: "source", automaticChat: false } }));
+  vi.mocked(api.playbackSettings).mockResolvedValue({ chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
+  vi.mocked(api.channelSettings).mockImplementation(async broadcasterId => ({ broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: "source", defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false, effective: { profileId: null, chatProvider: "browser" as const, chatterinoPath: null, lowLatency: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, quality: "source", automaticChat: false } }));
   vi.mocked(api.authStatus).mockResolvedValue(signedIn);
   vi.mocked(api.account).mockResolvedValue({ id: "viewer", login: "viewer", displayName: "Viewer", profileImageUrl: null });
   vi.mocked(api.followedStreams).mockResolvedValue(page([])); vi.mocked(api.streams).mockResolvedValue(page([stream]));
@@ -336,7 +336,7 @@ const playing = (id = "play-one", broadcasterId = "channel-one"): import("../lib
   url: "https://www.twitch.tv/example", quality: "best", exitCode: null, stopRequested: false,
   logs: [{ sequence: 1, source: "stderr", text: "Synthetic diagnostic warning" }], droppedLogEntries: 5,
 });
-const playbackSettings: import("../lib/generated").Settings = { discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
+const playbackSettings: import("../lib/generated").Settings = { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
 async function editControl(label: string, value: string, kind: "input" | "select" = "input") {
   const control = [...container.querySelectorAll<HTMLInputElement | HTMLSelectElement>(kind)].find(el => el.labels?.[0]?.textContent?.startsWith(label));
   if (!control) throw new Error(`Missing control: ${label}`);
@@ -509,7 +509,7 @@ test("settings loading waits for the backend and duplicate saves are guarded", a
 
 function channelPreferences(broadcasterId = "channel-one", quality: "source" | "high" | "low" = "source") {
   return { broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: quality, defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false,
-    effective: { lowLatency: false, streamlinkPath: null, player: playbackSettings.player, quality, automaticChat: false } };
+    effective: { profileId: null, chatProvider: "browser" as const, chatterinoPath: null, lowLatency: false, streamlinkPath: null, player: playbackSettings.player, quality, automaticChat: false } };
 }
 
 test("global save must not forget a pending accepted channel override", async () => {
@@ -528,14 +528,14 @@ test("global save must not forget a pending accepted channel override", async ()
 test("channel preferences display Rust defaults, save overrides, and return to inheritance", async () => {
   vi.mocked(api.channelSettings).mockResolvedValue(channelPreferences("channel-one", "high"));
   await render(); await click("Live"); await click("Open channel Example Channel");
-  expect(text()).toContain("Use global default (High");
-  await editControl("Channel quality", "low", "select"); await editControl("Channel browser chat", "on", "select");
+  expect(text()).toContain("Use playback default (High");
+  await editControl("Channel quality", "low", "select"); await editControl("Channel automatic chat", "on", "select");
   const saved = { ...channelPreferences("channel-one", "high"), overrides: { lowLatency: null, notifications: null, quality: "low" as const, automaticChat: true }, effective: { ...channelPreferences().effective, quality: "low" as const, automaticChat: true } };
   vi.mocked(api.saveChannelSettings).mockResolvedValue(saved);
   await click("Save channel settings");
   expect(api.saveChannelSettings).toHaveBeenCalledWith({ broadcasterId: "channel-one", overrides: { lowLatency: null, notifications: null, quality: "low", automaticChat: true } });
   expect(text()).toContain("Saved effective quality: Low");
-  await editControl("Channel quality", "inherit", "select"); await editControl("Channel browser chat", "inherit", "select");
+  await editControl("Channel quality", "inherit", "select"); await editControl("Channel automatic chat", "inherit", "select");
   vi.mocked(api.saveChannelSettings).mockResolvedValue(channelPreferences("channel-one", "high"));
   await click("Save channel settings");
   expect(api.saveChannelSettings).toHaveBeenLastCalledWith({ broadcasterId: "channel-one", overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null } });
@@ -571,14 +571,14 @@ test("global saves refresh the current channel's backend inheritance preview", a
   vi.mocked(api.savePlaybackSettings).mockResolvedValue({ ...playbackSettings, defaultQuality: "high" });
   vi.mocked(api.channelSettings).mockResolvedValue(channelPreferences("channel-one", "high"));
   await click("Save settings"); await click("Settings");
-  expect(text()).toContain("Use global default (High"); expect(api.channelSettings).toHaveBeenCalledTimes(2);
+  expect(text()).toContain("Use playback default (High"); expect(api.channelSettings).toHaveBeenCalledTimes(2);
 });
 
 test("manual browser chat supplies only broadcaster and session IDs and prevents duplicate requests", async () => {
-  const pending = deferred<null>(); vi.mocked(api.openChat).mockReturnValue(pending.promise);
+  const pending = deferred<null>(); vi.mocked(api.openBrowserChat).mockReturnValue(pending.promise);
   await render(); await click("Live"); await click("Open channel Example Channel");
   await act(async () => { button("Open chat in browser").click(); button("Open chat in browser").click(); });
-  expect(api.openChat).toHaveBeenCalledExactlyOnceWith({ broadcasterId: "channel-one", authSessionId: "1" });
+  expect(api.openBrowserChat).toHaveBeenCalledExactlyOnceWith({ broadcasterId: "channel-one", authSessionId: "1" });
   await act(async () => pending.resolve(null)); expect(text()).toContain("Twitch chat opened");
 });
 
@@ -587,7 +587,7 @@ test("automatic chat remains backend-owned and browser failure does not hide pla
   vi.mocked(api.launch).mockResolvedValue({ ...playing(), chatError: "browser_open" });
   await render(); await click("Live"); await click("Watch Example Channel");
   expect(api.openChat).not.toHaveBeenCalled();
-  expect(text()).toContain("Browser chat did not open"); expect(button("Stop").disabled).toBe(false);
+  expect(text()).toContain("Chat did not open"); expect(button("Stop").disabled).toBe(false);
 });
 
 test("Restart inherits current Rust preferences unless the user explicitly selects a quality", async () => {
@@ -1337,17 +1337,17 @@ test.each(["global-first", "channel-first"] as const)("channel and global defaul
   await openChannelPreferences();
   // Start global first, then independently submit the channel override.
   await click("Settings"); await editControl("Default quality", "high", "select"); await toggleControl("Prefer low latency");
-  await toggleControl("Open browser chat when playback starts"); await click("Background", ".settings-nav");
+  await toggleControl("Open chat when playback starts"); await click("Background", ".settings-nav");
   await toggleControl("Notify when followed channels go live"); await click("Save settings"); await click("Close Settings");
   await editControl("Channel quality", "low", "select"); await editControl("Channel low latency", "off", "select");
-  await editControl("Channel browser chat", "off", "select"); await editControl("Channel notifications", "off", "select"); await click("Save channel settings");
+  await editControl("Channel automatic chat", "off", "select"); await editControl("Channel notifications", "off", "select"); await click("Save channel settings");
   expect(api.saveChannelSettings).toHaveBeenCalledOnce(); expect(api.savePlaybackSettings).toHaveBeenCalledOnce();
   const finishGlobal = () => global.resolve(store.acceptGlobal(vi.mocked(api.savePlaybackSettings).mock.calls[0][0]));
   const finishChannel = () => saving.resolve(store.acceptChannel(vi.mocked(api.saveChannelSettings).mock.calls[0][0]));
   await act(async () => { if (order === "global-first") finishGlobal(); else finishChannel(); });
   await act(async () => { if (order === "global-first") finishChannel(); else finishGlobal(); });
-  expect(text()).toContain("Use global default (High"); expect(text()).toContain("Use default (On)");
-  expect(text()).toContain("Saved effective quality: Low · 360p30 · Low latency: Off · Browser chat: Off");
+  expect(text()).toContain("Use playback default (High"); expect(text()).toContain("Use default (On)");
+  expect(text()).toContain("Saved effective quality: Low · 360p30 · Low latency: Off · Automatic chat: Off");
   expect(text()).toContain("Saved notifications: Off"); expect(channelChoice("Channel low latency")).toBe("off");
   await editControl("Channel notifications", "inherit", "select");
   vi.mocked(api.saveChannelSettings).mockImplementation(async request => store.acceptChannel(request)); await click("Save channel settings");
@@ -1406,8 +1406,8 @@ test.each(["global-first", "channel-first"] as const)("explicit return to full i
   const global = deferred<typeof playbackSettings>(); const saving = deferred<ReturnType<typeof store.channelSnapshot>>();
   vi.mocked(api.savePlaybackSettings).mockReturnValue(global.promise); vi.mocked(api.saveChannelSettings).mockReturnValue(saving.promise);
   await openChannelPreferences(); await click("Settings"); await toggleControl("Prefer low latency"); await editControl("Default quality", "high", "select");
-  await toggleControl("Open browser chat when playback starts"); await click("Save settings"); await click("Close Settings");
-  for (const field of ["Channel quality", "Channel browser chat", "Channel notifications", "Channel low latency"]) await editControl(field, "inherit", "select");
+  await toggleControl("Open chat when playback starts"); await click("Save settings"); await click("Close Settings");
+  for (const field of ["Channel quality", "Channel automatic chat", "Channel notifications", "Channel low latency"]) await editControl(field, "inherit", "select");
   await click("Save channel settings");
   const finishGlobal = () => global.resolve(store.acceptGlobal(vi.mocked(api.savePlaybackSettings).mock.calls[0][0]));
   const finishChannel = () => saving.resolve(store.acceptChannel(vi.mocked(api.saveChannelSettings).mock.calls[0][0]));
@@ -1415,7 +1415,7 @@ test.each(["global-first", "channel-first"] as const)("explicit return to full i
   await act(async () => { if (order === "global-first") finishChannel(); else finishGlobal(); });
   expect(api.saveChannelSettings).toHaveBeenCalledWith({ broadcasterId: "channel-one", overrides: { quality: null, automaticChat: null, lowLatency: null, notifications: null } });
   expect(channelChoice("Channel low latency")).toBe("inherit");
-  expect(text()).toContain("Saved effective quality: High · 720p30 · Low latency: On · Browser chat: On");
+  expect(text()).toContain("Saved effective quality: High · 720p30 · Low latency: On · Automatic chat: On");
 });
 test.each(["on", "inherit"])("unrelated global refresh preserves deliberate unsaved channel choice %s", async choice => {
   settingsPersistence(); await openChannelPreferences();
@@ -1554,4 +1554,232 @@ test("channel mutations share the eight-intent bound across navigation and relea
   expect(api.saveChannelSettings).toHaveBeenCalledTimes(8);
   await act(async () => release.resolve(null)); await click("Save channel settings");
   expect(api.saveChannelSettings).toHaveBeenCalledTimes(9); expect(channelChoice("Channel low latency")).toBe("on");
+});
+
+function profilesPersistence() {
+  const store = settingsPersistence();
+  let sequence = 0;
+  vi.mocked(api.modifyPlayerProfile).mockImplementation(async request => {
+    const current = await api.playbackSettings();
+    const next = { ...current, profiles: [...current.profiles] };
+    if (request.kind === "create") next.profiles.push({ ...request.profile, id: `profile-${++sequence}` });
+    if (request.kind === "update") next.profiles = next.profiles.map(profile => profile.id === request.id ? { id: profile.id, ...request.profile } : profile);
+    if (request.kind === "select") next.selectedProfileId = request.id;
+    if (request.kind === "delete") { next.profiles = next.profiles.filter(profile => profile.id !== request.id); if (next.selectedProfileId === request.id) next.selectedProfileId = null; }
+    return store.acceptGlobal(next);
+  });
+  return store;
+}
+async function openProfiles() { await click("Settings"); await click("Player", ".settings-nav"); }
+async function createProfile(name = "Desktop") {
+  await click("Add profile"); await editControl("Profile name", name); await click("Save profile");
+}
+test("profiles create, select, rename, edit and delete through the shared settings authority", async () => {
+  profilesPersistence(); await render(); await openProfiles(); await createProfile();
+  expect(api.modifyPlayerProfile).toHaveBeenCalledWith({ kind: "create", profile: { name: "Desktop", player: playbackSettings.player, quality: null, lowLatency: null } });
+  await editControl("Profile", "profile-1", "select"); await click("Use profile"); await click("Edit profile");
+  await editControl("Profile name", "Living room"); await editControl("Profile quality", "high", "select"); await editControl("Profile low latency", "on", "select"); await click("Save profile");
+  expect(api.modifyPlayerProfile).toHaveBeenLastCalledWith({ kind: "update", id: "profile-1", profile: expect.objectContaining({ name: "Living room", quality: "high", lowLatency: true }) });
+  await click("Delete profile");
+  expect(text()).toContain("Default configuration is now active");
+  expect((await api.playbackSettings()).selectedProfileId).toBeNull();
+  expect(api.launch).not.toHaveBeenCalled(); expect(api.restart).not.toHaveBeenCalled();
+});
+test("profile names are plain text and cancellation restores the profile selector focus", async () => {
+  profilesPersistence(); await render(); await openProfiles(); await createProfile("<img src=x onerror=bad>");
+  expect(container.querySelector('[aria-label="Player profiles"] img')).toBeNull();
+  await click("Add profile"); expect(document.activeElement?.closest("label")?.textContent).toBe("Profile name");
+  await click("Cancel profile");
+  expect(document.activeElement?.closest("label")?.textContent).toContain("Profile");
+});
+test("profile save errors retain the draft and do not expose raw backend text", async () => {
+  profilesPersistence(); vi.mocked(api.modifyPlayerProfile).mockRejectedValue({ code: "settings", message: "secret backend text" });
+  await render(); await openProfiles(); await click("Add profile"); await editControl("Profile name", "Duplicate"); await click("Save profile");
+  expect(text()).toContain("unique name"); expect(text()).not.toContain("secret backend text");
+  expect(container.querySelector<HTMLInputElement>('.profile-editor input')?.value).toBe("Duplicate");
+});
+test("profile writes survive closing settings and block competing global writes until accepted", async () => {
+  const store = profilesPersistence(); const pending = deferred<typeof playbackSettings>();
+  vi.mocked(api.modifyPlayerProfile).mockReturnValueOnce(pending.promise);
+  await render(); await openProfiles(); await click("Add profile"); await editControl("Profile name", "Desktop");
+  await act(async () => { button("Save profile").click(); button("Save profile").click(); });
+  expect(api.modifyPlayerProfile).toHaveBeenCalledOnce();
+  await click("Close Settings"); await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Text size", "150", "select");
+  expect(button("Save settings").disabled).toBe(true);
+  const accepted = { ...playbackSettings, profiles: [{ id: "profile-1", name: "Desktop", player: playbackSettings.player, quality: null, lowLatency: null }] };
+  await act(async () => pending.resolve(store.acceptGlobal(accepted))); await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ textScale: "150", profiles: accepted.profiles }));
+});
+test("profile mutations queue behind language writes and preserve accepted global fields", async () => {
+  const store = profilesPersistence(); const language = deferred<typeof playbackSettings>();
+  vi.mocked(api.saveDiscoveryLanguage).mockReturnValue(language.promise);
+  await render(); await click("Live"); await editControl("Stream language", "de", "select");
+  await openProfiles(); await click("Add profile"); await editControl("Profile name", "Desktop"); await click("Save profile");
+  expect(api.modifyPlayerProfile).not.toHaveBeenCalled();
+  await act(async () => language.resolve(store.acceptGlobal({ ...playbackSettings, discoveryLanguage: "de" })));
+  expect(api.modifyPlayerProfile).toHaveBeenCalledOnce(); expect((await api.playbackSettings()).discoveryLanguage).toBe("de");
+});
+test("independent channel writes and profile writes both finish without losing preferences", async () => {
+  const store = profilesPersistence(); const pending = deferred<ReturnType<typeof store.channelSnapshot>>();
+  vi.mocked(api.saveChannelSettings).mockReturnValueOnce(pending.promise);
+  await openChannelPreferences(); await editControl("Channel low latency", "on", "select"); await click("Save channel settings");
+  await openProfiles(); await createProfile();
+  await act(async () => pending.resolve(store.acceptChannel({ broadcasterId: "channel-one", overrides: { ...channelPreferences().overrides, lowLatency: true } })));
+  await click("Close Settings"); expect(channelChoice("Channel low latency")).toBe("on"); expect((await api.playbackSettings()).profiles).toHaveLength(1);
+});
+test("Chatterino selection and explicit path persist while browser remains a manual choice", async () => {
+  settingsPersistence(); vi.mocked(api.discoverChatterino).mockResolvedValue(null); vi.mocked(api.openChat).mockResolvedValue(null); vi.mocked(api.openBrowserChat).mockResolvedValue(null);
+  await openChannelPreferences(); await click("Settings"); await editControl("Chat application", "chatterino", "select");
+  await editControl("Chatterino executable", "/synthetic space/Chatterino"); await click("Find Chatterino");
+  expect(text()).toContain("Not found; install it"); await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ chatProvider: "chatterino", chatterinoPath: "/synthetic space/Chatterino" }));
+  await click("Close Settings"); await click("Open chat in Chatterino"); await click("Open chat in browser");
+  expect(api.openChat).toHaveBeenCalledWith({ authSessionId: "1", broadcasterId: "channel-one" });
+  expect(api.openBrowserChat).toHaveBeenCalledWith({ authSessionId: "1", broadcasterId: "channel-one" });
+});
+test("Chatterino errors offer browser chat without automatically opening it", async () => {
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, chatProvider: "chatterino" });
+  vi.mocked(api.openChat).mockRejectedValue({ code: "chatterino_not_found", message: "private path" });
+  await openChannelPreferences(); await click("Open chat in Chatterino");
+  expect(text()).toContain("Chatterino was not found"); expect(text()).not.toContain("private path"); expect(api.openBrowserChat).not.toHaveBeenCalled();
+});
+test("detected Chatterino availability leaves the native override unchanged", async () => {
+  settingsPersistence(); vi.mocked(api.discoverChatterino).mockResolvedValue("Installed");
+  await render(); await click("Settings"); await editControl("Chat application", "chatterino", "select");
+  await click("Find Chatterino");
+  expect(text()).toContain("Chatterino: Installed");
+  expect((container.querySelector('input[placeholder="Automatic discovery"]') as HTMLInputElement).value).toBe("");
+  await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ chatProvider: "chatterino", chatterinoPath: null }));
+});
+test("Chatterino capacity gives actionable guidance and keeps browser chat usable", async () => {
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, chatProvider: "chatterino" });
+  vi.mocked(api.openChat).mockRejectedValue({ code: "chatterino_capacity", message: "private backend message" });
+  vi.mocked(api.openBrowserChat).mockResolvedValue(null);
+  await openChannelPreferences(); await click("Open chat in Chatterino");
+  expect(text()).toContain("Too many Chatterino instances are active. Close a Chatterino window or use browser chat.");
+  expect(text()).not.toContain("Browsing is busy"); expect(text()).not.toContain("private backend message");
+  expect(api.openBrowserChat).not.toHaveBeenCalled(); expect(button("Open chat in browser").disabled).toBe(false);
+  await click("Open chat in browser");
+  expect(api.openBrowserChat).toHaveBeenCalledExactlyOnceWith({ authSessionId: "1", broadcasterId: "channel-one" });
+});
+test("browsing capacity retains its existing busy guidance", async () => {
+  vi.mocked(api.streams).mockRejectedValue({ code: "capacity", message: "private browsing message" });
+  await render(); await click("Live");
+  expect(text()).toContain("Browsing is busy. Please try again shortly.");
+  expect(text()).not.toContain("Too many Chatterino instances"); expect(text()).not.toContain("private browsing message");
+});
+async function openUpdates() { await click("Settings"); await click("Updates", ".settings-nav"); }
+test.each([
+  ["current", "Stream GUI RS is up to date", "0.3.0"], ["available", "Version 0.4.0 is available", "0.4.0"],
+  ["development", "This build is newer than stable version 0.3.0", "0.3.0"], ["unavailable", "Unable to check for updates", null],
+  ["no_stable_release", "No stable release was returned", null],
+] as const)("manual update UI presents %s and keeps release opening parameterless", async (phase, message, latestVersion) => {
+  vi.mocked(api.updateStatus).mockResolvedValue({ phase: "not_checked", latestVersion: null });
+  vi.mocked(api.checkUpdates).mockResolvedValue({ phase, latestVersion }); vi.mocked(api.openUpdateRelease).mockResolvedValue(null);
+  await render(); await openUpdates(); expect(api.checkUpdates).not.toHaveBeenCalled();
+  await click("Check for updates"); expect(text()).toContain(message);
+  if (latestVersion) { await click("View release"); expect(api.openUpdateRelease).toHaveBeenCalledWith(); }
+  else expect([...container.querySelectorAll("button")].some(b => b.textContent === "View release")).toBe(false);
+});
+test("update refresh and duplicate clicks cannot be overwritten by a late initial status read", async () => {
+  const old = deferred<Awaited<ReturnType<typeof api.updateStatus>>>(); const check = deferred<Awaited<ReturnType<typeof api.updateStatus>>>();
+  vi.mocked(api.updateStatus).mockReturnValueOnce(old.promise); vi.mocked(api.checkUpdates).mockReturnValue(check.promise);
+  vi.mocked(api.refreshUpdates).mockResolvedValue({ phase: "available", latestVersion: "0.4.0" });
+  await render(); await openUpdates(); await act(async () => { button("Check for updates").click(); button("Check for updates").click(); });
+  expect(api.checkUpdates).toHaveBeenCalledOnce();
+  await act(async () => check.resolve({ phase: "current", latestVersion: "0.3.0" }));
+  await act(async () => old.resolve({ phase: "not_checked", latestVersion: null })); expect(text()).toContain("Stream GUI RS is up to date");
+  await click("Refresh update check"); expect(text()).toContain("Version 0.4.0 is available");
+});
+
+function updateAnnouncement() { return container.querySelector('[aria-label="Update awareness"] [role="status"]')!; }
+test.each([
+  ["current", "0.3.0", "Stream GUI RS is up to date"],
+  ["unavailable", null, "Unable to check for updates"],
+] as const)("pending update check announces progress immediately before %s", async (phase, latestVersion, message) => {
+  const pending = deferred<Awaited<ReturnType<typeof api.checkUpdates>>>();
+  vi.mocked(api.updateStatus).mockResolvedValue({ phase: "not_checked", latestVersion: null });
+  vi.mocked(api.checkUpdates).mockReturnValue(pending.promise);
+  await render(); await openUpdates();
+  const announcement = updateAnnouncement(); const check = button("Check for updates"); check.focus();
+  await act(async () => { check.click(); check.click(); });
+  expect(announcement.textContent).toBe("Checking for updates…");
+  expect(updateAnnouncement()).toBe(announcement);
+  expect(container.querySelectorAll('[aria-label="Update awareness"] [role="status"]')).toHaveLength(1);
+  expect(document.activeElement).toBe(check); expect(check.disabled).toBe(true);
+  expect(api.checkUpdates).toHaveBeenCalledOnce();
+  await act(async () => pending.resolve({ phase, latestVersion }));
+  expect(announcement.textContent).toBe(message); expect(check.disabled).toBe(false);
+});
+test.each(["current", "unavailable"] as const)("pending update refresh replaces the previous %s announcement and blocks duplicate requests", async phase => {
+  const pending = deferred<Awaited<ReturnType<typeof api.refreshUpdates>>>();
+  vi.mocked(api.updateStatus).mockResolvedValue({ phase, latestVersion: phase === "current" ? "0.3.0" : null });
+  vi.mocked(api.refreshUpdates).mockReturnValue(pending.promise);
+  await render(); await openUpdates();
+  expect(updateAnnouncement().textContent).toBe(phase === "current" ? "Stream GUI RS is up to date" : "Unable to check for updates");
+  await act(async () => { button("Refresh update check").click(); button("Refresh update check").click(); button("Check for updates").click(); });
+  expect(updateAnnouncement().textContent).toBe("Checking for updates…");
+  expect(button("Refresh update check").disabled).toBe(true); expect(button("Check for updates").disabled).toBe(true);
+  expect(api.refreshUpdates).toHaveBeenCalledOnce(); expect(api.checkUpdates).not.toHaveBeenCalled();
+  await act(async () => pending.resolve({ phase: "available", latestVersion: "0.4.0" }));
+  expect(updateAnnouncement().textContent).toBe("Version 0.4.0 is available");
+  expect(button("Refresh update check").disabled).toBe(false);
+});
+test("rejected update requests replace progress with one safe failure announcement", async () => {
+  const pending = deferred<Awaited<ReturnType<typeof api.refreshUpdates>>>();
+  vi.mocked(api.updateStatus).mockResolvedValue({ phase: "current", latestVersion: "0.3.0" });
+  vi.mocked(api.refreshUpdates).mockReturnValue(pending.promise);
+  await render(); await openUpdates(); await click("Refresh update check");
+  expect(updateAnnouncement().textContent).toBe("Checking for updates…");
+  await act(async () => pending.reject({ message: "untrusted update response" }));
+  expect(updateAnnouncement().textContent).toBe("Unable to check for updates");
+  expect(container.querySelector('[aria-label="Update awareness"] [role="alert"]')).toBeNull();
+  expect(text()).not.toContain("untrusted update response"); expect(button("Check for updates").disabled).toBe(false);
+});
+test.each(["resolve", "reject"] as const)("reopened update status settles independently of an old request that will %s", async outcome => {
+  const old = deferred<Awaited<ReturnType<typeof api.checkUpdates>>>();
+  const poll = deferred<Awaited<ReturnType<typeof api.updateStatus>>>();
+  vi.mocked(api.updateStatus).mockResolvedValueOnce({ phase: "not_checked", latestVersion: null })
+    .mockResolvedValueOnce({ phase: "checking", latestVersion: null }).mockReturnValueOnce(poll.promise);
+  vi.mocked(api.checkUpdates).mockReturnValue(old.promise);
+  await render(); await openUpdates(); await click("Check for updates");
+  expect(updateAnnouncement().textContent).toBe("Checking for updates…");
+  await click("Close Settings"); await openUpdates();
+  expect(updateAnnouncement().textContent).toBe("Checking for updates…");
+  await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+  await act(async () => poll.resolve({ phase: "available", latestVersion: "0.4.0" }));
+  expect(updateAnnouncement().textContent).toBe("Version 0.4.0 is available");
+  await act(async () => { if (outcome === "resolve") old.resolve({ phase: "unavailable", latestVersion: null }); else old.reject({ message: "old private response" }); });
+  expect(updateAnnouncement().textContent).toBe("Version 0.4.0 is available");
+  expect(container.querySelector('[aria-label="Update awareness"] [role="alert"]')).toBeNull();
+  expect(button("Check for updates").disabled).toBe(false); expect(api.checkUpdates).toHaveBeenCalledOnce();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(api.updateStatus).toHaveBeenCalledTimes(3);
+});
+test("pending or failed release opening preserves the update result without announcing a check", async () => {
+  const opening = deferred<null>();
+  vi.mocked(api.updateStatus).mockResolvedValue({ phase: "available", latestVersion: "0.4.0" });
+  vi.mocked(api.openUpdateRelease).mockReturnValue(opening.promise);
+  await render(); await openUpdates(); await click("View release");
+  expect(updateAnnouncement().textContent).toBe("Version 0.4.0 is available"); expect(button("View release").disabled).toBe(true);
+  await act(async () => opening.reject({ message: "private browser error" }));
+  expect(updateAnnouncement().textContent).toBe("Version 0.4.0 is available"); expect(button("View release").disabled).toBe(false);
+  expect(container.querySelector('[aria-label="Update awareness"] [role="alert"]')?.textContent).toBe("The update action could not be completed. Try again later.");
+  expect(text()).not.toContain("private browser error"); expect(api.checkUpdates).not.toHaveBeenCalled(); expect(api.refreshUpdates).not.toHaveBeenCalled();
+});
+
+test("an unavailable unselected profile can be edited or deleted without activating it", async () => {
+  const store = profilesPersistence();
+  store.acceptGlobal({ ...playbackSettings, profiles: [{ id: "missing", name: "Disconnected player", player: { mode: "custom", executable: "/missing/player", arguments: [] }, quality: null, lowLatency: null }] });
+  await render(); await openProfiles(); await editControl("Profile", "missing", "select");
+  await click("Edit profile"); expect(container.querySelector<HTMLInputElement>('.profile-editor input')?.value).toBe("Disconnected player");
+  await click("Cancel profile"); await click("Delete profile");
+  expect(api.modifyPlayerProfile).toHaveBeenCalledExactlyOnceWith({ kind: "delete", id: "missing" });
+});
+test("Enter in the profile editor saves only that profile and leaves global draft edits intact", async () => {
+  profilesPersistence(); await render(); await openProfiles(); await click("Add profile"); await editControl("Profile name", "Keyboard profile");
+  const input = container.querySelector<HTMLInputElement>('.profile-editor input')!;
+  await act(async () => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+  expect(api.modifyPlayerProfile).toHaveBeenCalledOnce(); expect(api.savePlaybackSettings).not.toHaveBeenCalled();
 });

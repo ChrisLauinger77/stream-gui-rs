@@ -1,0 +1,342 @@
+//! The only supported native chat client. No credentials, shell or configurable argv.
+use crate::{
+    domain::{AppError, ErrorCode, Result},
+    streamlink::{discovery::SearchLocations, validate_executable},
+};
+use std::{
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    sync::Arc,
+};
+
+#[cfg(target_os = "linux")]
+mod flatpak;
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum LaunchSource {
+    Native(PathBuf),
+    #[cfg(target_os = "linux")]
+    Flatpak {
+        executable: PathBuf,
+        installation: flatpak::Installation,
+    },
+}
+impl LaunchSource {
+    pub fn description(&self) -> String {
+        match self {
+            Self::Native(path) => path.to_string_lossy().into_owned(),
+            #[cfg(target_os = "linux")]
+            Self::Flatpak { .. } => "Installed".into(),
+        }
+    }
+}
+
+pub fn resolve(path: Option<&str>, locations: &SearchLocations) -> Result<LaunchSource> {
+    resolve_with(path, |name| locations.find(name))
+}
+fn resolve_with(
+    path: Option<&str>,
+    find: impl Fn(&str) -> Option<PathBuf>,
+) -> Result<LaunchSource> {
+    let missing = || {
+        AppError::new(
+            ErrorCode::ChatterinoNotFound,
+            "Chatterino was not found. Install it or set its executable path; browser chat remains available.",
+        )
+    };
+    if let Some(path) = path {
+        // An explicit native override never falls through to a different installation.
+        return (path.len() <= 4096 && !path.chars().any(char::is_control))
+            .then(|| validate_executable(Path::new(path)).ok())
+            .flatten()
+            .map(LaunchSource::Native)
+            .ok_or_else(missing);
+    }
+    if let Some(native) = find("chatterino") {
+        return Ok(LaunchSource::Native(native));
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(executable) = find("flatpak") {
+        if let Some(installation) = flatpak::detect(&executable) {
+            return Ok(LaunchSource::Flatpak {
+                executable,
+                installation,
+            });
+        }
+    }
+    Err(missing())
+}
+
+// Inject only executable candidates, so normal CI never discovers host applications.
+#[cfg(all(target_os = "linux", feature = "test-support"))]
+pub fn resolve_test_candidates(
+    path: Option<&str>,
+    native: Option<&Path>,
+    flatpak: Option<&Path>,
+) -> Result<LaunchSource> {
+    resolve_with(path, |name| {
+        (if name == "chatterino" {
+            native
+        } else {
+            flatpak
+        })
+        .and_then(|p| validate_executable(p).ok())
+    })
+}
+fn arguments(login: &str) -> Result<[String; 2]> {
+    crate::streamlink::playback::channel_url(login)?;
+    // Upstream's typed --channels layout does not overwrite the saved layout.
+    // Direct invocation may create a new independent window; no reuse promise.
+    Ok([
+        "--channels".into(),
+        format!("t:{}", login.to_ascii_lowercase()),
+    ])
+}
+fn launch_error() -> AppError {
+    AppError::new(
+        ErrorCode::ChatLaunch,
+        "Could not start Chatterino. Check its installation or use browser chat.",
+    )
+}
+fn command(source: &LaunchSource, login: &str) -> Result<Command> {
+    let channel = arguments(login)?;
+    match source {
+        LaunchSource::Native(path) => isolated_command(path, &channel),
+        #[cfg(target_os = "linux")]
+        LaunchSource::Flatpak {
+            executable,
+            installation,
+        } => isolated_command(
+            executable,
+            &[
+                "run".into(),
+                installation.flag().into(),
+                flatpak::APP_REF.into(),
+                channel[0].clone(),
+                channel[1].clone(),
+            ],
+        ),
+    }
+}
+fn isolated_command(path: &Path, args: &[String]) -> Result<Command> {
+    let mut command = Command::new(path);
+    command
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    // Only desktop/session essentials pass to the independent application. No
+    // inherited token/proxy/loader variables, auth state, files or custom environment.
+    command.env_clear();
+    for key in [
+        "PATH",
+        "HOME",
+        "USERPROFILE",
+        "SystemRoot",
+        "WINDIR",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "DISPLAY",
+        "WAYLAND_DISPLAY",
+        "XAUTHORITY",
+        "DBUS_SESSION_BUS_ADDRESS",
+        "XDG_RUNTIME_DIR",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_DATA_DIRS",
+        "XDG_CURRENT_DESKTOP",
+        "XDG_SESSION_TYPE",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+    ] {
+        if let Some(value) = std::env::var_os(key) {
+            command.env(key, value);
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::{
+            ffi::CString,
+            os::unix::{ffi::OsStrExt, process::CommandExt},
+        };
+        let program = CString::new(path.as_os_str().as_bytes()).map_err(|_| launch_error())?;
+        let args: Vec<CString> = command
+            .get_args()
+            .map(|arg| CString::new(arg.as_bytes()).map_err(|_| launch_error()))
+            .collect::<Result<_>>()?;
+        let environment: Vec<CString> = command
+            .get_envs()
+            .filter_map(|(key, value)| {
+                value.map(|value| {
+                    let mut entry = key.as_bytes().to_vec();
+                    entry.push(b'=');
+                    entry.extend_from_slice(value.as_bytes());
+                    CString::new(entry).map_err(|_| launch_error())
+                })
+            })
+            .collect::<Result<_>>()?;
+        if environment.len() >= 64 || args.len() > 6 {
+            return Err(launch_error());
+        }
+        // SAFETY: captures own stable CString buffers prepared before fork. The
+        // callback only fills stack arrays and calls async-signal-safe setsid /
+        // execve. Direct execve intentionally prevents execvp's ENOEXEC fallback
+        // from interpreting a malformed executable as a shell script. The std
+        // spawn error pipe still reports a failed pre_exec and reaps that child.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                let mut argv = [std::ptr::null(); 8];
+                argv[0] = program.as_ptr();
+                for (slot, value) in argv[1..].iter_mut().zip(&args) {
+                    *slot = value.as_ptr();
+                }
+                let mut envp = [std::ptr::null(); 64];
+                for (slot, value) in envp.iter_mut().zip(&environment) {
+                    *slot = value.as_ptr();
+                }
+                libc::execve(program.as_ptr(), argv.as_ptr(), envp.as_ptr());
+                Err(std::io::Error::last_os_error())
+            });
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // Deliberately not suspended or assigned to Streamlink's kill-on-close job.
+        command.creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW);
+    }
+    Ok(command)
+}
+#[derive(Clone)]
+pub struct Chatterino {
+    children: Arc<tokio::sync::Semaphore>,
+}
+impl Default for Chatterino {
+    fn default() -> Self {
+        Self {
+            children: Arc::new(tokio::sync::Semaphore::new(16)),
+        }
+    }
+}
+impl Chatterino {
+    pub fn open(&self, path: Option<&str>, login: &str) -> Result<()> {
+        self.open_after_discovery(
+            login,
+            || resolve(path, &SearchLocations::system()),
+            || false,
+        )
+    }
+    pub(crate) fn open_after_discovery(
+        &self,
+        login: &str,
+        discover: impl FnOnce() -> Result<LaunchSource>,
+        cancelled: impl Fn() -> bool,
+    ) -> Result<()> {
+        let source = discover()?;
+        // Flatpak discovery waits for a bounded child; logout/Stop/Quit may have
+        // cancelled this dispatch while the probe was in progress.
+        if cancelled() {
+            return Err(AppError::new(
+                ErrorCode::Cancelled,
+                "Chat request was cancelled.",
+            ));
+        }
+        self.open_source(&source, login)
+    }
+    pub fn open_source(&self, source: &LaunchSource, login: &str) -> Result<()> {
+        let mut command = command(source, login)?;
+        let permit = self.children.clone().try_acquire_owned().map_err(|_| {
+            AppError::new(
+                ErrorCode::ChatterinoCapacity,
+                "Sixteen Chatterino launches are still running. Close one or use browser chat.",
+            )
+        })?;
+        let (send, receive) = std::sync::mpsc::sync_channel(1);
+        // One bounded waiter per child owns wait/reaping even if the caller leaves.
+        // These independent apps are never killed or awaited by playback/Quit.
+        // At parent process exit the OS adopts surviving Unix children; Windows
+        // retains independent processes after these non-owning handles close.
+        std::thread::Builder::new()
+            .name("chatterino-reaper".into())
+            .spawn(move || {
+                let _permit = permit;
+                match command.spawn() {
+                    Ok(mut child) => {
+                        let _ = send.send(Ok(()));
+                        let _ = child.wait();
+                    }
+                    Err(_) => {
+                        let _ = send.send(Err(launch_error()));
+                    }
+                }
+            })
+            .map_err(|_| launch_error())?;
+        receive.recv().unwrap_or_else(|_| Err(launch_error()))
+    }
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn active_launchers(&self) -> usize {
+        16 - self.children.available_permits()
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn cancellation_during_discovery_prevents_chat_spawn() {
+        let cancelled = std::cell::Cell::new(false);
+        let chat = Chatterino::default();
+        let result = chat.open_after_discovery(
+            "example",
+            || {
+                cancelled.set(true);
+                Ok(LaunchSource::Native("/absent/synthetic-chat".into()))
+            },
+            || cancelled.get(),
+        );
+        assert_eq!(result.unwrap_err().code, ErrorCode::Cancelled);
+        assert_eq!(chat.active_launchers(), 0);
+    }
+    #[test]
+    fn typed_arguments_paths_and_environment_do_not_forward_credentials() {
+        assert_eq!(
+            arguments("Example_1").unwrap(),
+            ["--channels", "t:example_1"]
+        );
+        for login in [
+            "",
+            "-flag",
+            "name;other",
+            "a b",
+            "name/evil",
+            "oauth:synthetic",
+            "ユーザー",
+            "a\narg",
+        ] {
+            assert!(arguments(login).is_err());
+        }
+        let cmd = command(
+            &LaunchSource::Native("/synthetic path/播放器".into()),
+            "example",
+        )
+        .unwrap();
+        assert_eq!(cmd.get_program(), "/synthetic path/播放器");
+        assert_eq!(
+            cmd.get_args().collect::<Vec<_>>(),
+            ["--channels", "t:example"]
+        );
+        assert!(
+            cmd.get_envs()
+                .all(|(key, _)| !key.to_string_lossy().to_uppercase().contains("TOKEN"))
+        );
+        assert!(resolve(Some("relative"), &SearchLocations::system()).is_err());
+        assert!(resolve(Some("/absent/chatterino"), &SearchLocations::system()).is_err());
+    }
+}

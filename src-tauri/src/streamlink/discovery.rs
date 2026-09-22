@@ -47,6 +47,7 @@ impl SearchLocations {
                 std::env::split_paths(path)
                     .filter(|p| p.is_absolute())
                     .map(|p| p.join(&executable))
+                    .take(128)
                     .collect()
             })
             .unwrap_or_default();
@@ -55,6 +56,7 @@ impl SearchLocations {
                 "streamlink" => &["Streamlink/bin", "Streamlink"],
                 "vlc" => &["VideoLAN/VLC"],
                 "mpv" => &["mpv"],
+                "chatterino" => &["Chatterino", "Chatterino2"],
                 _ => &[],
             };
             for base in self.program_files.iter().chain(self.local_app_data.iter()) {
@@ -81,6 +83,7 @@ impl SearchLocations {
                 let bundle = match name {
                     "vlc" => Some("VLC.app/Contents/MacOS/VLC"),
                     "mpv" => Some("mpv.app/Contents/MacOS/mpv"),
+                    "chatterino" => Some("Chatterino.app/Contents/MacOS/chatterino"),
                     _ => None,
                 };
                 if let Some(bundle) = bundle {
@@ -89,6 +92,14 @@ impl SearchLocations {
                         candidates.push(home.join("Applications").join(bundle));
                     }
                 }
+            }
+        }
+        if self.os == "macos" && name == "chatterino" {
+            candidates.push(PathBuf::from(
+                "/Applications/chatterino.app/Contents/MacOS/chatterino",
+            ));
+            if let Some(home) = &self.home {
+                candidates.push(home.join("Applications/chatterino.app/Contents/MacOS/chatterino"));
             }
         }
         candidates
@@ -234,5 +245,57 @@ mod tests {
             resolve_player(&player, &locations).unwrap_err().code,
             ErrorCode::PlayerNotFound
         );
+    }
+}
+
+#[cfg(test)]
+mod chatterino_tests {
+    use super::*;
+    #[test]
+    fn chatterino_candidates_cover_native_installations_and_bound_path_search() {
+        let root = tempfile::tempdir().unwrap();
+        let mut locations = SearchLocations {
+            os: "macos".into(),
+            path: None,
+            home: Some(root.path().into()),
+            program_files: vec![root.path().join("Program Files")],
+            local_app_data: Some(root.path().join("Local")),
+        };
+        let mac = locations.candidates("chatterino");
+        for path in [
+            "/opt/homebrew/bin/chatterino",
+            "/usr/local/bin/chatterino",
+            "/Applications/Chatterino.app/Contents/MacOS/chatterino",
+            "/Applications/chatterino.app/Contents/MacOS/chatterino",
+        ] {
+            assert!(mac.contains(&PathBuf::from(path)));
+        }
+        assert!(
+            mac.contains(
+                &root
+                    .path()
+                    .join("Applications/Chatterino.app/Contents/MacOS/chatterino")
+            )
+        );
+        locations.os = "windows".into();
+        assert!(
+            locations
+                .candidates("chatterino")
+                .contains(&root.path().join("Program Files/Chatterino/chatterino.exe"))
+        );
+        assert!(
+            locations
+                .candidates("chatterino")
+                .contains(&root.path().join("Local/Programs/Chatterino/chatterino.exe"))
+        );
+        locations.os = "linux".into();
+        assert!(
+            locations
+                .candidates("chatterino")
+                .contains(&PathBuf::from("/usr/bin/chatterino"))
+        );
+        locations.path =
+            Some(std::env::join_paths((0..1000).map(|n| root.path().join(n.to_string()))).unwrap());
+        assert!(locations.candidates("chatterino").len() < 140);
     }
 }

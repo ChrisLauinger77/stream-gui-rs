@@ -111,6 +111,9 @@ mod tests {
             }),
             quality_policy: None,
             effective_settings: Some(EffectivePlaybackSettings {
+                profile_id: None,
+                chat_provider: crate::config::ChatProvider::Browser,
+                chatterino_path: None,
                 streamlink_path: settings.streamlink_path,
                 player: settings.player,
                 quality: settings.default_quality,

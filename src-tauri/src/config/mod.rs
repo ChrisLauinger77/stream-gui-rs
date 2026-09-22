@@ -1,3 +1,5 @@
+pub mod profiles;
+use profiles::{PlayerProfile, ProfileMutation};
 #[cfg(any(feature = "desktop", test))]
 mod client_id_value;
 #[cfg(any(feature = "desktop", test))]
@@ -17,7 +19,7 @@ use std::{
 };
 use ts_rs::TS;
 
-pub const SETTINGS_VERSION: u32 = 5;
+pub const SETTINGS_VERSION: u32 = 6;
 const MAX_SETTINGS_BYTES: u64 = 256 * 1024;
 const MAX_CHANNEL_OVERRIDES: usize = 1000;
 
@@ -108,6 +110,14 @@ impl Default for BackgroundSettings {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatProvider {
+    #[default]
+    Browser,
+    Chatterino,
+}
+
 /// Global preferences only. Channel records have their own narrow update operation.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -121,6 +131,10 @@ pub struct Settings {
     pub discovery_language: Option<StreamLanguage>,
     pub low_latency: bool,
     pub text_scale: TextScale,
+    pub chat_provider: ChatProvider,
+    pub chatterino_path: Option<String>,
+    pub profiles: Vec<PlayerProfile>,
+    pub selected_profile_id: Option<String>,
 }
 impl Settings {
     pub fn validate(&self) -> Result<()> {
@@ -136,6 +150,14 @@ impl Settings {
                 "Choose a monitoring interval of 60, 120 or 300 seconds.",
             ));
         }
+        if self.chatterino_path.as_ref().is_some_and(|p| {
+            p.len() > 4096 || p.chars().any(char::is_control) || !Path::new(p).is_absolute()
+        }) {
+            return Err(settings_error(
+                "Chatterino path must be an absolute executable path.",
+            ));
+        }
+        self.validate_profiles()?;
         self.player.validate()
     }
 }
@@ -162,6 +184,9 @@ pub struct SaveChannelSettingsRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct EffectivePlaybackSettings {
+    pub profile_id: Option<String>,
+    pub chat_provider: ChatProvider,
+    pub chatterino_path: Option<String>,
     pub streamlink_path: Option<String>,
     pub player: PlayerSettings,
     pub quality: QualityPolicy,
@@ -379,7 +404,48 @@ impl SettingsDocument {
                         .collect(),
                 }
             }
-            Some(5) => serde_json::from_value(value).map_err(|_| {
+            Some(5) => {
+                #[derive(Deserialize)]
+                #[serde(rename_all = "camelCase", deny_unknown_fields)]
+                struct OldSettings {
+                    streamlink_path: Option<String>,
+                    player: PlayerSettings,
+                    default_quality: QualityPolicy,
+                    automatic_chat: bool,
+                    theme: Theme,
+                    background: BackgroundSettings,
+                    discovery_language: Option<StreamLanguage>,
+                    low_latency: bool,
+                    text_scale: TextScale,
+                }
+                #[derive(Deserialize)]
+                #[serde(rename_all = "camelCase", deny_unknown_fields)]
+                struct Legacy {
+                    version: u32,
+                    settings: OldSettings,
+                    channel_overrides: BTreeMap<String, ChannelOverrides>,
+                }
+                let old: Legacy = serde_json::from_value(value)
+                    .map_err(|_| settings_error("Invalid version 5 settings."))?;
+                debug_assert_eq!(old.version, 5);
+                Self {
+                    version: SETTINGS_VERSION,
+                    settings: Settings {
+                        streamlink_path: old.settings.streamlink_path,
+                        player: old.settings.player,
+                        default_quality: old.settings.default_quality,
+                        automatic_chat: old.settings.automatic_chat,
+                        theme: old.settings.theme,
+                        background: old.settings.background,
+                        discovery_language: old.settings.discovery_language,
+                        low_latency: old.settings.low_latency,
+                        text_scale: old.settings.text_scale,
+                        ..Settings::default()
+                    },
+                    channel_overrides: old.channel_overrides,
+                }
+            }
+            Some(6) => serde_json::from_value(value).map_err(|_| {
                 settings_error("Settings schema is invalid; the file was not changed.")
             })?,
             _ => {
@@ -397,13 +463,24 @@ impl SettingsDocument {
     }
     fn effective(&self, id: &str, quality: Option<QualityPolicy>) -> EffectivePlaybackSettings {
         let overrides = self.channel_overrides.get(id).cloned().unwrap_or_default();
+        let profile = self.settings.selected_profile();
         EffectivePlaybackSettings {
+            profile_id: profile.map(|p| p.id.clone()),
+            chat_provider: self.settings.chat_provider,
+            chatterino_path: self.settings.chatterino_path.clone(),
             streamlink_path: self.settings.streamlink_path.clone(),
-            player: self.settings.player.clone(),
+            player: profile
+                .map(|p| &p.player)
+                .unwrap_or(&self.settings.player)
+                .clone(),
             quality: quality
                 .or(overrides.quality)
+                .or(profile.and_then(|p| p.quality))
                 .unwrap_or(self.settings.default_quality),
-            low_latency: overrides.low_latency.unwrap_or(self.settings.low_latency),
+            low_latency: overrides
+                .low_latency
+                .or(profile.and_then(|p| p.low_latency))
+                .unwrap_or(self.settings.low_latency),
             automatic_chat: overrides
                 .automatic_chat
                 .unwrap_or(self.settings.automatic_chat),
@@ -419,9 +496,17 @@ impl SettingsDocument {
         ChannelSettings {
             broadcaster_id: id.into(),
             overrides: self.channel_overrides.get(id).cloned().unwrap_or_default(),
-            default_quality: self.settings.default_quality,
+            default_quality: self
+                .settings
+                .selected_profile()
+                .and_then(|p| p.quality)
+                .unwrap_or(self.settings.default_quality),
             default_automatic_chat: self.settings.automatic_chat,
-            default_low_latency: self.settings.low_latency,
+            default_low_latency: self
+                .settings
+                .selected_profile()
+                .and_then(|p| p.low_latency)
+                .unwrap_or(self.settings.low_latency),
             default_notifications: self.settings.background.notifications_enabled,
             effective_notifications: self.notifications(id),
             effective: self.effective(id, None),
@@ -523,9 +608,21 @@ impl SettingsStore {
         *value = next;
         Ok(())
     }
-    pub fn update(&self, settings: Settings) -> Result<Settings> {
-        settings.validate()?;
+    pub fn modify_profile(&self, request: ProfileMutation) -> Result<Settings> {
         let mut value = self.value.lock().expect("settings mutex poisoned");
+        let mut next = value.clone();
+        next.settings.modify_profile(request)?;
+        self.persist(&next)?;
+        *value = next;
+        Ok(value.settings.clone())
+    }
+    pub fn update(&self, mut settings: Settings) -> Result<Settings> {
+        let mut value = self.value.lock().expect("settings mutex poisoned");
+        // These collections/references are read-only in global settings IPC.
+        // Preserve them at the write boundary too, including cancelled callers.
+        settings.profiles = value.settings.profiles.clone();
+        settings.selected_profile_id = value.settings.selected_profile_id.clone();
+        settings.validate()?;
         let next = SettingsDocument {
             settings: settings.clone(),
             ..value.clone()

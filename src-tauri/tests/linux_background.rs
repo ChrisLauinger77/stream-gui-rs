@@ -22,6 +22,12 @@ fn phase_six_about_support_and_text_scale_use_the_native_webview() {
     run_scenarios(&["phase6"]);
 }
 
+#[test]
+#[ignore = "requires a graphical Linux session and the frontend dev server; synthetic isolated services only"]
+fn phase_seven_profiles_chat_and_updates_use_the_native_webview() {
+    run_scenarios(&["phase7"]);
+}
+
 fn run_scenarios(actions: &[&str]) {
     for action in actions {
         let directory = tempfile::tempdir().unwrap();

@@ -2,6 +2,9 @@ import type { ErrorCode } from "../lib/generated";
 const messages: Record<ErrorCode, string> = {
   incomplete: "Monitoring could not complete all followed-stream pages. Retrying automatically.",
   notification: "Desktop notifications are unavailable. Check your system notification settings.",
+  chatterino_not_found: "Chatterino was not found. Install it or set its executable path in Settings. Browser chat remains available.",
+  chatterino_capacity: "Too many Chatterino instances are active. Close a Chatterino window or use browser chat.",
+  chat_launch: "Chatterino could not be started. Check its installation or use browser chat. Playback is unaffected.",
   browser_open: "Twitch chat could not be opened in your default browser. Playback is unaffected.",
   streamlink_not_found: "Streamlink was not found. Install it separately or set its path in Settings.",
   unsupported_streamlink: "Playback requires Streamlink 8 or newer. Update Streamlink and test it in Settings.",

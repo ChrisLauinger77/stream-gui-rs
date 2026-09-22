@@ -342,3 +342,60 @@ pub async fn open_repository() -> Result<()> {
             )
         })
 }
+
+#[tauri::command]
+pub fn update_status(services: State<'_, Arc<Services>>) -> crate::updates::UpdateStatus {
+    services.updates.status()
+}
+#[tauri::command]
+pub async fn check_updates(
+    services: State<'_, Arc<Services>>,
+) -> Result<crate::updates::UpdateStatus> {
+    Ok(services.updates.check(false).await)
+}
+#[tauri::command]
+pub async fn refresh_updates(
+    services: State<'_, Arc<Services>>,
+) -> Result<crate::updates::UpdateStatus> {
+    Ok(services.updates.check(true).await)
+}
+#[tauri::command]
+pub async fn open_update_release(services: State<'_, Arc<Services>>) -> Result<()> {
+    let url = services.updates.release_destination()?;
+    tokio::task::spawn_blocking(move || crate::desktop::browser::open(&url))
+        .await
+        .map_err(|_| AppError::new(ErrorCode::BrowserOpen, "Could not open the release page."))?
+        .map_err(|_| AppError::new(ErrorCode::BrowserOpen, "Could not open the release page."))
+}
+#[tauri::command]
+pub async fn modify_player_profile(
+    services: State<'_, Arc<Services>>,
+    request: crate::config::profiles::ProfileMutation,
+) -> Result<Settings> {
+    services.modify_profile(request).await
+}
+#[tauri::command]
+pub async fn discover_chatterino() -> Result<Option<String>> {
+    tokio::task::spawn_blocking(|| {
+        crate::chatterino::resolve(
+            None,
+            &crate::streamlink::discovery::SearchLocations::system(),
+        )
+        .ok()
+        .map(|source| source.description())
+    })
+    .await
+    .map_err(|_| {
+        AppError::new(
+            ErrorCode::ChatterinoNotFound,
+            "Could not discover Chatterino.",
+        )
+    })
+}
+#[tauri::command]
+pub async fn open_browser_chat(
+    services: State<'_, Arc<Services>>,
+    request: crate::domain::chat::ChatRequest,
+) -> Result<()> {
+    services.open_browser_chat(request).await
+}

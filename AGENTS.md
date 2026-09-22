@@ -34,6 +34,8 @@ authoritative Twitch state, it probably belongs in Rust. Theme preference also p
 | Shared HTTP / rate budget | `src-tauri/src/twitch_http/` |
 | Helix models, cache and pagination | `src-tauri/src/helix/` |
 | Application browsing and launch identity | `src-tauri/src/helix/browse/` |
+| Manual fixed-source release checks | `src-tauri/src/updates/` |
+| Independent Chatterino launch/reaping | `src-tauri/src/chatterino/` |
 | Settings and public client-ID validation | `src-tauri/src/config/` |
 | Discovery, probing, pure argv, sole supervisor | `src-tauri/src/streamlink/` |
 | OS process ownership / safe backend diagnostics | `src-tauri/src/platform/`, `src-tauri/src/diagnostics/` |
@@ -91,8 +93,8 @@ Do not introduce a second process owner or Twitch cache.
   URLs/headers or raw credential-store errors. Normal UI uses fixed messages in `src/browse/errors.ts`; do
   not stringify unknown IPC errors.
 - `auth_open_verification` takes no URL and uses the validated Twitch activation URL.
-  `open_channel_chat` accepts only broadcaster/session IDs and constructs a fixed Twitch popout URL from
-  fresh, session-bound identity. Keep native opening restricted to these validated destinations. Linux GIO
+  `open_channel_chat` and `open_browser_chat` accept only broadcaster/session IDs. Fresh, session-bound
+  identity supplies the fixed Twitch popout URL or typed Chatterino channel argument. Linux GIO
   dispatch reaps browser launchers; preserve the isolated regression and safe errors.
 - Do not commit real credentials, account captures, personal local paths, `.env` files or credential
   exports. Keep generated builds, bundles, dependencies and diagnostic logs out of Git; preserve
@@ -122,7 +124,7 @@ user.
 ## Streamlink, players and sessions
 
 - Streamlink 8.0+ and players remain external dependencies. Orchestrate them; do not reimplement media
-  transport or introduce download/profile frameworks.
+  transport or introduce download/transport frameworks.
 - Launch IPC takes broadcaster ID, auth-session ID and optional quality. Rust resolves fresh live identity
   and constructs the canonical Twitch channel URL. Recheck auth after discovery/probing and at spawn;
   metadata is never command text.
@@ -157,21 +159,25 @@ user.
 
 ## Settings and launch configuration
 
-- `SettingsStore` owns strict version 5 settings: global Streamlink/player/quality/low-latency/chat/theme/background/language/text-scale preferences
+- `SettingsStore` owns strict version 6 settings: global Streamlink/player/quality/low-latency/chat/theme/background/language/text-scale preferences
   and sparse channel overrides, under Tauri's app config directory. Preserve atomic replacement, in-memory
-  migrations from this app's versions 1, 2, 3 and 4, and rejection of malformed/unknown schemas without overwrite.
+  migrations from this app's versions 1, 2, 3, 4 and 5, and rejection of malformed/unknown schemas without overwrite.
   Files are bounded to 256 KiB and channel overrides to 1,000 records.
-- Precedence is global defaults → optional channel overrides → optional request quality → immutable
+- Precedence is global defaults → selected player profile → optional channel overrides → optional request quality → immutable
   effective snapshot in `LaunchSpec` and the session. `quality: null` inherits; resolve only in Rust.
 - Channel overrides use stable positive decimal broadcaster IDs. Quality/chat/notifications/low-latency null means inherit; false
   explicitly disables the corresponding boolean preference. Remove fully inherited records. These local preferences apply across accounts;
   they never grant authentication or playback authority.
 - Saving settings does not mutate running processes. Explicit restart resolves current settings, retaining
   trusted session identity without a fresh Helix lookup. Chat opens once per enabled launch/restart;
-  generation-checked browser errors must not hide or fail playback.
+  generation-checked chat errors must not hide or fail playback.
 - Preserve configured paths/symlinks; resolve their targets at use. Failed/unsupported Streamlink probes or
   invalid player paths must not replace valid preferences. Global updates preserve channel records; path
   probes update only the path. React holds editable drafts and displays Rust effective previews.
+
+- Profiles have Rust-assigned stable UUIDs; at most 16, with unique trimmed names up to 64 characters/128 UTF-8 bytes. Reuse `PlayerSettings`; no Streamlink argument editor. There are no channel profile references. Delete clears an active selection; running snapshots remain immutable. Profile mutations share the existing global settings coordinator and backend operation lock. Global saves must preserve profiles/selection atomically, including stale/cancelled callers.
+- Chatterino gets only typed channel arguments and a fixed desktop-environment allowlist, never this app's credentials. Linux Flatpak support is restricted to the fixed `app/com.chatterino.chatterino` reference after native discovery; preserve bounded probes, explicit native override precedence and cancellation checks after probing. Its children are independent of Streamlink groups/jobs and survive Stop/Quit. Keep launcher wait/reaping bounded; never claim native instance reuse from source alone. Browser fallback is an explicit user action.
+- Update awareness is manual-only. Keep the fixed unauthenticated GitHub source separate from Twitch HTTP, reject redirects/untrusted release URLs, bound body/time/cache and never download or execute installers. Update failure must not affect startup or other services. About remains network-independent.
 
 ## Frontend and desktop UX
 
@@ -296,14 +302,15 @@ cross-compilation or process status does not prove native behavior.
 - `docs/helix.md`: HTTP, retry, pagination, cache and session-isolation contracts.
 - `docs/phase-0-validation.md`, `docs/phase-1-validation.md`, `docs/phase-2-validation.md`,
   `docs/phase-3-validation.md`, `docs/phase-4-validation.md`, `docs/phase-5-validation.md`,
-  `docs/phase-6-validation.md`: historical evidence and manual gaps, not proof of a current run. Use current
+  `docs/phase-6-validation.md`, `docs/phase-7-validation.md`: historical evidence and manual gaps, not proof of a current run. Use current
   README/CI build commands.
 
-The current tree implements Phase 6: browsing/playback/settings and Rust followed-live monitoring, plus
+The current tree implements Phase 7 on the v0.3.0 baseline: browsing/playback/settings and Rust followed-live monitoring, plus
 server-side discovery language filtering, exact-login lookup, opt-in low latency, persisted text size, safe
 support-report previews and cross-platform About. Preserve quiet baselines on startup,
 resume and recovery, session cancellation, bounded stream-ID deduplication and foreground rate priority.
-Advanced transports/chat clients, legacy import and updater polish remain deferred. Annotated `vMAJOR.MINOR.PATCH` tags trigger the
+Phase 7 adds manual release awareness, independent Chatterino chat and bounded global player profiles.
+Advanced transports, other chat clients, legacy import and automatic updating remain deferred. Annotated `vMAJOR.MINOR.PATCH` tags trigger the
 native publishing workflow; version preparation is documented in `docs/releasing.md`. Do not start another phase as incidental cleanup. Keep detailed architecture, user setup and validation history in
 their respective documents rather than expanding this guide.
 

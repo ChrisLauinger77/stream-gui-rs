@@ -1,4 +1,5 @@
 pub mod build_info;
+pub mod chatterino;
 pub mod config;
 pub mod credentials;
 pub mod diagnostics;
@@ -10,6 +11,7 @@ pub mod streamlink;
 mod time;
 pub mod twitch;
 pub mod twitch_http;
+pub mod updates;
 
 #[cfg(feature = "desktop")]
 mod commands;

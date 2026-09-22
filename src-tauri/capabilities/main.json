@@ -45,6 +45,13 @@
     "allow-resume-monitor",
     "allow-request-notification-permission",
     "allow-acknowledge-desktop-action",
-    "allow-quit-application"
+    "allow-quit-application",
+    "allow-update-status",
+    "allow-check-updates",
+    "allow-refresh-updates",
+    "allow-open-update-release",
+    "allow-modify-player-profile",
+    "allow-discover-chatterino",
+    "allow-open-browser-chat"
   ]
 }

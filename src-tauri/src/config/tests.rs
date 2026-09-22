@@ -19,11 +19,11 @@ fn settings_version_and_round_trip() {
         SettingsDocument::from_json(&serde_json::to_string(&value).unwrap()).unwrap(),
         value
     );
-    assert_eq!(value.version, 5);
+    assert_eq!(value.version, 6);
     assert_eq!(value.settings.theme, Theme::System);
     assert!(!value.settings.automatic_chat);
     assert_eq!(value.settings.default_quality, QualityPolicy::Source);
-    for text in ["{}", r#"{"version":6}"#, r#"{"version":0}"#] {
+    for text in ["{}", r#"{"version":7}"#, r#"{"version":0}"#] {
         assert_eq!(
             SettingsDocument::from_json(text).unwrap_err().code,
             ErrorCode::SettingsVersion
@@ -107,7 +107,7 @@ fn version_two_migration_preserves_every_playback_preference_without_rewriting()
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 5);
+    assert_eq!(persisted["version"], 6);
     assert_eq!(persisted["channelOverrides"], serde_json::json!({}));
 }
 
@@ -370,7 +370,7 @@ fn phase_five_migration_is_strict_preserves_channel_preferences_and_defaults_off
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 5);
+    assert_eq!(persisted["version"], 6);
     let reopened = SettingsStore::open(root.path()).unwrap();
     assert_eq!(reopened.snapshot(), expected);
     for id in ["123", "456"] {
@@ -508,7 +508,7 @@ fn version_four_migration_preserves_released_preferences_and_defaults_phase_six(
     check_channels(&reopened);
     let saved: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(saved["version"], 5);
+    assert_eq!(saved["version"], 6);
     assert!(saved["settings"]["discoveryLanguage"].is_null());
     assert_eq!(saved["settings"]["lowLatency"], false);
     assert_eq!(saved["settings"]["textScale"], "100");
@@ -676,5 +676,238 @@ fn concurrent_global_and_channel_saves_preserve_sparse_precedence_in_both_orders
                 serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
             assert_eq!(document["channelOverrides"].get("123").is_none(), inherit);
         }
+    }
+}
+
+#[test]
+fn released_schema_five_migration_preserves_all_values_and_starts_without_profiles() {
+    let root = tempfile::tempdir().unwrap();
+    let old = serde_json::json!({"version":5,"settings":{
+        "streamlinkPath": root.path().join("stream link"),
+        "player":{"mode":"custom","executable":root.path().join("播放器"),"arguments":["--volume=20", "{literal}", ""]},
+        "defaultQuality":"medium","automaticChat":true,"theme":"dark",
+        "background":{"monitoringEnabled":true,"notificationsEnabled":true,"closeToBackground":true,"intervalSeconds":300},
+        "discoveryLanguage":"de","lowLatency":true,"textScale":"150"
+    },"channelOverrides":{"123":{"quality":"audio","automaticChat":false,"notifications":false,"lowLatency":false}}});
+    let text = old.to_string();
+    fs::write(root.path().join("settings.json"), &text).unwrap();
+    let store = SettingsStore::open(root.path()).unwrap();
+    assert_eq!(fs::read_to_string(store.path()).unwrap(), text);
+    let current = store.snapshot();
+    assert!(current.profiles.is_empty());
+    assert!(current.selected_profile_id.is_none());
+    assert_eq!(current.chat_provider, ChatProvider::Browser);
+    assert_eq!(current.chatterino_path, None);
+    let migrated = serde_json::to_value(&current).unwrap();
+    for (key, value) in old["settings"].as_object().unwrap() {
+        assert_eq!(&migrated[key], value, "{key}");
+    }
+    store.update(current).unwrap();
+    let persisted: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
+    assert_eq!(persisted["channelOverrides"], old["channelOverrides"]);
+    assert_eq!(persisted["version"], 6);
+    let mut hostile = old;
+    hostile["settings"]["profiles"] = serde_json::json!([]);
+    assert!(SettingsDocument::from_json(&hostile.to_string()).is_err());
+}
+
+fn profile(name: &str) -> profiles::ProfileDraft {
+    profiles::ProfileDraft {
+        name: name.into(),
+        player: PlayerSettings {
+            arguments: vec!["--volume=20".into()],
+            ..Default::default()
+        },
+        quality: Some(QualityPolicy::Medium),
+        low_latency: Some(true),
+    }
+}
+#[test]
+fn profile_crud_precedence_and_deletion_preserve_immutable_snapshots() {
+    use profiles::ProfileMutation::*;
+    let root = tempfile::tempdir().unwrap();
+    let store = SettingsStore::open(root.path()).unwrap();
+    let created = store
+        .modify_profile(Create {
+            profile: profile("Desk"),
+        })
+        .unwrap();
+    let id = created.profiles[0].id.clone();
+    assert!(created.selected_profile_id.is_none());
+    store
+        .modify_profile(Select {
+            id: Some(id.clone()),
+        })
+        .unwrap();
+    let first = store.effective("123", None).unwrap();
+    assert_eq!(first.profile_id.as_ref(), Some(&id));
+    assert_eq!(first.player.arguments, ["--volume=20"]);
+    assert_eq!(first.quality, QualityPolicy::Medium);
+    assert!(first.low_latency);
+    for quality in [None, Some(QualityPolicy::Audio), Some(QualityPolicy::High)] {
+        for low in [None, Some(false), Some(true)] {
+            store
+                .set_channel(SaveChannelSettingsRequest {
+                    broadcaster_id: "123".into(),
+                    overrides: ChannelOverrides {
+                        quality,
+                        low_latency: low,
+                        ..Default::default()
+                    },
+                })
+                .unwrap();
+            for request in [None, Some(QualityPolicy::Low), Some(QualityPolicy::Source)] {
+                let effective = store.effective("123", request).unwrap();
+                assert_eq!(
+                    effective.quality,
+                    request.or(quality).unwrap_or(QualityPolicy::Medium)
+                );
+                assert_eq!(effective.low_latency, low.unwrap_or(true));
+            }
+        }
+    }
+    let mut changed = profile("Renamed");
+    changed.player.arguments.clear();
+    changed.quality = None;
+    changed.low_latency = None;
+    store
+        .modify_profile(Update {
+            id: id.clone(),
+            profile: changed,
+        })
+        .unwrap();
+    assert_eq!(
+        store.effective("456", None).unwrap().quality,
+        QualityPolicy::Source
+    );
+    assert!(!store.effective("456", None).unwrap().low_latency);
+    assert_eq!(store.snapshot().profiles[0].id, id);
+    store.modify_profile(Delete { id: id.clone() }).unwrap();
+    assert!(store.snapshot().selected_profile_id.is_none());
+    assert!(store.effective("456", None).unwrap().profile_id.is_none());
+    assert_eq!(first.player.arguments, ["--volume=20"]);
+    assert!(first.low_latency);
+    assert!(
+        store
+            .modify_profile(Select {
+                id: Some(id.clone())
+            })
+            .is_err()
+    );
+    assert!(
+        store
+            .modify_profile(Update {
+                id,
+                profile: profile("Gone")
+            })
+            .is_err()
+    );
+    assert_eq!(
+        SettingsStore::open(root.path()).unwrap().snapshot(),
+        store.snapshot()
+    );
+}
+#[test]
+fn profile_bounds_duplicates_and_corruption_are_rejected_without_overwrite() {
+    use profiles::ProfileMutation::*;
+    let root = tempfile::tempdir().unwrap();
+    let store = SettingsStore::open(root.path()).unwrap();
+    store
+        .modify_profile(Create {
+            profile: profile("Desk"),
+        })
+        .unwrap();
+    for name in [
+        "",
+        " Desk",
+        "desk",
+        "DESK",
+        "a\nb",
+        &"x".repeat(65),
+        &"界".repeat(64),
+    ] {
+        let before = fs::read(store.path()).unwrap();
+        assert!(
+            store
+                .modify_profile(Create {
+                    profile: profile(name)
+                })
+                .is_err(),
+            "{name:?}"
+        );
+        assert_eq!(fs::read(store.path()).unwrap(), before);
+    }
+    let mut document = store.value.lock().unwrap().clone();
+    document
+        .settings
+        .profiles
+        .push(document.settings.profiles[0].clone());
+    assert!(SettingsDocument::from_json(&serde_json::to_string(&document).unwrap()).is_err());
+    document.settings.profiles.pop();
+    document.settings.selected_profile_id = Some(uuid::Uuid::new_v4().to_string());
+    assert!(SettingsDocument::from_json(&serde_json::to_string(&document).unwrap()).is_err());
+    for index in 1..profiles::MAX_PROFILES {
+        store
+            .modify_profile(Create {
+                profile: profile(&format!("Profile {index}")),
+            })
+            .unwrap();
+    }
+    assert!(
+        store
+            .modify_profile(Create {
+                profile: profile("overflow")
+            })
+            .is_err()
+    );
+    let mut invalid = profile("bad args");
+    invalid.player.arguments = vec!["bad\0arg".into()];
+    let id = store.snapshot().profiles[0].id.clone();
+    assert!(
+        store
+            .modify_profile(Update {
+                id,
+                profile: invalid
+            })
+            .is_err()
+    );
+}
+
+#[test]
+fn atomic_global_updates_cannot_replace_profiles_or_restore_a_deleted_selection() {
+    use profiles::ProfileMutation::*;
+    let root = tempfile::tempdir().unwrap();
+    let store = SettingsStore::open(root.path()).unwrap();
+    let stale_empty = store.snapshot();
+    let created = store
+        .modify_profile(Create {
+            profile: profile("Keep"),
+        })
+        .unwrap();
+    let id = created.profiles[0].id.clone();
+    store
+        .modify_profile(Select {
+            id: Some(id.clone()),
+        })
+        .unwrap();
+    let stale_selected = store.snapshot();
+    store.update(stale_empty).unwrap();
+    assert_eq!(store.snapshot().selected_profile_id, Some(id.clone()));
+    store.modify_profile(Delete { id }).unwrap();
+    store.update(stale_selected).unwrap();
+    assert!(store.snapshot().profiles.is_empty());
+    assert!(store.snapshot().selected_profile_id.is_none());
+}
+
+#[test]
+fn profile_mutation_dtos_reject_unknown_execution_fields() {
+    for value in [
+        serde_json::json!({"kind":"select","id":null,"url":"https://evil.invalid"}),
+        serde_json::json!({"kind":"delete","id":"id","arguments":["--token=synthetic"]}),
+        serde_json::json!({"kind":"create","profile":{"name":"Example","player":{"mode":"default","executable":null,"arguments":[],"environment":{}},"quality":null,"lowLatency":null}}),
+        serde_json::json!({"kind":"execute","executable":"anything"}),
+    ] {
+        assert!(serde_json::from_value::<profiles::ProfileMutation>(value).is_err());
     }
 }
