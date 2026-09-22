@@ -1,5 +1,10 @@
 # Phase 7 macOS and Windows native acceptance
 
+Current status: **macOS PASS**, reported by the user on 2026-09-22 with Homebrew
+Chatterino; **Windows pending**. See the [validation record](phase-7-validation.md#native-observations-and-remaining-acceptance)
+for the reported scope and build-identity details. The checklist below remains
+the reference for both platforms.
+
 Use the installers from the Phase 7 pull request's successful **Desktop checks**
 run. These are development acceptance packages, version **0.3.0**, with the
 registered public Twitch client ID and optional notification test controls.
