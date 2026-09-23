@@ -399,3 +399,40 @@ pub async fn open_browser_chat(
 ) -> Result<()> {
     services.open_browser_chat(request).await
 }
+
+#[tauri::command]
+pub async fn modify_discovery(
+    services: State<'_, Arc<Services>>,
+    request: crate::config::discovery::DiscoveryMutation,
+) -> Result<Settings> {
+    services.modify_discovery(request).await
+}
+#[tauri::command]
+pub async fn save_shortcuts(
+    services: State<'_, Arc<Services>>,
+    request: crate::config::shortcuts::ShortcutBindings,
+) -> Result<Settings> {
+    services.save_shortcuts(request).await
+}
+
+#[tauri::command]
+pub async fn get_team(
+    services: State<'_, Arc<Services>>,
+    request: TeamRequest,
+) -> Result<TeamDetails> {
+    let _permit = services.browse_permit()?;
+    services
+        .helix
+        .browse_team(request, &tokio_util::sync::CancellationToken::new())
+        .await
+}
+
+#[tauri::command]
+pub fn acknowledge_navigation_intent(
+    app: tauri::AppHandle,
+    request: crate::domain::background::AcknowledgeDesktopAction,
+) {
+    use tauri::Manager;
+    app.state::<crate::navigation::NavigationInbox>()
+        .acknowledge(&request.id);
+}

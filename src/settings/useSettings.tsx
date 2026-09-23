@@ -1,13 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { api } from "../lib/ipc";
-import type { SaveChannelSettingsRequest, Settings, StreamLanguage } from "../lib/generated";
+import type { DiscoveryMutation, ShortcutBindings, SaveChannelSettingsRequest, Settings, StreamLanguage } from "../lib/generated";
 
 function useSettingsCoordinator() {
   const [settings, updateSettings] = useState<Settings | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [savingSettings, setSavingSettings] = useState(false);
   const settingsInFlight = useRef(false);
+  const [savingShortcuts, setSavingShortcuts] = useState(false);
+  const shortcutsInFlight = useRef(false);
   const mounted = useRef(false);
   const accepted = useRef(0);
   const globalAccepted = useRef(false);
@@ -42,6 +44,18 @@ function useSettingsCoordinator() {
     finally {
       settingsInFlight.current = false;
       if (mounted.current) setSavingSettings(false);
+    }
+  }, [mutateSettings]);
+  const modifyDiscovery = useCallback((request: DiscoveryMutation) => mutateSettings(() => api.modifyDiscovery(request)), [mutateSettings]);
+  const saveShortcuts = useCallback(async (request: ShortcutBindings) => {
+    // A full shortcut draft must not queue behind another full draft. Keep the
+    // guard above panel remounts so a reopened editor waits for accepted state.
+    if (shortcutsInFlight.current) throw { code: "capacity" };
+    shortcutsInFlight.current = true; setSavingShortcuts(true);
+    try { return await mutateSettings(() => api.saveShortcuts(request)); }
+    finally {
+      shortcutsInFlight.current = false;
+      if (mounted.current) setSavingShortcuts(false);
     }
   }, [mutateSettings]);
   const saveLanguage = useCallback((language: StreamLanguage | null) =>
@@ -81,7 +95,7 @@ function useSettingsCoordinator() {
     });
     return () => { cancelled = true; mounted.current = false; };
   }, []);
-  return { settings, error, dismiss: () => setError(null), savingSettings, commitSettings, saveLanguage, saveChannel, readChannel };
+  return { settings, error, dismiss: () => setError(null), savingSettings, savingShortcuts, commitSettings, modifyDiscovery, saveShortcuts, saveLanguage, saveChannel, readChannel };
 }
 
 const SettingsContext = createContext<ReturnType<typeof useSettingsCoordinator> | null>(null);

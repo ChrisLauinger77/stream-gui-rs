@@ -28,8 +28,15 @@
       ]
     }
   },
+  "plugins": {
+    "deep-link": { "desktop": { "schemes": ["stream-gui-rs"] } }
+  },
   "bundle": {
     "active": false,
+    "linux": {
+      "deb": { "desktopTemplate": "packaging/linux.desktop" },
+      "rpm": { "desktopTemplate": "packaging/linux.desktop" }
+    },
     "macOS": {
       "minimumSystemVersion": "11.0",
       "signingIdentity": "-"

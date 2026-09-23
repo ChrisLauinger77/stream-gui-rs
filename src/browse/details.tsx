@@ -1,20 +1,21 @@
 import { useEffect, useState } from "react";
+import { LocalItemActions } from "../features/DiscoveryPreferences";
 import { ChannelPreferences } from "../features/ChannelPreferences";
 import { api } from "../lib/ipc";
-import type { CategorySummary, ChannelDetails, ChannelSummary } from "../lib/generated";
+import type { ChannelIdentity, CategorySummary, ChannelDetails, ChannelSummary } from "../lib/generated";
 import { usePage } from "./usePage";
 import { CategoryList, ChannelList, dateLabel, Media, PageFrame, StreamPreview, WatchButton } from "./components";
 import { pageRequest, type Links, type QueryContext } from "./Workspace";
 export function SearchView({ context, links, draft, setDraft, type, setType }: {
   context: QueryContext; links: Links; draft: string; setDraft: (value: string) => void;
-  type: "channels" | "categories"; setType: (value: "channels" | "categories") => void;
+  type: "channels" | "categories" | "teams"; setType: (value: "channels" | "categories" | "teams") => void;
 }) {
   const [settled, setSettled] = useState(draft.trim());
   useEffect(() => { const timer = setTimeout(() => setSettled(draft.trim()), 350); return () => clearTimeout(timer); }, [draft]);
-  return <><form className="search-form" role="search" onSubmit={e => { e.preventDefault(); setSettled(draft.trim()); }}>
-    <label>Search Twitch<input type="search" name="query" maxLength={100} autoComplete="off" placeholder="Channel or category name" value={draft} onChange={e => setDraft(e.target.value)} /></label></form>
-    <div className="tabs" aria-label="Search result type"><button aria-pressed={type === "channels"} onClick={() => setType("channels")}>Channels</button><button aria-pressed={type === "categories"} onClick={() => setType("categories")}>Categories</button></div>
-    {!draft.trim() ? <div className="empty-state"><h2>What are you looking for?</h2><p>Enter a channel or category name to get started.</p></div> : settled !== draft.trim() ? <p role="status" className="loading">Waiting for your search…</p> : type === "channels" ? <ChannelSearch key={`channels:${settled}`} search={settled} context={context} links={links} /> : <CategorySearch key={`categories:${settled}`} search={settled} context={context} links={links} />}
+  return <><form className="search-form" role="search" onSubmit={e => { e.preventDefault(); if (type === "teams") { if (draft.trim()) links.team(draft.trim()); } else setSettled(draft.trim()); }}>
+    <label>Search Twitch<input type="search" name="query" maxLength={100} autoComplete="off" placeholder={type === "teams" ? "Exact team name, not a URL" : "Channel or category name"} value={draft} onChange={e => setDraft(e.target.value)} /></label>{type === "teams" && <button type="submit" disabled={!draft.trim()}>Open team</button>}</form>
+    <div className="tabs" aria-label="Search result type"><button aria-pressed={type === "channels"} onClick={() => setType("channels")}>Channels</button><button aria-pressed={type === "categories"} onClick={() => setType("categories")}>Categories</button><button aria-pressed={type === "teams"} onClick={() => setType("teams")}>Teams</button></div>
+    {type === "teams" ? <p className="muted">Enter the exact team name from its Twitch team address. Team lookup opens members without starting playback.</p> : !draft.trim() ? <div className="empty-state"><h2>What are you looking for?</h2><p>Enter a channel or category name to get started.</p></div> : settled !== draft.trim() ? <p role="status" className="loading">Waiting for your search…</p> : type === "channels" ? <ChannelSearch key={`channels:${settled}`} search={settled} context={context} links={links} /> : <CategorySearch key={`categories:${settled}`} search={settled} context={context} links={links} />}
   </>;
 }
 function ChannelSearch({ search, context, links }: { search: string; context: QueryContext; links: Links }) {
@@ -37,8 +38,18 @@ export function ChannelView({ id, context, links }: { id: string; context: Query
   return <PageFrame query={query} detail empty="Channel unavailable">{details && <article className="channel-detail">
     <div className="channel-identity"><Media retryGeneration={query.imageRetryGeneration} src={details.channel.imageUrl} shape="avatar" /><div><h2>{details.channel.displayName}</h2><p className="muted">@{details.channel.login}</p><p className={details.channel.liveState === "live" ? "live-tag" : "muted"}>{details.channel.liveState === "live" ? "LIVE NOW" : details.channel.liveState === "offline" ? "Offline — no current live stream" : "Live status unavailable"}</p></div></div>
     {details.channel.liveState === "live" && details.stream && <WatchButton id={details.channel.broadcasterId} name={details.channel.displayName} watch={links.watch} pending={links.pending} />}
+    <LocalItemActions kind="channel" id={id} name={details.channel.displayName} />
     <ChannelPreferences key={`${context.sessionId}:${id}`} broadcasterId={id} sessionId={context.sessionId} />
     {details.description && <p className="channel-description">{details.description}</p>}
     {details.stream ? <div className="channel-stream"><StreamPreview retryGeneration={query.imageRetryGeneration} stream={details.stream} /><h3>{details.stream.title}</h3><p className="stream-meta">{details.stream.categoryId && <button className="text-button" onClick={() => links.category(details.stream!.categoryId!, details.stream!.categoryName ?? "Category")}>{details.stream.categoryName ?? "Category"}</button>}{details.stream.language?.toUpperCase()}</p>{details.stream.startedAt && <p className="muted">Started <time dateTime={details.stream.startedAt}>{dateLabel(details.stream.startedAt)}</time></p>}</div> : <div><h3>{details.channel.title ?? "No stream information available"}</h3><p className="muted">{details.channel.categoryName}{details.channel.language && ` · ${details.channel.language.toUpperCase()}`}</p></div>}
   </article>}</PageFrame>;
+}
+
+// Resolution belongs to this keyed visit. A late lookup cannot navigate over a
+// newer route, and session replacement unmounts both resolution and details.
+export function LoginChannelView({ login, context, links }: { login: string; context: QueryContext; links: Links }) {
+  const query = usePage<ChannelIdentity>({ ...context, viewKey: `login:${login}`, identify: channel => channel.broadcasterId,
+    load: async () => ({ items: [await api.lookupChannel({ sessionId: context.sessionId, login })], cursor: null, freshness: "network", ageSeconds: 0, warnings: [] }) });
+  const channel = query.page?.items[0];
+  return channel ? <ChannelView key={channel.broadcasterId} id={channel.broadcasterId} context={context} links={links} /> : <PageFrame query={query} detail empty="Channel unavailable"><span /></PageFrame>;
 }

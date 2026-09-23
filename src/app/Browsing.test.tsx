@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App } from "./App";
 import { Media } from "../browse/components";
+import { defaultBindings } from "./shortcuts";
 import { api } from "../lib/ipc";
 import type { AuthStatus, CategorySummary, ChannelDetails, ChannelSummary, PagedResult, StreamSummary } from "../lib/generated";
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: vi.fn() }));
@@ -39,7 +40,7 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
   vi.mocked(api.sessions).mockResolvedValue([]);
   vi.mocked(api.acknowledgeDesktopAction).mockResolvedValue(null);
-  vi.mocked(api.playbackSettings).mockResolvedValue({ chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
+  vi.mocked(api.playbackSettings).mockResolvedValue({ chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
   vi.mocked(api.channelSettings).mockImplementation(async broadcasterId => ({ broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: "source", defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false, effective: { profileId: null, chatProvider: "browser" as const, chatterinoPath: null, lowLatency: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, quality: "source", automaticChat: false } }));
   vi.mocked(api.authStatus).mockResolvedValue(signedIn);
   vi.mocked(api.account).mockResolvedValue({ id: "viewer", login: "viewer", displayName: "Viewer", profileImageUrl: null });
@@ -336,7 +337,7 @@ const playing = (id = "play-one", broadcasterId = "channel-one"): import("../lib
   url: "https://www.twitch.tv/example", quality: "best", exitCode: null, stopRequested: false,
   logs: [{ sequence: 1, source: "stderr", text: "Synthetic diagnostic warning" }], droppedLogEntries: 5,
 });
-const playbackSettings: import("../lib/generated").Settings = { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
+const playbackSettings: import("../lib/generated").Settings = { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
 async function editControl(label: string, value: string, kind: "input" | "select" = "input") {
   const control = [...container.querySelectorAll<HTMLInputElement | HTMLSelectElement>(kind)].find(el => el.labels?.[0]?.textContent?.startsWith(label));
   if (!control) throw new Error(`Missing control: ${label}`);
@@ -613,6 +614,7 @@ test.each(["Linux x86_64", "Win32"])("focused Control shortcuts navigate, focus 
 
 test("macOS uses Command shortcuts and ignores Control navigation", async () => {
   Object.defineProperty(navigator, "platform", { configurable: true, value: "MacIntel" });
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, shortcuts: defaultBindings(true) });
   await render(); await keypress("2"); expect(api.streams).not.toHaveBeenCalled();
   await keypress("2", { metaKey: true }); expect(api.streams).toHaveBeenCalledOnce();
   await keypress("[", { metaKey: true }); expect(button("Following").getAttribute("aria-current")).toBe("page");
@@ -665,7 +667,7 @@ async function toggleControl(label: string) {
 }
 const desktopSnapshot: import("../lib/generated").DesktopStatus = {
   monitor: { phase: "running", paused: false, liveCount: 3, stale: false, error: null, retryInSeconds: 60, notificationError: false },
-  notificationPermission: "not_requested", notificationClickSupported: true, notificationTestAvailable: false, trayAvailable: true, action: null,
+  notificationPermission: "not_requested", notificationClickSupported: true, notificationTestAvailable: false, navigation: null, trayAvailable: true, action: null,
 };
 const testNotification = {
   kind: "channel" as const, id: "native-test", authSessionId: "notification-acceptance", broadcasterId: "0", displayName: "TEST notification: Synthetic channel",
@@ -1782,4 +1784,285 @@ test("Enter in the profile editor saves only that profile and leaves global draf
   const input = container.querySelector<HTMLInputElement>('.profile-editor input')!;
   await act(async () => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
   expect(api.modifyPlayerProfile).toHaveBeenCalledOnce(); expect(api.savePlaybackSettings).not.toHaveBeenCalled();
+});
+
+function localPreferences(initial = playbackSettings) {
+  let saved = structuredClone(initial);
+  vi.mocked(api.playbackSettings).mockImplementation(async () => saved);
+  vi.mocked(api.modifyDiscovery).mockImplementation(async ({ list, item, present }) => {
+    const items = saved.discovery[list].filter(value => value.kind !== item.kind || value.id !== item.id);
+    saved = { ...saved, discovery: { ...saved.discovery, [list]: present ? [...items, item] : items } };
+    return saved;
+  });
+  return () => saved;
+}
+
+test("channel bookmarks remain reachable while hidden and are independent of Twitch follows", async () => {
+  const saved = localPreferences();
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await click("Bookmark channel"); await click("Hide channel from discovery");
+  expect(saved().discovery.bookmarks).toHaveLength(1); expect(saved().discovery.hidden).toHaveLength(1);
+  await click("Go back"); expect(container.querySelector(".stream-card")).toBeNull();
+  await click("Bookmarks"); await click("Example Channel"); expect(text()).toContain("Offline — no current live stream");
+  await click("Remove bookmark"); expect(saved().discovery.bookmarks).toHaveLength(0);
+  await click("Following"); await click("All channels"); expect(text()).toContain("Example Channel");
+  await click("Settings"); await click("Hidden items", ".settings-nav"); await click("Restore Example Channel");
+  expect(saved().discovery.hidden).toHaveLength(0);
+  await click("Close Settings"); await click("Live"); expect(container.querySelector(".stream-card")).not.toBeNull();
+});
+
+test("category hides filter passive discovery while search and saved categories stay reachable", async () => {
+  const saved = localPreferences();
+  await render(); await click("Categories"); await click("Open category Example Game");
+  await click("Bookmark category"); await click("Hide category from discovery");
+  await click("Go back"); expect(container.querySelector(".category-card")).toBeNull();
+  expect(document.activeElement).toBe(container.querySelector("h1"));
+  await click("Live"); expect(container.querySelector(".stream-card")).toBeNull();
+  await click("Bookmarks"); await click("Example Game"); expect(container.querySelector(".stream-card")).not.toBeNull();
+  await click("Search"); await type("Example"); await click("Categories", ".tabs");
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+  expect(container.querySelector(".category-card")).not.toBeNull();
+  expect(saved().discovery.hidden[0].kind).toBe("category");
+});
+
+test("stale bookmarks can be removed without resolving Twitch and restore keyboard focus", async () => {
+  const saved = localPreferences({ ...playbackSettings, discovery: { hidden: [], bookmarks: [{ kind: "channel", id: "999", name: "Deleted channel" }] } });
+  await render(); await click("Bookmarks"); button("Remove bookmark Deleted channel").focus(); await click("Remove bookmark Deleted channel");
+  expect(saved().discovery.bookmarks).toHaveLength(0); expect(api.channel).not.toHaveBeenCalled();
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Local bookmarks");
+});
+
+test("a bookmark save survives navigation and a failed mutation permits a later successful save", async () => {
+  const saved = localPreferences();
+  const pending = deferred<import("../lib/generated").Settings>();
+  vi.mocked(api.modifyDiscovery).mockReturnValueOnce(pending.promise);
+  await render(); await click("Live"); await click("Open channel Example Channel"); await click("Bookmark channel"); await click("Go back");
+  await act(async () => pending.resolve({ ...saved(), discovery: { hidden: [], bookmarks: [{ kind: "channel", id: channel.broadcasterId, name: channel.displayName }] } }));
+  await click("Bookmarks"); expect(text()).toContain("Example Channel");
+  vi.mocked(api.modifyDiscovery).mockRejectedValueOnce({ code: "settings" });
+  await click("Remove bookmark Example Channel"); expect(text()).toContain("Example Channel");
+  await click("Remove bookmark Example Channel"); expect(text()).toContain("No bookmarks yet");
+});
+
+const teamDetails: import("../lib/generated").TeamDetails = { id: "42", name: "synthetic-team", displayName: "Synthetic Team", description: "<b>Safe team description</b>", imageUrl: null, members: page([{ ...channel, liveState: "unknown" }]), memberCount: 1, limited: false };
+async function openTeam() {
+  await click("Search"); await click("Teams", ".tabs"); await type("synthetic-team");
+  await act(async () => { container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+}
+test("Teams opens bounded metadata as text and preserves member focus across playback navigation", async () => {
+  vi.mocked(api.team).mockResolvedValue(teamDetails);
+  vi.mocked(api.channel).mockResolvedValue({ ...details, channel: { ...channel, liveState: "live" }, stream });
+  vi.mocked(api.launch).mockResolvedValue(playing());
+  await render(); await openTeam(); expect(api.team).toHaveBeenCalledWith({ name: "synthetic-team", page: { sessionId: "1", cursor: null, refresh: false } });
+  expect(text()).toContain("<b>Safe team description</b>"); expect(container.querySelector("article b")).toBeNull();
+  button("Open channel Example Channel").focus(); await click("Open channel Example Channel"); await click("Watch Example Channel");
+  expect(api.launch).toHaveBeenCalledWith({ authSessionId: "1", broadcasterId: channel.broadcasterId, quality: null });
+  await click("Close Watching"); await click("Go back"); expect(document.activeElement).toBe(button("Open channel Example Channel"));
+  expect(api.team).toHaveBeenCalledOnce();
+});
+test("Teams distinguishes empty members, missing teams and late results after logout", async () => {
+  vi.mocked(api.team).mockResolvedValue({ ...teamDetails, members: page([]), memberCount: 0 });
+  await render(); await openTeam(); expect(text()).toContain("This team has no members");
+  vi.mocked(api.team).mockRejectedValueOnce({ code: "not_found" }); await click("Refresh"); expect(text()).toContain("Previous results");
+  const pending = deferred<typeof teamDetails>(); vi.mocked(api.team).mockReturnValueOnce(pending.promise);
+  await click("Retry"); vi.mocked(api.logout).mockResolvedValue(signedOut); await click("Sign out");
+  await act(async () => pending.resolve(teamDetails)); expect(text()).not.toContain("Synthetic Team");
+});
+
+test("Back and Forward restore search results, destination focus and scroll without fetching again", async () => {
+  await render(); await click("Search"); await type("example"); await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+  container.querySelector("main")!.scrollTop = 240; button("Open channel Example Channel").focus(); await click("Open channel Example Channel");
+  container.querySelector("main")!.scrollTop = 80; button("Bookmark channel").focus();
+  await click("Go back"); expect(container.querySelector<HTMLInputElement>('input[type="search"]')!.value).toBe("example");
+  expect(container.querySelector("main")!.scrollTop).toBe(240); expect(document.activeElement).toBe(button("Open channel Example Channel"));
+  await click("Go forward"); expect(text()).toContain("An example description"); expect(container.querySelector("main")!.scrollTop).toBe(80);
+  expect(document.activeElement).toBe(button("Bookmark channel"));
+  expect(api.channel).toHaveBeenCalledOnce(); expect(api.searchChannels).toHaveBeenCalledOnce();
+  await click("Go home"); expect(button("Following").getAttribute("aria-current")).toBe("page");
+  expect(button("Go forward").disabled).toBe(true);
+});
+test("Back during a pending fetch ignores late results and Forward reloads an invalidated destination", async () => {
+  const pending = deferred<ChannelDetails>(); vi.mocked(api.channel).mockReturnValueOnce(pending.promise).mockResolvedValueOnce(details);
+  await render(); await click("Live"); button("Open channel Example Channel").focus(); await click("Open channel Example Channel"); await click("Go back");
+  await act(async () => pending.resolve({ ...details, description: "Obsolete response" }));
+  expect(text()).not.toContain("Obsolete response"); expect(document.activeElement).toBe(button("Open channel Example Channel"));
+  await click("Go forward"); expect(api.channel).toHaveBeenCalledTimes(2); expect(text()).toContain("An example description");
+  await click("Go back"); await click("Search"); expect(button("Go forward").disabled).toBe(true);
+});
+
+test("shortcut capture reports conflicts before save, supports cancel and persists custom actions", async () => {
+  let saved = { ...playbackSettings, shortcuts: defaultBindings(false) };
+  vi.mocked(api.playbackSettings).mockImplementation(async () => saved);
+  vi.mocked(api.saveShortcuts).mockImplementation(async shortcuts => { saved = { ...saved, shortcuts }; return saved; });
+  await render(); await click("Settings"); await click("Shortcuts", ".settings-nav");
+  button("Change Focus Search shortcut").focus(); await click("Change Focus Search shortcut");
+  await keypress("2", { ctrlKey: true }, button("Change Focus Search shortcut"));
+  expect(text()).toContain("conflicts with"); expect(button("Save shortcuts").disabled).toBe(true);
+  await click("Change Focus Search shortcut"); await keypress("Escape", {}, button("Change Focus Search shortcut")); expect(text()).toContain("Capture cancelled");
+  await click("Change Focus Search shortcut"); await keypress("b", { ctrlKey: true, shiftKey: true }, button("Change Focus Search shortcut"));
+  expect(text()).toContain("Ctrl+Shift+B"); expect(button("Save shortcuts").disabled).toBe(false);
+  await click("Save shortcuts"); await click("Close Settings"); await keypress("b", { ctrlKey: true, shiftKey: true });
+  expect(document.activeElement).toBe(container.querySelector('input[type="search"]'));
+  await keypress(","); await click("Shortcuts", ".settings-nav"); await click("Unassign Focus Search shortcut"); await click("Save shortcuts");
+  expect(saved.shortcuts.search).toBeNull();
+  await click("Reset shortcuts to defaults"); await click("Save shortcuts"); expect(saved.shortcuts.search?.key).toBe("k");
+});
+
+test("shortcut capture rejects unsupported keys, exits with Tab and uses macOS labels", async () => {
+  Object.defineProperty(navigator, "platform", { configurable: true, value: "MacIntel" });
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, shortcuts: defaultBindings(true) });
+  await render(); await click("Settings"); await click("Shortcuts", ".settings-nav");
+  await click("Change Refresh shortcut"); await keypress("q", { metaKey: true }, button("Change Refresh shortcut"));
+  expect(text()).toContain("reserved"); expect(api.saveShortcuts).not.toHaveBeenCalled();
+  await keypress("Tab", {}, button("Change Refresh shortcut")); expect(text()).toContain("Capture ended");
+  await click("Change Refresh shortcut"); await keypress("b", { altKey: true, ctrlKey: true, shiftKey: true }, button("Change Refresh shortcut"));
+  expect(text()).toContain("Control+Option+Shift+B");
+});
+
+test("pointer cancellation of shortcut capture retains focus and announces cancellation", async () => {
+  await render(); await click("Settings"); await click("Shortcuts", ".settings-nav");
+  const change = button("Change Focus Search shortcut");
+  await act(async () => { change.focus(); change.click(); });
+  const cancel = button("Cancel capture");
+  await act(async () => {
+    // jsdom does not perform the browser's default mousedown focus transfer.
+    if (cancel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }))) cancel.focus();
+  });
+  await act(async () => { if (cancel.isConnected) cancel.click(); });
+  expect(change.getAttribute("aria-pressed")).toBe("false");
+  expect(text()).toContain("Capture cancelled.");
+  expect(document.activeElement).toBe(change);
+  expect(api.saveShortcuts).not.toHaveBeenCalled();
+});
+
+test("leaving shortcut capture updates its status without changing the binding", async () => {
+  await render(); await click("Settings"); await click("Shortcuts", ".settings-nav");
+  const change = button("Change Focus Search shortcut");
+  await act(async () => { change.focus(); change.click(); });
+  await act(async () => { button("Reset shortcuts to defaults").focus(); });
+  expect(change.getAttribute("aria-pressed")).toBe("false");
+  expect(text()).not.toContain("Press a shortcut.");
+  expect(text()).toContain("Capture ended.");
+  expect(container.querySelector('[aria-label="Focus Search binding: Ctrl+K"]')).not.toBeNull();
+});
+
+test("shortcut mutations serialize with global saves and accepted state survives remount", async () => {
+  const pending = deferred<import("../lib/generated").Settings>();
+  vi.mocked(api.saveShortcuts).mockReturnValue(pending.promise);
+  let settings = { ...playbackSettings, shortcuts: defaultBindings(false) };
+  vi.mocked(api.playbackSettings).mockImplementation(async () => settings);
+  vi.mocked(api.savePlaybackSettings).mockImplementation(async request => { settings = { ...request, shortcuts: settings.shortcuts }; return settings; });
+  await render(); await click("Settings"); await click("Shortcuts", ".settings-nav"); await click("Unassign Focus Search shortcut"); await click("Save shortcuts");
+  await click("Close Settings"); await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Appearance", "dark", "select"); await click("Save settings");
+  expect(api.savePlaybackSettings).not.toHaveBeenCalled();
+  await act(async () => { settings = { ...settings, shortcuts: { ...settings.shortcuts, search: null } }; pending.resolve(settings); });
+  expect(api.savePlaybackSettings).toHaveBeenCalledOnce(); expect(settings.shortcuts.search).toBeNull(); expect(settings.theme).toBe("dark");
+  await click("Shortcuts", ".settings-nav"); expect(container.querySelector('[aria-label="Focus Search binding: Unassigned"]')).not.toBeNull();
+});
+
+test("a reopened shortcut editor waits for the previous full draft before editing", async () => {
+  const pending = deferred<import("../lib/generated").Settings>();
+  const settings = { ...playbackSettings, shortcuts: defaultBindings(false) };
+  vi.mocked(api.playbackSettings).mockResolvedValue(settings);
+  vi.mocked(api.saveShortcuts).mockReturnValueOnce(pending.promise);
+  await render(); await click("Settings"); await click("Shortcuts", ".settings-nav");
+  await click("Unassign Focus Search shortcut"); await click("Save shortcuts");
+  await click("Close Settings"); await click("Settings"); await click("Shortcuts", ".settings-nav");
+  expect(button("Change Refresh shortcut").disabled).toBe(true);
+  expect(button("Unassign Refresh shortcut").disabled).toBe(true);
+  expect(button("Save shortcuts").disabled).toBe(true);
+  await act(async () => pending.resolve({ ...settings, shortcuts: { ...settings.shortcuts, search: null } }));
+  expect(button("Change Refresh shortcut").disabled).toBe(false);
+  expect(container.querySelector('[aria-label="Focus Search binding: Unassigned"]')).not.toBeNull();
+  await click("Unassign Refresh shortcut"); await click("Save shortcuts");
+  expect(api.saveShortcuts).toHaveBeenLastCalledWith(expect.objectContaining({ search: null, refresh: null }));
+});
+
+function deliverNavigation(intent: import("../lib/generated").NavigationIntent, id = "link-1") {
+  vi.mocked(api.desktopStatus).mockImplementation(async () => ({ ...desktopSnapshot, navigation: { id, intent } }));
+  vi.mocked(api.acknowledgeNavigationIntent).mockResolvedValue(null);
+}
+test("cold-start deep links wait for settings and authentication, navigate once, and never autoplay", async () => {
+  const settings = deferred<import("../lib/generated").Settings>();
+  vi.mocked(api.playbackSettings).mockReturnValue(settings.promise);
+  vi.mocked(api.authStatus).mockResolvedValue({ ...signedOut, phase: "restoring" });
+  deliverNavigation({ kind: "channel", login: "example" });
+  vi.mocked(api.lookupChannel).mockResolvedValue({ broadcasterId: channel.broadcasterId, displayName: channel.displayName });
+  await render(); expect(api.lookupChannel).not.toHaveBeenCalled(); expect(api.acknowledgeNavigationIntent).not.toHaveBeenCalled();
+  await act(async () => settings.resolve(playbackSettings));
+  vi.mocked(api.authStatus).mockResolvedValue(signedIn);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(api.lookupChannel).toHaveBeenCalledOnce(); expect(text()).toContain("An example description"); expect(api.launch).not.toHaveBeenCalled();
+  expect(api.acknowledgeNavigationIntent).toHaveBeenCalledWith("link-1");
+  await act(async () => { await vi.advanceTimersByTimeAsync(4000); }); expect(api.lookupChannel).toHaveBeenCalledOnce();
+});
+test("new deep links supersede pending resolution and late results cannot navigate over them", async () => {
+  const pending = deferred<import("../lib/generated").ChannelIdentity>();
+  vi.mocked(api.lookupChannel).mockReturnValue(pending.promise);
+  deliverNavigation({ kind: "channel", login: "old" }); await render();
+  deliverNavigation({ kind: "team", name: "synthetic-team" }, "link-2"); vi.mocked(api.team).mockResolvedValue(teamDetails);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); expect(text()).toContain("Synthetic Team");
+  await act(async () => pending.resolve({ broadcasterId: channel.broadcasterId, displayName: "Obsolete link" }));
+  expect(api.channel).not.toHaveBeenCalled(); expect(text()).not.toContain("Obsolete link"); expect(api.launch).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(container.querySelector("h1"));
+});
+test("deep links during logout wait for a new session and category links override passive hides", async () => {
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, discovery: { bookmarks: [], hidden: [{ kind: "category", id: category.id, name: category.name }] } });
+  deliverNavigation({ kind: "category", id: category.id }); await render();
+  expect(text()).toContain("Connect to Twitch to open"); expect(api.category).not.toHaveBeenCalled();
+  vi.mocked(api.authStatus).mockResolvedValue({ ...signedIn, sessionId: "2" });
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(api.category).toHaveBeenCalledWith({ id: category.id, page: { page: { sessionId: "2", cursor: null, refresh: false }, language: null } });
+  expect(container.querySelector(".stream-card")).not.toBeNull(); expect(api.launch).not.toHaveBeenCalled();
+});
+test("a failed navigation acknowledgement retries without replaying the navigation", async () => {
+  deliverNavigation({ kind: "team", name: "synthetic-team" }); vi.mocked(api.team).mockResolvedValue(teamDetails);
+  vi.mocked(api.acknowledgeNavigationIntent).mockRejectedValueOnce({ code: "internal" }).mockResolvedValue(null);
+  await render(); await click("Live");
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(api.acknowledgeNavigationIntent).toHaveBeenCalledTimes(2); expect(api.team).toHaveBeenCalledOnce(); expect(button("Live").getAttribute("aria-current")).toBe("page");
+});
+
+test("hide completion filters an in-flight page without losing its cursor or restoring hidden results", async () => {
+  const saved = localPreferences();
+  const mutation = deferred<import("../lib/generated").Settings>();
+  const more = deferred<PagedResult<StreamSummary>>();
+  vi.mocked(api.streams).mockResolvedValueOnce(page([stream], "next")).mockReturnValueOnce(more.promise);
+  vi.mocked(api.modifyDiscovery).mockReturnValueOnce(mutation.promise);
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await click("Hide channel from discovery"); await click("Go back"); await click("Load more");
+  await act(async () => mutation.resolve({ ...saved(), discovery: { bookmarks: [], hidden: [{ kind: "channel", id: channel.broadcasterId, name: channel.displayName }] } }));
+  expect(container.querySelector(".stream-card")).toBeNull();
+  await act(async () => more.resolve(page([stream, { ...stream, streamId: "other-stream", broadcasterId: "other-channel", displayName: "Visible channel" }], "last")));
+  expect(container.querySelectorAll(".stream-card")).toHaveLength(1);
+  expect(text()).toContain("Visible channel"); expect(text()).not.toContain("Example Channel");
+  expect(button("Load more").disabled).toBe(false);
+  vi.mocked(api.streams).mockResolvedValueOnce(page([])); await click("Load more");
+  expect(api.streams).toHaveBeenLastCalledWith({ page: { sessionId: "1", cursor: "last", refresh: false }, language: null });
+});
+
+test("bookmark mutations and a failing channel refresh preserve independent accepted state", async () => {
+  const saved = localPreferences(); const refresh = deferred<ChannelDetails>();
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  vi.mocked(api.channel).mockReturnValueOnce(refresh.promise); await click("Refresh"); await click("Bookmark channel");
+  await act(async () => refresh.reject({ code: "network" }));
+  expect(saved().discovery.bookmarks).toHaveLength(1); expect(text()).toContain("Previous results");
+  await click("Remove bookmark"); expect(saved().discovery.bookmarks).toHaveLength(0);
+});
+
+test("local bookmarks, hides and shortcuts survive logout while navigation history resets", async () => {
+  const saved = localPreferences({ ...playbackSettings, shortcuts: { ...defaultBindings(false), search: null } });
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await click("Bookmark channel"); await click("Hide channel from discovery");
+  vi.mocked(api.logout).mockResolvedValue(signedOut); vi.mocked(api.authStatus).mockResolvedValue(signedOut); await click("Sign out");
+  vi.mocked(api.authStatus).mockResolvedValue({ ...signedIn, sessionId: "new-account", user: { ...signedIn.user!, id: "another-viewer" } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(button("Go back").disabled).toBe(true); expect(button("Go forward").disabled).toBe(true);
+  await click("Live"); expect(container.querySelector(".stream-card")).toBeNull();
+  await click("Bookmarks"); await click("Example Channel");
+  expect(api.channel).toHaveBeenLastCalledWith({ id: channel.broadcasterId, page: { sessionId: "new-account", cursor: null, refresh: false } });
+  expect(saved().shortcuts.search).toBeNull();
+  await click("Settings"); await click("Shortcuts", ".settings-nav");
+  expect(container.querySelector('[aria-label="Focus Search binding: Unassigned"]')).not.toBeNull();
 });

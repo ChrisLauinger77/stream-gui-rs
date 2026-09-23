@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-modify-discovery"
+description = "Enables the modify_discovery command without any pre-configured scope."
+commands.allow = ["modify_discovery"]
+
+[[permission]]
+identifier = "deny-modify-discovery"
+description = "Denies the modify_discovery command without any pre-configured scope."
+commands.deny = ["modify_discovery"]

@@ -19,11 +19,11 @@ fn settings_version_and_round_trip() {
         SettingsDocument::from_json(&serde_json::to_string(&value).unwrap()).unwrap(),
         value
     );
-    assert_eq!(value.version, 6);
+    assert_eq!(value.version, 7);
     assert_eq!(value.settings.theme, Theme::System);
     assert!(!value.settings.automatic_chat);
     assert_eq!(value.settings.default_quality, QualityPolicy::Source);
-    for text in ["{}", r#"{"version":7}"#, r#"{"version":0}"#] {
+    for text in ["{}", r#"{"version":8}"#, r#"{"version":0}"#] {
         assert_eq!(
             SettingsDocument::from_json(text).unwrap_err().code,
             ErrorCode::SettingsVersion
@@ -107,7 +107,7 @@ fn version_two_migration_preserves_every_playback_preference_without_rewriting()
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 6);
+    assert_eq!(persisted["version"], 7);
     assert_eq!(persisted["channelOverrides"], serde_json::json!({}));
 }
 
@@ -370,7 +370,7 @@ fn phase_five_migration_is_strict_preserves_channel_preferences_and_defaults_off
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 6);
+    assert_eq!(persisted["version"], 7);
     let reopened = SettingsStore::open(root.path()).unwrap();
     assert_eq!(reopened.snapshot(), expected);
     for id in ["123", "456"] {
@@ -508,7 +508,7 @@ fn version_four_migration_preserves_released_preferences_and_defaults_phase_six(
     check_channels(&reopened);
     let saved: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(saved["version"], 6);
+    assert_eq!(saved["version"], 7);
     assert!(saved["settings"]["discoveryLanguage"].is_null());
     assert_eq!(saved["settings"]["lowLatency"], false);
     assert_eq!(saved["settings"]["textScale"], "100");
@@ -706,7 +706,7 @@ fn released_schema_five_migration_preserves_all_values_and_starts_without_profil
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
     assert_eq!(persisted["channelOverrides"], old["channelOverrides"]);
-    assert_eq!(persisted["version"], 6);
+    assert_eq!(persisted["version"], 7);
     let mut hostile = old;
     hostile["settings"]["profiles"] = serde_json::json!([]);
     assert!(SettingsDocument::from_json(&hostile.to_string()).is_err());
@@ -910,4 +910,248 @@ fn profile_mutation_dtos_reject_unknown_execution_fields() {
     ] {
         assert!(serde_json::from_value::<profiles::ProfileMutation>(value).is_err());
     }
+}
+
+#[test]
+fn version_six_migrates_in_memory_and_rejects_smuggled_phase_eight_fields() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut old = serde_json::to_value(SettingsDocument::default()).unwrap();
+    old["version"] = 6.into();
+    let settings = old["settings"].as_object_mut().unwrap();
+    settings.remove("discovery");
+    settings.remove("shortcuts");
+    let original = serde_json::to_string(&old).unwrap();
+    fs::write(dir.path().join("settings.json"), &original).unwrap();
+    let store = SettingsStore::open(dir.path()).unwrap();
+    assert_eq!(
+        store.snapshot().discovery,
+        discovery::DiscoveryPreferences::default()
+    );
+    assert_eq!(fs::read_to_string(store.path()).unwrap(), original);
+    old["settings"]["discovery"] = serde_json::json!({"bookmarks":[],"hidden":[]});
+    assert!(SettingsDocument::from_json(&old.to_string()).is_err());
+    store
+        .set_shortcuts(shortcuts::ShortcutBindings::default())
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&fs::read_to_string(store.path()).unwrap())
+            .unwrap()["version"],
+        7
+    );
+}
+
+#[test]
+fn discovery_mutations_are_idempotent_bounded_and_independent_of_global_drafts() {
+    use discovery::*;
+    let dir = tempfile::tempdir().unwrap();
+    let store = SettingsStore::open(dir.path()).unwrap();
+    let draft = store.snapshot();
+    let item = SavedItem {
+        kind: ItemKind::Channel,
+        id: "123".into(),
+        name: "Synthetic channel".into(),
+    };
+    let add = DiscoveryMutation {
+        list: DiscoveryList::Bookmarks,
+        item: item.clone(),
+        present: true,
+    };
+    store.modify_discovery(add.clone()).unwrap();
+    store.modify_discovery(add).unwrap();
+    store
+        .modify_discovery(DiscoveryMutation {
+            list: DiscoveryList::Hidden,
+            item: item.clone(),
+            present: true,
+        })
+        .unwrap();
+    store.update(draft).unwrap();
+    assert_eq!(
+        store.snapshot().discovery.bookmarks.as_slice(),
+        std::slice::from_ref(&item)
+    );
+    assert_eq!(
+        store.snapshot().discovery.hidden.as_slice(),
+        std::slice::from_ref(&item)
+    );
+    for id in 1..200 {
+        store
+            .modify_discovery(DiscoveryMutation {
+                list: DiscoveryList::Bookmarks,
+                item: SavedItem {
+                    id: (1000 + id).to_string(),
+                    ..item.clone()
+                },
+                present: true,
+            })
+            .unwrap();
+    }
+    let before = fs::read(store.path()).unwrap();
+    assert!(
+        store
+            .modify_discovery(DiscoveryMutation {
+                list: DiscoveryList::Bookmarks,
+                item: SavedItem {
+                    id: "9999".into(),
+                    ..item.clone()
+                },
+                present: true
+            })
+            .is_err()
+    );
+    assert_eq!(fs::read(store.path()).unwrap(), before);
+    let remove = DiscoveryMutation {
+        list: DiscoveryList::Bookmarks,
+        item: item.clone(),
+        present: false,
+    };
+    store.modify_discovery(remove.clone()).unwrap();
+    store.modify_discovery(remove).unwrap();
+    assert_eq!(store.snapshot().discovery.bookmarks.len(), 199);
+    assert_eq!(store.snapshot().discovery.hidden, [item]);
+}
+
+#[test]
+fn malformed_saved_items_and_duplicate_bindings_are_rejected() {
+    use discovery::*;
+    let item = SavedItem {
+        kind: ItemKind::Category,
+        id: "123".into(),
+        name: "Synthetic category".into(),
+    };
+    for bad in [
+        SavedItem {
+            id: "0".into(),
+            ..item.clone()
+        },
+        SavedItem {
+            id: "../1".into(),
+            ..item.clone()
+        },
+        SavedItem {
+            name: "bad\nname".into(),
+            ..item.clone()
+        },
+        SavedItem {
+            name: "x".repeat(257),
+            ..item.clone()
+        },
+    ] {
+        assert!(
+            DiscoveryPreferences {
+                bookmarks: vec![bad],
+                hidden: vec![]
+            }
+            .validate()
+            .is_err()
+        );
+    }
+    assert!(
+        DiscoveryPreferences {
+            bookmarks: vec![item.clone(), item],
+            hidden: vec![]
+        }
+        .validate()
+        .is_err()
+    );
+    for mac in [false, true] {
+        use shortcuts::*;
+        let defaults = ShortcutBindings::defaults(mac);
+        defaults.validate().unwrap();
+        let mut bindings = defaults.clone();
+        bindings.0.insert(
+            ShortcutAction::Refresh,
+            bindings.0[&ShortcutAction::Search].clone(),
+        );
+        assert!(bindings.validate().is_err());
+        let mut bindings = defaults.clone();
+        bindings.0.insert(ShortcutAction::Search, None);
+        bindings.validate().unwrap();
+        let mut bindings = defaults.clone();
+        bindings.0.remove(&ShortcutAction::Search);
+        assert!(bindings.validate().is_err());
+        for key in ["Shift", "Escape", "q", "../x", "K", "é", ""] {
+            let mut bindings = defaults.clone();
+            bindings
+                .0
+                .get_mut(&ShortcutAction::Search)
+                .unwrap()
+                .as_mut()
+                .unwrap()
+                .key = key.into();
+            assert!(bindings.validate().is_err());
+        }
+    }
+}
+
+#[test]
+fn discovery_shortcuts_profiles_and_channel_mutations_preserve_each_other() {
+    use discovery::*;
+    use shortcuts::*;
+    let dir = tempfile::tempdir().unwrap();
+    let store = std::sync::Arc::new(SettingsStore::open(dir.path()).unwrap());
+    let draft = store.snapshot();
+    let workers: Vec<_> = (0..4)
+        .map(|n| {
+            let store = store.clone();
+            std::thread::spawn(move || match n {
+                0 => {
+                    store
+                        .modify_discovery(DiscoveryMutation {
+                            list: DiscoveryList::Hidden,
+                            item: SavedItem {
+                                kind: ItemKind::Channel,
+                                id: "123".into(),
+                                name: "Synthetic".into(),
+                            },
+                            present: true,
+                        })
+                        .unwrap();
+                }
+                1 => {
+                    store
+                        .modify_profile(ProfileMutation::Create {
+                            profile: profiles::ProfileDraft {
+                                name: "Synthetic".into(),
+                                player: Default::default(),
+                                quality: None,
+                                low_latency: None,
+                            },
+                        })
+                        .unwrap();
+                }
+                2 => {
+                    let mut bindings = ShortcutBindings::default();
+                    bindings.0.insert(ShortcutAction::Search, None);
+                    store.set_shortcuts(bindings).unwrap();
+                }
+                _ => {
+                    store
+                        .set_channel(SaveChannelSettingsRequest {
+                            broadcaster_id: "123".into(),
+                            overrides: ChannelOverrides {
+                                low_latency: Some(true),
+                                ..Default::default()
+                            },
+                        })
+                        .unwrap();
+                }
+            })
+        })
+        .collect();
+    for worker in workers {
+        worker.join().unwrap();
+    }
+    store.update(draft).unwrap();
+    let restored = SettingsStore::open(dir.path()).unwrap();
+    assert_eq!(restored.snapshot().discovery.hidden.len(), 1);
+    assert_eq!(restored.snapshot().profiles.len(), 1);
+    assert_eq!(
+        restored.snapshot().shortcuts.0[&ShortcutAction::Search],
+        None
+    );
+    assert_eq!(
+        restored.channel("123").unwrap().overrides.low_latency,
+        Some(true)
+    );
 }

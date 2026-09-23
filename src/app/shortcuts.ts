@@ -1,29 +1,69 @@
 import { useEffect } from "react";
-
-export type ShortcutAction = "search" | "following" | "live" | "categories" | "watching" | "settings" | "back" | "refresh";
+import type { ShortcutAction, ShortcutBinding, ShortcutBindings } from "../lib/generated";
+export type { ShortcutAction } from "../lib/generated";
 export const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform);
-export function shortcutLabels(mac = isMac()): Record<ShortcutAction, string> {
-  const mod = mac ? "⌘" : "Ctrl+";
-  return { search: `${mod}K`, following: `${mod}1`, live: `${mod}2`, categories: `${mod}3`, watching: `${mod}4`, settings: `${mod},`, back: mac ? "⌘[" : "Alt+←", refresh: `${mod}R` };
+export const shortcutActions: ShortcutAction[] = ["home", "following", "live", "categories", "search", "watching", "settings", "back", "forward", "refresh"];
+export const actionLabel = (action: ShortcutAction) => action === "search" ? "Focus Search" : action[0].toUpperCase() + action.slice(1);
+export function defaultBindings(mac = isMac()): ShortcutBindings {
+  const make = (key: string, primary = true, alt = false): ShortcutBinding => ({ key, primary, alt, control: false, meta: false, shift: false });
+  return { home: make("Home", false, true), following: make("1"), live: make("2"), categories: make("3"), search: make("k"), watching: make("4"), settings: make(","), back: make(mac ? "[" : "ArrowLeft", mac, !mac), forward: make(mac ? "]" : "ArrowRight", mac, !mac), refresh: make("r") };
 }
-export function shortcutAction(event: KeyboardEvent, mac: boolean): ShortcutAction | null {
-  if (event.defaultPrevented || event.repeat || event.isComposing || event.shiftKey) return null;
+export function bindingLabel(binding: ShortcutBinding | null | undefined, mac = isMac()) {
+  if (!binding) return "Unassigned";
+  const modifiers = [binding.primary && (mac ? "⌘" : "Ctrl"), binding.control && (mac ? "Control" : "Ctrl"), binding.alt && (mac ? "Option" : "Alt"), binding.shift && "Shift", binding.meta && (mac ? "⌘" : "Meta")].filter(Boolean);
+  const key = ({ ArrowLeft: "←", ArrowRight: "→" } as Record<string, string>)[binding.key] ?? (binding.key.length === 1 ? binding.key.toUpperCase() : binding.key);
+  return mac && modifiers.length === 1 && modifiers[0] === "⌘" ? `⌘${key}` : [...modifiers, key].join("+");
+}
+export function shortcutLabels(mac = isMac(), bindings = defaultBindings(mac)): Record<ShortcutAction, string> {
+  return Object.fromEntries(shortcutActions.map(action => [action, bindingLabel(bindings[action], mac)])) as Record<ShortcutAction, string>;
+}
+function signature(binding: ShortcutBinding, mac: boolean) {
+  return [binding.key, binding.control || binding.primary && !mac, binding.meta || binding.primary && mac, binding.alt, binding.shift].join(":");
+}
+export function bindingError(binding: ShortcutBinding): string | null {
+  if (!/^(?:[a-z0-9,\[\]]|ArrowLeft|ArrowRight|Home|F[6-9]|F1[0-2])$/.test(binding.key)
+    || !(binding.primary || binding.control || binding.meta || binding.alt)
+    || binding.primary && (binding.control || binding.meta) || binding.control && binding.meta
+    || ["q", "w", "n", "t", "l"].includes(binding.key)) return "Choose a modified letter, number, comma, bracket, arrow, Home or F6–F12. Q, W, N, T and L are reserved.";
+  return null;
+}
+export function shortcutErrors(bindings: ShortcutBindings): string[] {
+  const errors = new Set<string>();
+  for (const action of shortcutActions) {
+    const binding = bindings[action];
+    if (binding === undefined) errors.add(`${actionLabel(action)} is missing.`);
+    if (binding) { const error = bindingError(binding); if (error) errors.add(`${actionLabel(action)}: ${error}`); }
+  }
+  for (const mac of [false, true]) {
+    const seen = new Map<string, ShortcutAction>();
+    for (const action of shortcutActions) {
+      const binding = bindings[action]; if (!binding) continue;
+      const key = signature(binding, mac); const other = seen.get(key);
+      if (other) errors.add(`${actionLabel(action)} conflicts with ${actionLabel(other)}.`);
+      seen.set(key, action);
+    }
+  }
+  return [...errors];
+}
+export function capturedBinding(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">, mac = isMac()): ShortcutBinding {
+  return { key: event.key.length === 1 ? event.key.toLowerCase() : event.key, primary: mac ? event.metaKey : event.ctrlKey, control: mac && event.ctrlKey, meta: !mac && event.metaKey, alt: event.altKey, shift: event.shiftKey };
+}
+export function shortcutAction(event: KeyboardEvent, mac: boolean, bindings = defaultBindings(mac)): ShortcutAction | null {
+  if (event.defaultPrevented || event.repeat || event.isComposing) return null;
   const target = event.target;
   if (target instanceof Element && target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])")) return null;
   if ([...document.querySelectorAll<HTMLElement>('dialog[open], [role="dialog"][aria-modal="true"]')].some(dialog => !dialog.hidden)) return null;
-  if (!event.ctrlKey && !event.metaKey && event.altKey && event.key === "ArrowLeft") return "back";
-  if (event.altKey || (mac ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey)) return null;
-  const bindings: Partial<Record<string, ShortcutAction>> = { k: "search", "1": "following", "2": "live", "3": "categories", "4": "watching", ",": "settings", "[": "back", r: "refresh" };
-  return bindings[event.key.toLowerCase()] ?? null;
+  const observed = signature({ ...capturedBinding(event, mac), primary: false, control: event.ctrlKey, meta: event.metaKey }, mac);
+  return shortcutActions.find(action => bindings[action] && signature(bindings[action]!, mac) === observed) ?? null;
 }
-export function useShortcuts(actions: Record<ShortcutAction, () => void>) {
+export function useShortcuts(actions: Record<ShortcutAction, () => void>, bindings?: ShortcutBindings) {
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
-      const action = shortcutAction(event, isMac());
+      const action = shortcutAction(event, isMac(), bindings);
       if (!action) return;
       event.preventDefault(); actions[action]();
     };
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
-  }, [actions]);
+  }, [actions, bindings]);
 }

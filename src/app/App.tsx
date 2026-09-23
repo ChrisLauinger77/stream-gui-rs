@@ -25,7 +25,7 @@ export function App() {
 function AppContent() {
   const [developer, setDeveloper] = useState(false);
   const desktop = useDesktop();
-  useEffect(() => { if (desktop.status?.action) setDeveloper(false); }, [desktop.status?.action?.id]);
+  useEffect(() => { if (desktop.status?.action || desktop.status?.navigation) setDeveloper(false); }, [desktop.status?.action?.id, desktop.status?.navigation?.id]);
   if (developer) return <><div className="developer-banner"><button onClick={() => setDeveloper(false)}>← Back to browsing</button><span>Developer tools · backend diagnostics</span></div><NotificationAcceptance desktop={desktop} /><DeveloperTools /></>;
   return <Application desktop={desktop} developer={() => setDeveloper(true)} />;
 }
@@ -49,7 +49,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const settingsPanel = useRef<HTMLElement>(null);
   const settingsHeading = useRef<HTMLHeadingElement>(null);
   const watchingPanel = useRef<HTMLDivElement>(null);
-  const shortcuts = shortcutLabels();
+  const shortcuts = shortcutLabels(undefined, playback.settings?.shortcuts);
   const closeSettings = () => { restore("settings", settingsPanel.current, settingsButton.current); setSettings(false); };
   const closeWatching = () => { restore("watching", watchingPanel.current, watchingButton.current); setWatching(false); };
   useEffect(() => {
@@ -83,6 +83,24 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       .finally(() => { actionState.acknowledging = false; });
   }, [desktop.status, auth.sessionId, notificationTest, actionState]);
   useEffect(() => {
+    const pending = desktop.status?.navigation;
+    const state = desktop.navigationActions.current;
+    if (!pending || !playback.settings || !auth.status || auth.status.phase === "restoring") return;
+    if (state.handled !== pending.id) {
+      if (pending.intent.kind !== "show" && (!auth.sessionId || !workspace.current)) return;
+      setSettings(false); setWatching(false); setNotificationTest(false); setAbout(null); setSupport(false);
+      if (pending.intent.kind !== "show") workspace.current!.intent(pending.intent);
+      setNavigationFocus({ id: pending.id, target: "channel" });
+      state.handled = pending.id;
+    }
+    if (state.acknowledged === pending.id || state.acknowledging) return;
+    state.acknowledging = true;
+    void api.acknowledgeNavigationIntent(pending.id)
+      .then(() => { state.acknowledged = pending.id; })
+      .catch(() => { /* Retry only the acknowledgement on the next native snapshot. */ })
+      .finally(() => { state.acknowledging = false; });
+  }, [desktop.status?.navigation, auth.sessionId, auth.status, playback.settings, desktop.navigationActions]);
+  useEffect(() => {
     // Passive unmount cleanup closes the modal (including native opener focus)
     // before this effect focuses the accepted destination, even on the same route.
     if (navigationFocus?.target === "channel") workspace.current?.focus();
@@ -96,11 +114,12 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
     setSettings(false); setWatching(false); workspace.current?.navigate(section);
   };
   useShortcuts({
+    home: () => navigate("following"), forward: () => { setSettings(false); setWatching(false); workspace.current?.forward(); },
     search: () => navigate("search"), following: () => navigate("following"), live: () => navigate("live"), categories: () => navigate("categories"),
     watching: () => { if (!watching) capture("watching"); setWatching(true); setSettings(false); }, settings: () => { if (!settings) capture("settings"); setSettings(true); setWatching(false); },
     back: () => { if (settings) closeSettings(); else if (watching) closeWatching(); else if (notificationTest) setNotificationTest(false); else workspace.current?.back(); },
     refresh: () => { if (!settings) workspace.current?.refresh(); },
-  });
+  }, playback.settings?.shortcuts);
   const watch = useCallback((broadcasterId: string) => {
     if (!auth.sessionId) return;
     capture("watching"); setWatching(true); setSettings(false);
@@ -126,6 +145,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       isStopping={id => playback.pending.has(`stop:${id}`)} isRestarting={id => playback.pending.has(`restart:${id}`)}
       stop={id => { void playback.run(`stop:${id}`, () => api.stop(id), "Playback stopped."); }}
       restart={(session, quality) => { void playback.run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), "Streamlink process restarted."); }} /></div>}
+    {desktop.status?.navigation && !auth.sessionId && desktop.status.navigation.intent.kind !== "show" && <p className="notice" role="status">Connect to Twitch to open the requested destination.</p>}
     {auth.error && <p className="error" role="alert">{auth.error}</p>}
     {notificationTest ? <main className="settings-panel">
       <h1 tabIndex={-1} ref={testHeading}>TEST notification · Synthetic channel</h1>

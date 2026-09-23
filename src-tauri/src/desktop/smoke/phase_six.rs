@@ -12,7 +12,7 @@ pub(super) async fn evaluate(app: &tauri::AppHandle, script: &str) -> serde_json
     serde_json::from_str(&receive.recv().await.unwrap()).unwrap_or_default()
 }
 pub(super) async fn until(app: &tauri::AppHandle, script: &str) {
-    tokio::time::timeout(Duration::from_secs(8), async {
+    let result = tokio::time::timeout(Duration::from_secs(8), async {
         loop {
             if evaluate(app, script).await == true {
                 return;
@@ -20,18 +20,21 @@ pub(super) async fn until(app: &tauri::AppHandle, script: &str) {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     })
-    .await
-    .unwrap_or_else(|_| panic!("WebKitGTK condition failed: {script}"));
+    .await;
+    if result.is_err() {
+        let state = evaluate(app, "JSON.stringify({ready: document.readyState, title: document.title, text: document.body?.innerText.slice(0,500)})").await;
+        panic!("WebKitGTK condition failed: {script}; synthetic view: {state}");
+    }
 }
 pub(super) async fn click(app: &tauri::AppHandle, text: &str) {
     let label = serde_json::to_string(text).unwrap();
     until(
         app,
-        &format!("[...document.querySelectorAll('button')].some(b=>b.textContent === {label})"),
+        &format!("[...document.querySelectorAll('button')].some(b=>b.textContent === {label} || b.getAttribute('aria-label') === {label})"),
     )
     .await;
     let script = format!(
-        "(() => {{ const button = [...document.querySelectorAll('button')].find(b => b.textContent === {label}); if (!button) return false; button.focus(); button.click(); return true; }})()"
+        "(() => {{ const button = [...document.querySelectorAll('button')].find(b => b.textContent === {label} || b.getAttribute('aria-label') === {label}); if (!button) return false; button.focus(); button.click(); return true; }})()"
     );
     assert_eq!(evaluate(app, &script).await, true, "native click: {text}");
 }

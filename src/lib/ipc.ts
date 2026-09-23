@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  ProfileMutation, UpdateStatus, DesktopStatus, MonitorStatus, AcknowledgeDesktopAction, NotificationTestAction,
+  TeamRequest, TeamDetails, DiscoveryMutation, ShortcutBindings, ProfileMutation, UpdateStatus, DesktopStatus, MonitorStatus, AcknowledgeDesktopAction, NotificationTestAction,
   ChatRequest, ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
   LookupChannelRequest, ChannelIdentity, StreamLanguage, StreamBrowseRequest, CategoryStreamsRequest, BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
   Account, AppError, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
@@ -9,11 +9,15 @@ import type {
 
 // Only these named operations are available. DTOs are generated from Rust.
 type Commands = {
+  get_team: [TeamRequest, TeamDetails];
+  modify_discovery: [DiscoveryMutation, Settings];
+  save_shortcuts: [ShortcutBindings, Settings];
   desktop_status: [undefined, DesktopStatus];
   dev_notification_test: [NotificationTestAction, null];
   pause_monitor: [undefined, MonitorStatus];
   resume_monitor: [undefined, MonitorStatus];
   request_notification_permission: [undefined, null];
+  acknowledge_navigation_intent: [AcknowledgeDesktopAction, null];
   acknowledge_desktop_action: [AcknowledgeDesktopAction, null];
   quit_application: [undefined, null];
   list_followed_streams: [BrowseRequest, PagedResult<StreamSummary>];
@@ -68,11 +72,15 @@ async function call<K extends keyof Commands>(
 }
 
 export const api = {
+  team: (request: TeamRequest) => call("get_team", request),
+  modifyDiscovery: (request: DiscoveryMutation) => call("modify_discovery", request),
+  saveShortcuts: (request: ShortcutBindings) => call("save_shortcuts", request),
   desktopStatus: () => call("desktop_status"),
   devNotificationTest: (action: NotificationTestAction) => call("dev_notification_test", action),
   pauseMonitor: () => call("pause_monitor"),
   resumeMonitor: () => call("resume_monitor"),
   requestNotificationPermission: () => call("request_notification_permission"),
+  acknowledgeNavigationIntent: (id: string) => call("acknowledge_navigation_intent", { id }),
   acknowledgeDesktopAction: (id: string) => call("acknowledge_desktop_action", { id }),
   quit: () => call("quit_application"),
   followedStreams: (request: BrowseRequest) => call("list_followed_streams", request),

@@ -4,6 +4,7 @@
 [![Version](https://img.shields.io/github/v/release/ChrisLauinger77/stream-gui-rs)](<>)
 [![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/stream-gui-rs/total.svg)](<>)
 [![GPL-3.0](https://img.shields.io/github/license/ChrisLauinger77/stream-gui-rs)](LICENSE)
+![Static Badge](https://img.shields.io/badge/Linux%20%7C%20MacOS%20%7C%20Windows-blue)
 
 <img src="src/assets/app-icon.svg" alt="Stream GUI RS application icon" width="128">
 
@@ -16,7 +17,9 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 ## Features
 
 - Twitch Device Code sign-in with credentials stored in Keychain, Credential Manager, or Secret Service
-- Following, popular live streams, categories, search, and channel details
+- Following, popular live streams, categories, search, channel details, and Twitch Teams
+- Local channel/category bookmarks and hidden discovery lists
+- Home, Back/Forward restoration, configurable local shortcuts, and safe navigation links
 - Server-side language filtering for Live/category streams and exact Twitch-login lookup
 - Streamlink 8.0+ discovery and external playback
 - Streamlink default player, mpv, VLC, and custom executable modes
@@ -31,7 +34,7 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
 - About on every desktop platform and a previewable support report
 
-The list describes the 0.4.0 source tree. See [release notes](docs/release-notes-0.4.0.md) for changes and upgrade guidance, and [Phase 7 validation](docs/phase-7-validation.md) for feature acceptance. Candidate builds are not published releases.
+The source tree includes Phase 8 development on the 0.4.0 baseline; no 0.5.0 release is prepared. See [Phase 8 validation](docs/phase-8-validation.md) for current checks and acceptance gaps. See [release notes](docs/release-notes-0.4.0.md) for changes and upgrade guidance, and [Phase 7 validation](docs/phase-7-validation.md) for feature acceptance. Candidate builds are not published releases.
 
 Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. Background features are available in 0.2.0 and later; v0.1.0 packages retain their original close-to-exit behavior.
 
@@ -114,6 +117,35 @@ The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectiv
 **About Stream GUI RS** is available from the tray/status menu and the main interface. macOS keeps its native AppKit panel; Linux and Windows use one small main-window dialog. About restores a hidden main window, shows the icon, compiled version/commit, and a fixed GitHub repository link. Close/Escape closes the dialog; explicit application Quit still cleans up playback and monitoring.
 
 **Settings → Prepare support report** shows selectable text for manual copying. Rust includes only build/platform metadata, a previously validated numeric Streamlink version (or “not checked”), player mode, and up to sixteen anonymous process phases/failure codes/exit codes. It excludes account/channel identities, credentials, paths, arguments, environment, raw logs and arbitrary error messages. Opening it performs no probe, credential access, upload, clipboard write, or Twitch request. Review the preview before sharing; the full local Developer tools diagnostics are a different, more detailed surface.
+
+## Teams, bookmarks, navigation and shortcuts
+
+**Search → Teams** opens an exact Twitch team name (the final name in its Twitch team address). Team metadata is displayed as text; members are sorted by login with duplicate IDs removed. Up to 300 members are shown, with an explicit limit notice for larger teams. Open a member to see current channel details and Watch. Team membership alone does not establish live/offline status.
+
+Channel and category details offer **Bookmark** and **Hide from discovery**. **Bookmarks** is a local list, independent of Twitch follows and shared across this app's signed-in accounts. Each bookmark stores its stable Twitch ID, kind and a small saved label; labels can become outdated. Opening uses the normal channel/category view, with retained results labeled and an explicit Refresh action. Remove stale bookmarks from the list without resolving them first.
+
+Hidden channels are excluded from **Live** and category stream listings. Hidden categories are excluded from **Categories** and their streams from **Live**. **Following, Search, Teams, bookmarks, exact lookup and direct links remain reachable**, including items that are both hidden and bookmarked. Opening a hidden category directly shows it, while still filtering hidden channels within it. **Settings → Hidden items** reviews and restores entries. Bookmarks and hidden items each allow 200 entries; all preferences still share the 256-KiB settings-file bound. These controls do not affect monitoring, notifications or running playback.
+
+**Home** selects Following. **Back** and **Forward** retain up to twelve history entries, including search query/type, category language, scroll and meaningful focus. Retained results are labeled and do not trigger a request just for navigation; an evicted snapshot loads through Rust again. A new destination or edited search clears Forward history. Refresh remains explicit.
+
+**Settings → Shortcuts** customizes Home, Following, Live, Categories, Search, Watching, Settings, Back, Forward and Refresh. Select Change, press the desired combination, and Save shortcuts. Escape cancels capture; Tab exits normally. Unassign disables an action; Reset restores a draft of the platform defaults. Conflicts (including Control/Command equivalence across platforms) and reserved/unsupported keys are shown before save. Primary means Command on macOS and Ctrl elsewhere. Shortcuts remain local to the focused app and pause during typing and modal dialogs. The OS may intercept its own shortcuts before the app receives them.
+
+## Application links
+
+Installed packages associate the `stream-gui-rs` scheme with these navigation-only forms:
+
+```text
+stream-gui-rs://show
+stream-gui-rs://channel/example_login
+stream-gui-rs://category/509658
+stream-gui-rs://team/example-team
+```
+
+Channel logins allow 1–25 ASCII letters, digits or underscores. Category IDs are positive decimal IDs, at most 32 digits, with no leading zero. Team names allow 1–100 ASCII letters, digits, underscores or hyphens. Login/team case is normalized. Links are limited to 256 bytes. Query strings, fragments, percent encoding, Unicode identifiers, credentials, ports, extra segments and other actions are rejected. Links never start playback, change settings or execute commands.
+
+An existing instance is shown and activated. On a cold start, the latest valid intent waits in Rust until settings and authentication restoration are ready; a browsing link received while signed out waits for sign-in. Repeated links replace the pending intent, and old acknowledgements cannot erase a newer one. Navigation already started under an old account is discarded on logout. Nothing is persisted as link history.
+
+Protocol registration comes from installed packages. Bare development binaries and unintegrated AppImages/portable Windows copies do not automatically claim OS associations; Linux/Windows developers can pass one literal link as the executable's sole argument. macOS uses native LaunchServices activation of an installed app bundle; launching multiple bare binaries directly is outside that contract. Linux forwarding uses the user session bus. A separate CLI is deferred: the protocol handler provides navigation forwarding, not a scripting/result API.
 
 ## Profiles, external chat and update checks
 

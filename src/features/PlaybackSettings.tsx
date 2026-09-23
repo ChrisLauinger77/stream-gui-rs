@@ -3,15 +3,16 @@ import { api } from "../lib/ipc";
 import type { ChatProvider, PlayerDiscovery, ProbeResult, Settings, TextScale, Theme } from "../lib/generated";
 import { QualitySelect } from "../playback/QualitySelect";
 import { playbackError } from "../playback/usePlayback";
-import { shortcutLabels } from "../app/shortcuts";
+import { ShortcutEditor } from "./ShortcutEditor";
 
+import { SavedItems } from "./DiscoveryPreferences";
 import { PlayerFields } from "./PlayerFields";
 import { PlayerProfiles } from "./PlayerProfiles";
 import { UpdateAwareness } from "./UpdateAwareness";
 import { BackgroundSettings } from "./BackgroundSettings";
 import type { useDesktop } from "../app/useDesktop";
 
-const sections = ["Playback", "Streamlink", "Player", "Appearance", "Background", "Updates", "Shortcuts"] as const;
+const sections = ["Playback", "Streamlink", "Player", "Appearance", "Background", "Updates", "Shortcuts", "Hidden items"] as const;
 type Section = typeof sections[number];
 type SettingsProps = { desktop: ReturnType<typeof useDesktop>; saved: Settings | null; saving: boolean; commit: (action: () => Promise<Settings>) => Promise<Settings> };
 type DraftEdits = Omit<Partial<Settings>, "player" | "background" | "profiles" | "selectedProfileId"> & {
@@ -46,7 +47,6 @@ function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { save
     try { await action(); } catch (error) { setError(playbackError(error)); }
     finally { inFlight.current = false; setBusy(null); }
   };
-  const shortcuts = shortcutLabels();
   return <div className="settings-content">
     <nav className="settings-nav" aria-label="Settings sections">{sections.map(name => <button key={name} aria-current={section === name ? "page" : undefined} onClick={() => setSection(name)}>{name}</button>)}</nav>
     <form noValidate className="playback-settings" aria-label="Application preferences" onSubmit={event => {
@@ -103,12 +103,10 @@ function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { save
         <div hidden={section !== "Background"} className="setting-group">
           <BackgroundSettings value={draft.background} change={background => edit({ background })} desktop={desktop} />
         </div>
+        {section === "Hidden items" && <SavedItems list="hidden" />}
         {section === "Updates" && <UpdateAwareness />}
-        <div hidden={section !== "Shortcuts"}>
-          <p className="muted">Available while this app is focused. Shortcuts pause while typing, choosing an input value, or using a modal dialog.</p>
-          <dl className="shortcut-reference">{Object.entries(shortcuts).map(([action, label]) => <div key={action}><dt>{action === "search" ? "Focus Search" : action[0].toUpperCase() + action.slice(1)}</dt><dd><kbd>{label}</kbd></dd></div>)}</dl>
-        </div>
-        {section !== "Shortcuts" && section !== "Updates" && <div className="settings-save"><button type="submit" disabled={saving}>Save settings</button><button type="button" onClick={() => { setEdits({}); setProbe(null); setError(null); setMessage("Unsaved changes discarded."); }}>Cancel changes</button><span className="muted">{JSON.stringify(draft) !== JSON.stringify(saved) ? "Unsaved changes" : "Saved preferences"}</span></div>}
+        {section === "Shortcuts" && <ShortcutEditor />}
+        {section !== "Shortcuts" && section !== "Updates" && section !== "Hidden items" && <div className="settings-save"><button type="submit" disabled={saving}>Save settings</button><button type="button" onClick={() => { setEdits({}); setProbe(null); setError(null); setMessage("Unsaved changes discarded."); }}>Cancel changes</button><span className="muted">{JSON.stringify(draft) !== JSON.stringify(saved) ? "Unsaved changes" : "Saved preferences"}</span></div>}
       </fieldset>
       {(busy || saving) && <p role="status">{busy === "probe" ? "Testing Streamlink…" : "Working…"}</p>}
       {error && <p className="error" role="alert">{error}</p>}

@@ -822,3 +822,138 @@ async fn exact_and_filtered_requests_cannot_resume_as_same_account_new_session()
         );
     }
 }
+
+fn team_fixture(count: usize) -> serde_json::Value {
+    serde_json::json!({"data":[{"id":"42","team_name":"synthetic-team","team_display_name":"Synthetic Team","background_image_url":null,"banner":null,"created_at":"","updated_at":"","info":"<b>Plain text only</b>","thumbnail_url":"https://untrusted.invalid/image.png","users":(1..=count).rev().map(|id|serde_json::json!({"user_id":id.to_string(),"user_login":format!("member{id:04}"),"user_name":format!("Member {id}")})).collect::<Vec<_>>()}]})
+}
+#[tokio::test]
+async fn team_lookup_sorts_deduplicates_bounds_and_reuses_session_cache() {
+    let mut body = team_fixture(305);
+    let duplicate = body["data"][0]["users"][0].clone();
+    body["data"][0]["users"]
+        .as_array_mut()
+        .unwrap()
+        .push(duplicate);
+    let (server, client, page) = client(vec![Reply::json(200, body.to_string())]).await;
+    let request = TeamRequest {
+        name: "SYNTHETIC-TEAM".into(),
+        page,
+    };
+    let result = client
+        .browse_team(request.clone(), &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(result.member_count, 305);
+    assert!(result.limited);
+    assert_eq!(result.members.items.len(), 300);
+    assert_eq!(result.members.items[0].login, "member0001");
+    assert!(result.image_url.is_none());
+    assert_eq!(result.members.items[0].live_state, LiveState::Unknown);
+    let cached = client
+        .browse_team(request, &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(cached.members.freshness, DataFreshness::Cached);
+    assert_eq!(server.requests().len(), 1);
+    assert!(server.requests()[0].contains("/helix/teams?name=synthetic-team"));
+}
+#[tokio::test]
+async fn team_lookup_distinguishes_empty_missing_invalid_and_provider_errors() {
+    let (_server, client, page) = client(vec![
+        Reply::json(200, team_fixture(0).to_string()),
+        Reply::json(404, "private"),
+        Reply::json(200, r#"{"data":[]}"#),
+        Reply::json(200, r#"{"data":[{}]}"#),
+    ])
+    .await;
+    let mut request = TeamRequest {
+        name: "synthetic-team".into(),
+        page,
+    };
+    request.page.refresh = true;
+    assert_eq!(
+        client
+            .browse_team(request.clone(), &CancellationToken::new())
+            .await
+            .unwrap()
+            .member_count,
+        0
+    );
+    for code in [
+        ErrorCode::NotFound,
+        ErrorCode::NotFound,
+        ErrorCode::InvalidResponse,
+    ] {
+        assert_eq!(
+            client
+                .browse_team(request.clone(), &CancellationToken::new())
+                .await
+                .unwrap_err()
+                .code,
+            code
+        );
+    }
+    for name in [
+        "",
+        "../team",
+        "team/name",
+        "tëam",
+        "team%2fname",
+        "team?x=1",
+    ] {
+        request.name = name.into();
+        assert_eq!(
+            client
+                .browse_team(request.clone(), &CancellationToken::new())
+                .await
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidInput
+        );
+    }
+}
+#[tokio::test]
+async fn team_lookup_does_not_cross_logout_or_replacement_session() {
+    let gate = Arc::new(tokio::sync::Notify::new());
+    let (server, client, page) = client(vec![
+        Reply::json(200, team_fixture(1).to_string()).gated(gate.clone()),
+        Reply::json(200, team_fixture(0).to_string()),
+    ])
+    .await;
+    let request = TeamRequest {
+        name: "synthetic-team".into(),
+        page,
+    };
+    let cancel = CancellationToken::new();
+    let task = client.browse_team(request.clone(), &cancel);
+    tokio::pin!(task);
+    tokio::select! { _ = &mut task => panic!("request should be gated"), _ = server.wait_for_requests(1) => {} }
+    client.auth.logout().await.unwrap();
+    client.auth.login().await.unwrap();
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    client.auth.tick().await.unwrap();
+    let replacement = client.auth.status().await.session_id.unwrap();
+    assert_ne!(replacement, request.page.session_id);
+    gate.notify_one();
+    assert_eq!(task.await.unwrap_err().code, ErrorCode::Unauthenticated);
+    assert_eq!(
+        client
+            .browse_team(request.clone(), &cancel)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::Unauthenticated
+    );
+    assert_eq!(server.requests().len(), 1);
+    let mut next = request;
+    next.page.session_id = replacement;
+    assert_eq!(
+        client
+            .browse_team(next, &cancel)
+            .await
+            .unwrap()
+            .member_count,
+        0
+    );
+    assert_eq!(server.requests().len(), 2);
+}

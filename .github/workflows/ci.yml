@@ -100,6 +100,13 @@ jobs:
         # Rebuild with the opt-in feature; the normal build above must omit it.
         # --bundles selects packaging even with bundle.active=false.
         run: npm run tauri build -- --debug --bundles ${{ matrix.bundles }} --features custom-protocol,notification-acceptance --ci
+      - name: Verify packaged Linux protocol dispatch
+        if: runner.os == 'Linux' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))
+        shell: bash
+        run: |
+          packages=(src-tauri/target/debug/bundle/deb/*.deb)
+          test "${#packages[@]}" -eq 1
+          STREAM_GUI_TEST_DEB="$PWD/${packages[0]}" cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_browser_open --features test-support packaged_protocol_dispatch_passes_the_exact_uri_to_the_launcher -- --ignored
       - name: Verify macOS app bundle signature
         if: runner.os == 'macOS' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))
         run: |
