@@ -4,10 +4,10 @@ Implementation date: 2026-09-22. Baseline: completed Phase 7 / v0.4.0,
 `0c5397ca6cc1b2605d176f81f0f5f552d27c6069`, with a clean `main` matching
 `origin/main` before work. Implementation branch: `codex/phase-8-discovery`.
 
-The implementation, hosted checks and user-reported Linux and Windows native results
-described below are complete. Phase 8's cross-platform completion gate remains open
-until macOS installed-package/native acceptance is recorded. No version bump, release
-preparation, tag, publication or later-phase work is part of this change.
+The implementation, hosted checks and user-reported Linux, macOS and Windows native
+results are described below. All three native acceptance gates have reported passes;
+PR readiness additionally requires green hosted checks on its current HEAD. No version
+bump, release preparation, tag, publication or later-phase work is part of this change.
 
 ## Preparation and decisions
 
@@ -384,8 +384,8 @@ association or real app activation; the user-reported Linux test below did.
 
 The same run produced [macOS ARM64](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881346703/artifacts/10761054683)
 and [Windows X64](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881346703/artifacts/10761680983)
-acceptance artifacts for merge commit `68b606e`. macOS has not been manually tested;
-the user-reported Windows 11 result is recorded below.
+acceptance artifacts for merge commit `68b606e`. User-reported native results for both
+platforms are recorded below.
 Subsequent documentation-only follow-ups change no application/build input; current
 HEAD check results are available on [PR #21's checks](https://github.com/ChrisLauinger77/stream-gui-rs/pull/21/checks).
 
@@ -401,16 +401,21 @@ passed using the PR's NSIS package, with About showing the expected commit. This
 includes retained login/settings and Teams, installed links while closed/running/hidden
 with malformed-link rejection and no autoplay, real playback with Stop/Restart,
 tray/background and Quit cleanup without console flashes, plus keyboard/shortcuts,
-text sizes and 200% zoom. The exact About text was not transcribed. No macOS test
-host/result has been supplied. No real Twitch credentials were read or captured by
+text sizes and 200% zoom. The user also confirmed that the full focused macOS
+checklist passed using the Phase 8 PR app package on Apple Silicon: retained
+login/settings and real Teams, installed links while closed/running/hidden with
+malformed-link rejection and no autoplay, real playback with Stop/Restart,
+status-item and Command-Q behavior, plus keyboard/shortcuts, text sizes and 200%
+zoom. The exact About text was not transcribed on either platform. These are
+user-reported manual results; no real Twitch credentials were read or captured by
 the agent during this review.
 
 | Evidence | Linux | macOS | Windows |
 | --- | --- | --- | --- |
-| Installed protocol registration; cold/running/hidden links; malformed links; no autoplay | Passed, user reported | Not run | Passed, user reported |
-| Existing login/settings; real Teams/channel data | Passed as part of "all new" report; details not itemized | Not run | Passed, user reported |
-| Real playback, Stop/Restart, tray/background and Quit cleanup | Real streaming passed; lifecycle details not itemized | Not run | Passed, user reported; no console flashes |
-| Manual keyboard, focus, shortcut cancellation, text scaling and 200% zoom | Passed, user reported; screen reader not separately identified | Not run | Passed, user reported; screen reader not separately identified |
+| Installed protocol registration; cold/running/hidden links; malformed links; no autoplay | Passed, user reported | Passed, user reported | Passed, user reported |
+| Existing login/settings; real Teams/channel data | Passed as part of "all new" report; details not itemized | Passed, user reported | Passed, user reported |
+| Real playback, Stop/Restart, tray/background and Quit cleanup | Real streaming passed; lifecycle details not itemized | Passed, user reported; Command-Q | Passed, user reported; no console flashes |
+| Manual keyboard, focus, shortcut cancellation, text scaling and 200% zoom | Passed, user reported; screen reader not separately identified | Passed, user reported; screen reader not separately identified | Passed, user reported; screen reader not separately identified |
 
 ### Focused installed-package checklist
 
@@ -442,9 +447,10 @@ acceptance.
    controls remain reachable, focus visible, and status/conflict messages and labels
    understandable; record screen-reader checks as not run if unavailable.
 
-The PR remains Draft until hosted checks on the final PR HEAD and all three native
-acceptance gates pass. Documentation updates alone do not require repeating the
-unchanged expensive local suite; `git diff --check` and claim/path review still apply.
+All three native acceptance gates have user-reported passes. The PR may be marked
+Ready once hosted checks on the final PR HEAD pass; this does not authorize a merge.
+Documentation updates alone do not require repeating the unchanged expensive local
+suite; `git diff --check` and claim/path review still apply.
 
 ## Commit and scope record
 
