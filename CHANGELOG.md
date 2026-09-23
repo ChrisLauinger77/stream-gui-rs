@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-09-23
+
+### Added
+
+- Twitch Teams browsing with direct access to member channels and the existing Watch flow.
+- Local channel and category bookmarks, plus hide lists for passive discovery; direct navigation and other browsing views remain reachable.
+- Configurable application-local shortcuts with conflict detection, unassign and reset controls.
+- Strict `stream-gui-rs://` navigation links for Show, channels, categories and teams, without automatic playback.
+- Settings schema 7 migration with safe defaults for the new discovery lists and shortcuts.
+
+### Improved
+
+- Home, Back and Forward navigation retains bounded search, scroll and focus state.
+- Installed links activate the existing application instance on Linux and Windows and use bundle activation on macOS.
+
 ## 0.4.0 - 2026-09-22
 
 ### Added
