@@ -201,7 +201,7 @@ unsupported serde attributes remain; Rust serde validation still applies.
 | Linux background, explicitly `--ignored --test-threads=1` | **5 passed**, including Phase 6/7/8 and Wayland titlebar |
 | Non-publishing Tauri custom-protocol debug build | Passed using `ciCompileOnlyPublicClient123` |
 | Final generated-file/permission consistency and `git diff --check` | Passed; regeneration is byte-for-byte stable |
-| Hosted Linux/macOS/Windows Desktop checks and CodeQL | Not run; the user requested that this branch remain local |
+| Hosted Linux/macOS/Windows Desktop checks and CodeQL | Initially not run under the local-only instruction; see the PR finalization record below |
 
 ## Native evidence and remaining acceptance
 
@@ -231,15 +231,209 @@ Outstanding evidence required before declaring cross-platform Phase 8 complete:
   current native fixture covers startup inbox delivery and actual process forwarding,
   not installer registration. Real Twitch Teams and real Streamlink/mpv/VLC audiovisual
   playback, keyboard-only/screen-reader acceptance remain unobserved in this run.
-- macOS native WKWebView, Command semantics, installed universal app protocol
+- macOS native WKWebView, Command semantics, installed app-bundle protocol
   cold/running/hidden activation, About/status item and Command-Q cleanup. No macOS
   runtime is available on this host.
 - Windows WebView2, installed protocol cold/running/hidden activation, keyboard,
   no-console behavior, tray/background and Quit cleanup. No Windows runtime is
   available on this host.
-- Hosted checks on the implementation commit. Baseline hosted success is not evidence
-  for this branch. The user explicitly chose to keep this branch local after the
-  implementation was committed and reviewed; no push or pull request was made.
+- Current-commit hosted checks and installed native acceptance. The initial
+  local-only decision was superseded by the explicit PR finalization request below;
+  baseline hosted success is not evidence for this branch.
+
+## PR finalization — 2026-09-23
+
+The user subsequently authorized a normal push and PR finalization, superseding the
+earlier local-only decision. Before pushing, `codex/phase-8-discovery` was clean at
+`1e64c427916655d12573225101e126e709c3be44`, with no untracked files. Local and remote
+`main` matched `0c5397ca6cc1b2605d176f81f0f5f552d27c6069`. The existing platform-badge
+commit `7ae118a` was preserved. Package metadata, both lockfiles and Tauri configuration
+still declared 0.4.0. No history was rewritten.
+
+The branch was pushed normally and [draft PR #21](https://github.com/ChrisLauinger77/stream-gui-rs/pull/21)
+was opened against `main`. No merge, release or tag is authorized by this request.
+
+### Fresh adversarial review
+
+The initial review of the complete `main...1e64c42` diff was read-only. Follow-up
+pointer-event and built-package probes confirmed two defects. Both were reproduced
+before fixing them. No critical/high finding was found. The earlier implementation
+fixes listed above remain in the branch.
+
+**MEDIUM — A: confirmed Linux packaging defect, fixed.** The DEB from
+run `35879294673` advertised the protocol MIME type but its desktop entry had
+`Exec=stream-gui-rs`, without a URI argument field. An isolated GIO launcher probe
+received no arguments. Opening a channel/team link through the OS could show the app
+but could not deliver the requested destination. `src-tauri/tauri.conf.json` now
+selects `src-tauri/packaging/linux.desktop` for DEB/RPM, with `Exec={{exec}} %u`;
+AppImage generation reuses the Debian template. This uses Tauri's existing template
+hook without another dependency or runtime association writes. The upstream
+[desktop-entry generator](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-bundler/src/bundle/linux/freedesktop/mod.rs)
+and [default template](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-bundler/src/bundle/linux/freedesktop/main.desktop)
+explain why MIME metadata alone was insufficient.
+
+The regression `packaged_protocol_dispatch_passes_the_exact_uri_to_the_launcher`
+in `src-tauri/tests/linux_browser_open.rs` extracts the actual built DEB, retains
+its launcher argument fields, and replaces only the executable with the existing
+native fixture. Isolated XDG associations deliver channel, team and malformed-query
+URIs unchanged; the existing Rust parser remains responsible for rejection. It
+failed on the downloaded CI package, then passed on the corrected locally built
+DEB. All **3 Linux browser/package checks** passed together, as did formatting,
+all-target desktop check, strict Clippy, the Tauri custom-protocol DEB build and
+`git diff --check`. CI now runs this package regression before uploading Linux
+acceptance artifacts. These synthetic checks do not establish real-account native
+acceptance or installed AppImage/RPM integration.
+
+Packaging fix commit: `e91531b4cd177632aaa34d7881fd169631a6aa4a`
+(`fix(packaging): forward Linux protocol links to the app`). To repeat the focused
+package check after building a DEB, set `STREAM_GUI_TEST_DEB` to its absolute path
+and run:
+
+```sh
+cargo test --locked --manifest-path src-tauri/Cargo.toml --test linux_browser_open --features test-support packaged_protocol_dispatch_passes_the_exact_uri_to_the_launcher -- --ignored
+```
+
+**LOW — A: confirmed defect, fixed.** In
+`src/features/ShortcutEditor.tsx`, moving focus from the listening Change button to
+Cancel capture ran the blur handler first. That removed Cancel before its click
+handler could run, leaving focus without its target and the stale "Press a shortcut"
+status. Moving focus elsewhere also left that status after capture ended. Reproduce
+by starting capture and clicking Cancel, or clicking another focusable control.
+The fix explicitly focuses Change when capture begins, keeps that focus during the
+Cancel pointer press, and announces ordinary blur termination. Two regressions in
+`src/app/Browsing.test.tsx` prove cancellation retains focus/announces completion and
+ordinary blur leaves the binding unchanged with an accurate status. Escape, Tab,
+conflict and modifier tests also pass. No confirmed defect remains unresolved.
+
+Fix commit: `385969fe730e855ab8610385c95a3fb0e14b1949`
+(`fix(ui): preserve shortcut capture cancellation focus`). Post-fix local validation:
+**223 frontend tests passed**, including both previously failing regressions;
+`npm run build` (TypeScript and production build) and `git diff --check` passed.
+Rust, generated DTOs, permissions and dependencies were unchanged by this fix; the
+fresh hosted matrix runs the full backend/native/build suite as well.
+
+Review covered all schema 1–6 migrations, particularly preservation of schema 6
+profiles, selection, Chatterino, channel overrides, background/notification,
+language, low-latency and text-scale preferences. Manual update awareness has no
+persisted preference to migrate. It also covered concurrent global/profile/channel/
+discovery/shortcut writes, remount and failure handling, list bounds and passive-hide
+precedence, Teams authentication/session/cache bounds, twelve-entry history and focus,
+the ten shortcut actions, parser rejection cases, startup/latest-intent delivery,
+Linux/Windows forwarding, separate macOS activation, permissions and support-report
+privacy. Existing auth, supervisor, monitoring, notifications, chat and update
+ownership remain intact. The separate CLI remains deferred.
+
+Installed protocol behavior and physical keyboard/screen-reader interaction are
+**classification C: native/manual verification gaps**, not inferred defects.
+Reproduction requires the corresponding installed package and desktop OS. The
+smallest next step is the focused acceptance below; no speculative code change or
+new regression is warranted without a reproduced failure.
+
+### Hosted and native acceptance record
+
+Hosted checks for the pushed implementation are tracked in
+[Desktop checks 35878094850](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35878094850)
+and [CodeQL 35878091677](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35878091677).
+All three desktop jobs and all three CodeQL analyses (Actions, JavaScript/TypeScript,
+Rust) passed for `1e64c42`; this is pre-fix evidence, not the final acceptance build.
+Each desktop job passed frontend build/tests, candidate-promotion guards, Rust
+formatting, backend/build/process tests, desktop checks/tests, strict Clippy,
+non-publishing Tauri build, registered-client-ID packaging and artifact upload.
+Linux browser tests, macOS bundle signature verification and Windows GUI-subsystem
+verification also passed. No hosted failure required diagnosis or a CI workaround.
+
+The fix is checked separately by
+[Desktop checks 35879294673](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35879294673)
+and [CodeQL 35879288525](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35879288525).
+All three desktop jobs and CodeQL analyses passed for `385969f`, but package inspection
+then found the Linux URI-forwarding defect above. Those artifacts are superseded.
+Native acceptance must use a package containing both fixes, rather than an earlier
+artifact with the same 0.4.0 version label.
+
+The corrected application commit is `e91531b4cd177632aaa34d7881fd169631a6aa4a`.
+[Desktop checks 35881346703](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881346703)
+builds its PR merge commit `68b606e9b971589dc4a0cd719291d945c278f5dd`.
+[CodeQL 35881344020](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881344020)
+passed all three analyses and the aggregate gate; the PR-ref open-alert query returned
+no findings. All three desktop jobs passed, including every applicable build guard,
+format/type/lint check, packaged-mode build and artifact upload. Linux passed the
+new actual-DEB dispatch regression; macOS passed bundle signature verification;
+Windows passed GUI-subsystem verification. The job steps and test logs were inspected
+individually; no failure, retry or workaround was needed for this run.
+
+| Hosted test group | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| Frontend | 223 passed | 223 passed | 223 passed |
+| Backend unit | 181 passed | 181 passed | 181 passed |
+| Native process lifecycle | 42 passed | 36 passed | 36 passed |
+| Build-info/client-ID guards | 3 passed | 3 passed | 3 passed |
+| Candidate promotion guards | 2 passed | 2 passed | 2 passed |
+| Desktop unit, normal / acceptance feature | 10 / 14 passed | 11 / 15 passed | 12 / 16 passed |
+| Browser / actual-DEB protocol dispatch | 2 / 1 passed | Not applicable | Not applicable |
+
+The eligible Linux artifact is
+[Linux X64 acceptance package](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881346703/artifacts/10760629215),
+named `stream-gui-rs-notification-acceptance-Linux-X64-68b606e9b971589dc4a0cd719291d945c278f5dd`.
+Its About identity is **0.4.0 / 68b606e**. Artifact archive SHA-256:
+`77e1f167a9615c2f0a6e9a9ab48c6272d9881d3fc73d2289d7853b1bae2c475d`.
+The downloaded `Stream GUI RS_0.4.0_amd64.deb` has SHA-256
+`b5926326408af0f15e704fc835458ef8a5c8f635289ca8b883614fd9139a4ce5`.
+Its extracted desktop entry was independently checked for the scheme MIME type and
+`Exec=stream-gui-rs %u`. This is package evidence, not a claim that the user's OS
+association or real app activation has been accepted.
+
+The same run produced [macOS ARM64](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881346703/artifacts/10761054683)
+and [Windows X64](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881346703/artifacts/10761680983)
+acceptance artifacts for merge commit `68b606e`. They have not been manually tested.
+The final documentation-only follow-up changes no application/build input; current
+HEAD check results are available on [PR #21's checks](https://github.com/ChrisLauinger77/stream-gui-rs/pull/21/checks).
+
+The user can perform Linux acceptance. No macOS or Windows test host/result has
+been supplied. The earlier synthetic Linux graphical checks remain valid historical
+evidence, but do not establish installed protocol registration, real-service playback
+or manual accessibility on the PR package. No real Twitch credentials were read or
+captured during this review.
+
+| Evidence | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| Installed protocol registration; cold/running/hidden links; malformed links | Pending | Not run | Not run |
+| Existing login/settings; real Teams/channel data | Pending | Not run | Not run |
+| Real playback, Stop/Restart, tray/background and Quit cleanup | Pending | Not run | Not run |
+| Manual keyboard, focus, scaling and screen-reader labels | Pending | Not run | Not run |
+
+### Focused installed-package checklist
+
+Record OS/desktop, artifact/run identity, About commit, and pass/fail/not-run for each
+item. Report symptoms without credentials, sign-in codes, private settings or logs.
+Use the PR acceptance package; it is a debug test build, not a release. CI macOS
+packages use the runner architecture and are not evidence of universal-binary
+acceptance.
+
+1. Quit the previous app, install the matching package, and confirm existing login
+   and settings are retained. Check profiles, chat selection and one channel override.
+2. Open a real team through Search → Teams; open a member and use Back/Forward.
+   Bookmark/unbookmark and hide/restore a channel/category. Confirm hidden items stay
+   reachable through Bookmarks, Search, Teams and direct navigation.
+3. With keyboard only, reach Teams, bookmark/hide controls and Back/Forward. Capture a
+   custom shortcut, cancel with Escape and the Cancel capture button, check a conflict,
+   save a valid binding, use it, and reset/save defaults. Check focus returns to a
+   meaningful control.
+4. Confirm the installed OS association for `stream-gui-rs`. Open
+   `stream-gui-rs://show`, a channel link, a category link and a team link through the
+   OS handler while closed, running and hidden/backgrounded. Check one retained app
+   instance, visible destination focus, and no autoplay. Send a malformed link with
+   a query or extra path segment, then a valid link; the valid link must still work.
+5. Start one real live stream, verify actual audio/video, Stop and Restart. Check
+   tray/background restoration and Quit cleanup of owned playback. On Windows check
+   for console flashes/duplicate instances; on macOS check Command semantics,
+   installed-bundle activation, About and Command-Q.
+6. Check new views at 100/125/150% text scale and 200% browser/system zoom. Confirm
+   controls remain reachable, focus visible, and status/conflict messages and labels
+   understandable; record screen-reader checks as not run if unavailable.
+
+The PR remains Draft until hosted checks on the final PR HEAD and all three native
+acceptance gates pass. Documentation updates alone do not require repeating the
+unchanged expensive local suite; `git diff --check` and claim/path review still apply.
 
 ## Commit and scope record
 
@@ -251,7 +445,10 @@ Outstanding evidence required before declaring cross-platform Phase 8 complete:
 - `232abbf` — bound development file watching so native build output cannot exhaust Vite watchers.
 - `088c866` — typed deep links, native activation, generated permissions and native/adversarial acceptance.
 - `186c5a5` — README, architecture, durable AGENTS invariants and this validation report.
-- A final documentation-only follow-up records the decision to keep the branch local.
+- `7ae118a` — existing platform-support badge, preserved during finalization.
+- `1e64c42` — the initial local-only decision, later superseded by PR authorization.
+- `385969f` — shortcut cancellation focus/status regression fix.
+- `e91531b` — Linux package URI argument forwarding and actual-DEB regression.
 
 Versions in package metadata, lockfiles and Tauri configuration remain **0.4.0**.
 No release/version-preparation command, release tag, merge or publication was run.
