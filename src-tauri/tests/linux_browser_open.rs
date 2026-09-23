@@ -33,13 +33,75 @@ fn check_destination(destination: &str) {
         "[Default Applications]\nx-scheme-handler/https=test-browser.desktop;\n",
     )
     .unwrap();
+    check_handler(directory.path(), &marker, destination);
+}
+
+#[test]
+#[ignore = "requires a built DEB at STREAM_GUI_TEST_DEB; never launches the real app"]
+fn packaged_protocol_dispatch_passes_the_exact_uri_to_the_launcher() {
+    let package = std::env::var_os("STREAM_GUI_TEST_DEB").expect("set STREAM_GUI_TEST_DEB");
+    let extracted = tempfile::tempdir().unwrap();
+    assert!(
+        Command::new("dpkg-deb")
+            .arg("--extract")
+            .arg(package)
+            .arg(extracted.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let entry = fs::read_to_string(
+        extracted
+            .path()
+            .join("usr/share/applications/Stream GUI RS.desktop"),
+    )
+    .unwrap();
+    assert!(
+        entry.lines().any(
+            |line| line.strip_prefix("MimeType=").is_some_and(|types| types
+                .split(';')
+                .any(|value| value == "x-scheme-handler/stream-gui-rs"))
+        )
+    );
+    for destination in [
+        "stream-gui-rs://channel/example_login",
+        "stream-gui-rs://team/example-team",
+        "stream-gui-rs://channel/example_login?unexpected=1",
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        let applications = directory.path().join("applications");
+        fs::create_dir(&applications).unwrap();
+        let marker = directory.path().join("opened.json");
+        // Substitute only the executable; exercise the packaged argument fields
+        // through GIO without starting the app or using the user's associations.
+        let probe = entry.replacen(
+            "Exec=stream-gui-rs",
+            &format!(
+                "Exec=\"{}\" --browser-probe \"{}\"",
+                env!("CARGO_BIN_EXE_fake-streamlink"),
+                marker.display()
+            ),
+            1,
+        );
+        assert_ne!(entry, probe);
+        fs::write(applications.join("test-browser.desktop"), probe).unwrap();
+        fs::write(
+            directory.path().join("mimeapps.list"),
+            "[Default Applications]\nx-scheme-handler/stream-gui-rs=test-browser.desktop;\n",
+        )
+        .unwrap();
+        check_handler(directory.path(), &marker, destination);
+    }
+}
+
+fn check_handler(directory: &Path, marker: &Path, destination: &str) {
     let result = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "isolated_browser_dispatch", "--nocapture"])
-        .env("STREAM_GUI_BROWSER_TEST_MARKER", &marker)
+        .env("STREAM_GUI_BROWSER_TEST_MARKER", marker)
         .env("STREAM_GUI_BROWSER_TEST_DESTINATION", destination)
-        .env("XDG_CONFIG_HOME", directory.path())
-        .env("XDG_DATA_HOME", directory.path())
-        .env("XDG_DATA_DIRS", directory.path())
+        .env("XDG_CONFIG_HOME", directory)
+        .env("XDG_DATA_HOME", directory)
+        .env("XDG_DATA_DIRS", directory)
         .env("XDG_CURRENT_DESKTOP", "")
         .env("GIO_USE_VFS", "local")
         .env(
