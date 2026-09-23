@@ -4,10 +4,10 @@ Implementation date: 2026-09-22. Baseline: completed Phase 7 / v0.4.0,
 `0c5397ca6cc1b2605d176f81f0f5f552d27c6069`, with a clean `main` matching
 `origin/main` before work. Implementation branch: `codex/phase-8-discovery`.
 
-The implementation and Linux checks described below are complete. Phase 8's
-cross-platform completion gate remains open until hosted checks and the outstanding
-installed-package/native acceptance checks are recorded. No version bump, release
-preparation, tag, publication or later-phase work is part of this change.
+The implementation, hosted checks and user-reported Linux native acceptance described
+below are complete. Phase 8's cross-platform completion gate remains open until
+macOS and Windows installed-package/native acceptance is recorded. No version bump,
+release preparation, tag, publication or later-phase work is part of this change.
 
 ## Preparation and decisions
 
@@ -225,7 +225,7 @@ profiles/chat/update presentation and background restore/reload/Quit. The titleb
 scenario ran through the Wayland backend; Phase 8 itself used the configured X11 GTK
 backend in this graphical session. No real notification server was substituted.
 
-Outstanding evidence required before declaring cross-platform Phase 8 complete:
+Evidence outstanding after the initial local run, before PR finalization:
 
 - Linux installed package protocol association and actual OS URI cold launch; the
   current native fixture covers startup inbox delivery and actual process forwarding,
@@ -379,8 +379,8 @@ Its About identity is **0.4.0 / 68b606e**. Artifact archive SHA-256:
 The downloaded `Stream GUI RS_0.4.0_amd64.deb` has SHA-256
 `b5926326408af0f15e704fc835458ef8a5c8f635289ca8b883614fd9139a4ce5`.
 Its extracted desktop entry was independently checked for the scheme MIME type and
-`Exec=stream-gui-rs %u`. This is package evidence, not a claim that the user's OS
-association or real app activation has been accepted.
+`Exec=stream-gui-rs %u`. This package inspection alone did not establish OS
+association or real app activation; the user-reported Linux test below did.
 
 The same run produced [macOS ARM64](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881346703/artifacts/10761054683)
 and [Windows X64](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881346703/artifacts/10761680983)
@@ -388,18 +388,22 @@ acceptance artifacts for merge commit `68b606e`. They have not been manually tes
 The final documentation-only follow-up changes no application/build input; current
 HEAD check results are available on [PR #21's checks](https://github.com/ChrisLauinger77/stream-gui-rs/pull/21/checks).
 
-The user can perform Linux acceptance. No macOS or Windows test host/result has
-been supplied. The earlier synthetic Linux graphical checks remain valid historical
-evidence, but do not establish installed protocol registration, real-service playback
-or manual accessibility on the PR package. No real Twitch credentials were read or
-captured during this review.
+After the Linux package handoff, the user reported that all new Phase 8 behavior and
+real streaming worked on Linux. In a follow-up, the user explicitly confirmed that
+installed protocol links worked while closed, running and hidden; a malformed link
+was rejected without autoplay; and keyboard focus, shortcut cancellation, text sizes
+and 200% zoom checks passed on Debian Forky under Wayland. This is **user-reported
+manual acceptance**, distinct from the earlier synthetic graphical checks and
+hosted CI. The desktop environment and observed About commit were not separately
+reported. No macOS or Windows test host/result has been supplied. No real Twitch
+credentials were read or captured by the agent during this review.
 
 | Evidence | Linux | macOS | Windows |
 | --- | --- | --- | --- |
-| Installed protocol registration; cold/running/hidden links; malformed links | Pending | Not run | Not run |
-| Existing login/settings; real Teams/channel data | Pending | Not run | Not run |
-| Real playback, Stop/Restart, tray/background and Quit cleanup | Pending | Not run | Not run |
-| Manual keyboard, focus, scaling and screen-reader labels | Pending | Not run | Not run |
+| Installed protocol registration; cold/running/hidden links; malformed links; no autoplay | Passed, user reported | Not run | Not run |
+| Existing login/settings; real Teams/channel data | Passed as part of "all new" report; details not itemized | Not run | Not run |
+| Real playback, Stop/Restart, tray/background and Quit cleanup | Real streaming passed; lifecycle details not itemized | Not run | Not run |
+| Manual keyboard, focus, shortcut cancellation, text scaling and 200% zoom | Passed, user reported; screen reader not separately identified | Not run | Not run |
 
 ### Focused installed-package checklist
 
