@@ -1919,6 +1919,33 @@ test("shortcut capture rejects unsupported keys, exits with Tab and uses macOS l
   expect(text()).toContain("Control+Option+Shift+B");
 });
 
+test("pointer cancellation of shortcut capture retains focus and announces cancellation", async () => {
+  await render(); await click("Settings"); await click("Shortcuts", ".settings-nav");
+  const change = button("Change Focus Search shortcut");
+  await act(async () => { change.focus(); change.click(); });
+  const cancel = button("Cancel capture");
+  await act(async () => {
+    // jsdom does not perform the browser's default mousedown focus transfer.
+    if (cancel.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }))) cancel.focus();
+  });
+  await act(async () => { if (cancel.isConnected) cancel.click(); });
+  expect(change.getAttribute("aria-pressed")).toBe("false");
+  expect(text()).toContain("Capture cancelled.");
+  expect(document.activeElement).toBe(change);
+  expect(api.saveShortcuts).not.toHaveBeenCalled();
+});
+
+test("leaving shortcut capture updates its status without changing the binding", async () => {
+  await render(); await click("Settings"); await click("Shortcuts", ".settings-nav");
+  const change = button("Change Focus Search shortcut");
+  await act(async () => { change.focus(); change.click(); });
+  await act(async () => { button("Reset shortcuts to defaults").focus(); });
+  expect(change.getAttribute("aria-pressed")).toBe("false");
+  expect(text()).not.toContain("Press a shortcut.");
+  expect(text()).toContain("Capture ended.");
+  expect(container.querySelector('[aria-label="Focus Search binding: Ctrl+K"]')).not.toBeNull();
+});
+
 test("shortcut mutations serialize with global saves and accepted state survives remount", async () => {
   const pending = deferred<import("../lib/generated").Settings>();
   vi.mocked(api.saveShortcuts).mockReturnValue(pending.promise);
