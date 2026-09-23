@@ -4,10 +4,10 @@ Implementation date: 2026-09-22. Baseline: completed Phase 7 / v0.4.0,
 `0c5397ca6cc1b2605d176f81f0f5f552d27c6069`, with a clean `main` matching
 `origin/main` before work. Implementation branch: `codex/phase-8-discovery`.
 
-The implementation, hosted checks and user-reported Linux native acceptance described
-below are complete. Phase 8's cross-platform completion gate remains open until
-macOS and Windows installed-package/native acceptance is recorded. No version bump,
-release preparation, tag, publication or later-phase work is part of this change.
+The implementation, hosted checks and user-reported Linux and Windows native results
+described below are complete. Phase 8's cross-platform completion gate remains open
+until macOS installed-package/native acceptance is recorded. No version bump, release
+preparation, tag, publication or later-phase work is part of this change.
 
 ## Preparation and decisions
 
@@ -384,8 +384,9 @@ association or real app activation; the user-reported Linux test below did.
 
 The same run produced [macOS ARM64](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881346703/artifacts/10761054683)
 and [Windows X64](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881346703/artifacts/10761680983)
-acceptance artifacts for merge commit `68b606e`. They have not been manually tested.
-The final documentation-only follow-up changes no application/build input; current
+acceptance artifacts for merge commit `68b606e`. macOS has not been manually tested;
+the user-reported Windows 11 result is recorded below.
+Subsequent documentation-only follow-ups change no application/build input; current
 HEAD check results are available on [PR #21's checks](https://github.com/ChrisLauinger77/stream-gui-rs/pull/21/checks).
 
 After the Linux package handoff, the user reported that all new Phase 8 behavior and
@@ -395,15 +396,21 @@ was rejected without autoplay; and keyboard focus, shortcut cancellation, text s
 and 200% zoom checks passed on Debian Forky under Wayland. This is **user-reported
 manual acceptance**, distinct from the earlier synthetic graphical checks and
 hosted CI. The desktop environment and observed About commit were not separately
-reported. No macOS or Windows test host/result has been supplied. No real Twitch
-credentials were read or captured by the agent during this review.
+reported. The user subsequently confirmed that the full focused Windows 11 checklist
+passed using the PR's NSIS package, with About showing the expected commit. This
+includes retained login/settings and Teams, installed links while closed/running/hidden
+with malformed-link rejection and no autoplay, real playback with Stop/Restart,
+tray/background and Quit cleanup without console flashes, plus keyboard/shortcuts,
+text sizes and 200% zoom. The exact About text was not transcribed. No macOS test
+host/result has been supplied. No real Twitch credentials were read or captured by
+the agent during this review.
 
 | Evidence | Linux | macOS | Windows |
 | --- | --- | --- | --- |
-| Installed protocol registration; cold/running/hidden links; malformed links; no autoplay | Passed, user reported | Not run | Not run |
-| Existing login/settings; real Teams/channel data | Passed as part of "all new" report; details not itemized | Not run | Not run |
-| Real playback, Stop/Restart, tray/background and Quit cleanup | Real streaming passed; lifecycle details not itemized | Not run | Not run |
-| Manual keyboard, focus, shortcut cancellation, text scaling and 200% zoom | Passed, user reported; screen reader not separately identified | Not run | Not run |
+| Installed protocol registration; cold/running/hidden links; malformed links; no autoplay | Passed, user reported | Not run | Passed, user reported |
+| Existing login/settings; real Teams/channel data | Passed as part of "all new" report; details not itemized | Not run | Passed, user reported |
+| Real playback, Stop/Restart, tray/background and Quit cleanup | Real streaming passed; lifecycle details not itemized | Not run | Passed, user reported; no console flashes |
+| Manual keyboard, focus, shortcut cancellation, text scaling and 200% zoom | Passed, user reported; screen reader not separately identified | Not run | Passed, user reported; screen reader not separately identified |
 
 ### Focused installed-package checklist
 
