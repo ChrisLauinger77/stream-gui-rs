@@ -1,6 +1,7 @@
 //! External navigation has no execution, credential or playback authority.
 use crate::domain::{AppError, ErrorCode, Result};
 use serde::Serialize;
+use std::ffi::OsStr;
 use std::sync::Mutex;
 use ts_rs::TS;
 
@@ -70,10 +71,16 @@ pub fn parse_link(input: &str) -> Result<NavigationIntent> {
 }
 /// Only the executable and at most one OS protocol argument are accepted.
 /// An ordinary launch restores the existing window without creating navigation.
-pub fn parse_arguments(args: &[String]) -> Result<Option<NavigationIntent>> {
+/// The executable path is opaque and may not be UTF-8 on Unix.
+pub fn parse_arguments<T: AsRef<OsStr>>(args: &[T]) -> Result<Option<NavigationIntent>> {
     match args {
         [_executable] => Ok(None),
-        [_executable, link] => parse_link(link).map(Some),
+        [_executable, link] => {
+            let link = link.as_ref().to_str().ok_or_else(|| {
+                AppError::new(ErrorCode::InvalidInput, "Invalid application arguments.")
+            })?;
+            parse_link(link).map(Some)
+        }
         _ => Err(AppError::new(
             ErrorCode::InvalidInput,
             "Expected one application navigation link.",
@@ -187,9 +194,9 @@ mod tests {
     }
     #[test]
     fn arguments_cannot_carry_a_second_execution_surface() {
-        assert!(parse_arguments(&["app".into()]).unwrap().is_none());
+        assert!(parse_arguments(&[String::from("app")]).unwrap().is_none());
         assert_eq!(
-            parse_arguments(&["app".into(), "stream-gui-rs://show".into()]).unwrap(),
+            parse_arguments(&[String::from("app"), String::from("stream-gui-rs://show"),]).unwrap(),
             Some(NavigationIntent::Show)
         );
         for args in [
@@ -202,5 +209,30 @@ mod tests {
                 parse_arguments(&args.into_iter().map(str::to_owned).collect::<Vec<_>>()).is_err()
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_executable_path_does_not_block_startup_navigation() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let executable = OsString::from_vec(b"/tmp/stream-gui-rs-\xff".to_vec());
+        assert!(
+            parse_arguments(std::slice::from_ref(&executable))
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            parse_arguments(&[executable.clone(), OsString::from("stream-gui-rs://show")]).unwrap(),
+            Some(NavigationIntent::Show)
+        );
+        let error = parse_arguments(&[
+            executable,
+            OsString::from_vec(b"stream-gui-rs://show\xff".to_vec()),
+        ])
+        .unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidInput);
+        assert_eq!(error.message, "Invalid application arguments.");
     }
 }

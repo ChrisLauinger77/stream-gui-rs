@@ -257,8 +257,9 @@ was opened against `main`. No merge, release or tag is authorized by this reques
 
 The initial review of the complete `main...1e64c42` diff was read-only. Follow-up
 pointer-event and built-package probes confirmed two defects. Both were reproduced
-before fixing them. No critical/high finding was found. The earlier implementation
-fixes listed above remain in the branch.
+before fixing them. A later PR review found one more confirmed startup-path defect.
+No critical/high finding was found. The earlier implementation fixes listed above
+remain in the branch.
 
 **MEDIUM — A: confirmed Linux packaging defect, fixed.** The DEB from
 run `35879294673` advertised the protocol MIME type but its desktop entry had
@@ -303,7 +304,7 @@ The fix explicitly focuses Change when capture begins, keeps that focus during t
 Cancel pointer press, and announces ordinary blur termination. Two regressions in
 `src/app/Browsing.test.tsx` prove cancellation retains focus/announces completion and
 ordinary blur leaves the binding unchanged with an accurate status. Escape, Tab,
-conflict and modifier tests also pass. No confirmed defect remains unresolved.
+conflict and modifier tests also pass.
 
 Fix commit: `385969fe730e855ab8610385c95a3fb0e14b1949`
 (`fix(ui): preserve shortcut capture cancellation focus`). Post-fix local validation:
@@ -311,6 +312,27 @@ Fix commit: `385969fe730e855ab8610385c95a3fb0e14b1949`
 `npm run build` (TypeScript and production build) and `git diff --check` passed.
 Rust, generated DTOs, permissions and dependencies were unchanged by this fix; the
 fresh hosted matrix runs the full backend/native/build suite as well.
+
+**MEDIUM — A: confirmed Unix startup-path defect, fixed.** The review on PR head
+`86f2e98` found that `desktop::run` converted every OS argument to UTF-8, including
+the executable path. A valid Linux/macOS path with non-UTF-8 bytes therefore failed
+with "Invalid application arguments" before Tauri started, even for an ordinary
+launch. Startup now keeps OS arguments in their native encoding; the shared parser
+ignores the executable argument and decodes only the optional protocol link. Link
+grammar, argument count and safe rejection of non-UTF-8 links are unchanged. The
+Unix regression `non_utf8_executable_path_does_not_block_startup_navigation`
+checks ordinary startup, a valid link and rejection of a non-UTF-8 link. This is
+a focused fix with no new dependency or IPC surface. No confirmed defect remains
+unresolved.
+
+Local validation after this fix: **223 frontend tests**, **182 backend unit tests**
+and **42 Linux process tests** passed; frontend build/typecheck, Rust formatting,
+all-target desktop check, strict Clippy, two Linux browser checks, Tauri debug
+custom-protocol build and `git diff --check` passed. The backend HTTP fixtures
+needed loopback access; their first sandboxed run failed with `EPERM`, and the full
+suite passed when rerun with loopback access. The actual-DEB test was not repeated
+locally because this build used `--no-bundle`; its earlier hosted result remains
+package evidence. Generated TypeScript bindings are unchanged.
 
 Review covered all schema 1–6 migrations, particularly preservation of schema 6
 profiles, selection, Chatterino, channel overrides, background/notification,
@@ -350,7 +372,7 @@ then found the Linux URI-forwarding defect above. Those artifacts are superseded
 Native acceptance must use a package containing both fixes, rather than an earlier
 artifact with the same 0.4.0 version label.
 
-The corrected application commit is `e91531b4cd177632aaa34d7881fd169631a6aa4a`.
+The package-corrected application commit was `e91531b4cd177632aaa34d7881fd169631a6aa4a`.
 [Desktop checks 35881346703](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881346703)
 builds its PR merge commit `68b606e9b971589dc4a0cd719291d945c278f5dd`.
 [CodeQL 35881344020](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881344020)
@@ -360,6 +382,12 @@ format/type/lint check, packaged-mode build and artifact upload. Linux passed th
 new actual-DEB dispatch regression; macOS passed bundle signature verification;
 Windows passed GUI-subsystem verification. The job steps and test logs were inspected
 individually; no failure, retry or workaround was needed for this run.
+
+This matrix predates the later startup-path fix. Current application-source hosted
+results are tracked on [PR #21's checks](https://github.com/ChrisLauinger77/stream-gui-rs/pull/21/checks);
+the regression raises the backend unit count from 181 to 182. User-reported native
+acceptance below used the earlier package with both packaging and shortcut fixes;
+the non-UTF-8 executable-path scenario was not manually reproduced on those hosts.
 
 | Hosted test group | Linux | macOS | Windows |
 | --- | --- | --- | --- |
@@ -386,8 +414,8 @@ The same run produced [macOS ARM64](https://github.com/ChrisLauinger77/stream-gu
 and [Windows X64](https://github.com/ChrisLauinger77/stream-gui-rs/actions/runs/35881346703/artifacts/10761680983)
 acceptance artifacts for merge commit `68b606e`. User-reported native results for both
 platforms are recorded below.
-Subsequent documentation-only follow-ups change no application/build input; current
-HEAD check results are available on [PR #21's checks](https://github.com/ChrisLauinger77/stream-gui-rs/pull/21/checks).
+The subsequent documentation-only follow-ups changed no application/build input.
+The later startup-path fix changes only OS argument parsing and its focused test.
 
 After the Linux package handoff, the user reported that all new Phase 8 behavior and
 real streaming worked on Linux. In a follow-up, the user explicitly confirmed that
@@ -447,8 +475,9 @@ acceptance.
    controls remain reachable, focus visible, and status/conflict messages and labels
    understandable; record screen-reader checks as not run if unavailable.
 
-All three native acceptance gates have user-reported passes. The PR may be marked
-Ready once hosted checks on the final PR HEAD pass; this does not authorize a merge.
+All three native acceptance gates have user-reported passes. The PR is Ready for
+review; hosted checks on the final code HEAD must still pass before merge. This
+does not authorize a merge.
 Documentation updates alone do not require repeating the unchanged expensive local
 suite; `git diff --check` and claim/path review still apply.
 

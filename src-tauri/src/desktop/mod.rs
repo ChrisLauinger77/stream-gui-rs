@@ -146,17 +146,7 @@ fn build_app(initial: Option<crate::navigation::NavigationIntent>) -> tauri::Res
 }
 
 pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let args = std::env::args_os()
-        .take(3)
-        .map(|arg| {
-            arg.into_string().map_err(|_| {
-                crate::domain::AppError::new(
-                    crate::domain::ErrorCode::InvalidInput,
-                    "Invalid application arguments.",
-                )
-            })
-        })
-        .collect::<crate::domain::Result<Vec<_>>>()?;
+    let args = std::env::args_os().take(3).collect::<Vec<_>>();
     let initial = crate::navigation::parse_arguments(&args)?;
     let app = build_app(initial)?;
     // Tauri panics when a setup hook returns an error. Validate and install our
