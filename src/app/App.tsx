@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { DeveloperTools } from "./DeveloperTools";
@@ -7,6 +8,7 @@ import { friendlyError } from "../browse/errors";
 import type { Account, AuthStatus } from "../lib/generated";
 
 import { SettingsProvider } from "../settings/useSettings";
+import { I18nProvider } from "../i18n";
 import { usePlayback } from "../playback/usePlayback";
 import { About } from "../features/About";
 import { SupportReport } from "../features/SupportReport";
@@ -20,16 +22,18 @@ import { useAppearance } from "./useAppearance";
 import { useShortcuts, shortcutLabels } from "./shortcuts";
 
 export function App() {
-  return <SettingsProvider><AppContent /></SettingsProvider>;
+  return <SettingsProvider><I18nProvider><AppContent /></I18nProvider></SettingsProvider>;
 }
 function AppContent() {
+  const { t } = useI18n();
   const [developer, setDeveloper] = useState(false);
   const desktop = useDesktop();
   useEffect(() => { if (desktop.status?.action || desktop.status?.navigation) setDeveloper(false); }, [desktop.status?.action?.id, desktop.status?.navigation?.id]);
-  if (developer) return <><div className="developer-banner"><button onClick={() => setDeveloper(false)}>← Back to browsing</button><span>Developer tools · backend diagnostics</span></div><NotificationAcceptance desktop={desktop} /><DeveloperTools /></>;
+  if (developer) return <><div className="developer-banner"><button onClick={() => setDeveloper(false)}>{t("app.backToBrowsing")}</button><span>{t("app.developerToolsBackendDiagnostics")}</span></div><NotificationAcceptance desktop={desktop} /><DeveloperTools /></>;
   return <Application desktop={desktop} developer={() => setDeveloper(true)} />;
 }
 function Application({ desktop, developer }: { desktop: ReturnType<typeof useDesktop>; developer: () => void }) {
+  const { t, count } = useI18n();
   const auth = useAuthentication();
   const actionState = desktop.actions.current;
   const [notificationTest, setNotificationTest] = useState(() => isNotificationTest(desktop.status) && actionState.handled !== desktop.status?.action?.id);
@@ -123,56 +127,57 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const watch = useCallback((broadcasterId: string) => {
     if (!auth.sessionId) return;
     capture("watching"); setWatching(true); setSettings(false);
-    void run(`launch:${broadcasterId}`, () => api.launch({ authSessionId: auth.sessionId!, broadcasterId, quality: null }), "Streamlink process started. Check Watching for status.");
-  }, [auth.sessionId, run, capture]);
+    void run(`launch:${broadcasterId}`, () => api.launch({ authSessionId: auth.sessionId!, broadcasterId, quality: null }), t("app.playbackStarted"));
+  }, [auth.sessionId, run, capture, t]);
   const activeCount = playback.sessions.filter(session => session.restarting || ["starting", "running", "stopping"].includes(session.phase)).length;
   const controls = <div className="account-controls">
     <span className="connection-dot" aria-hidden="true" />
-    <span>{auth.account?.displayName ?? auth.status?.user?.login ?? "Not connected"}</span>
-    {auth.sessionId && <button className="quiet" disabled={auth.busy === "logout"} onClick={() => { void auth.run("logout"); }}>Sign out</button>}
-    <button ref={watchingButton} className="quiet" aria-label="Watching" title={`Watching (${shortcuts.watching})`} aria-expanded={watching} onClick={event => { if (watching) closeWatching(); else { capture("watching", event.currentTarget); setWatching(true); setSettings(false); } }}>Watching{activeCount > 0 && ` (${activeCount})`}</button>
-    <button ref={settingsButton} className="quiet" title={`Settings (${shortcuts.settings})`} aria-expanded={settings} onClick={event => { if (settings) closeSettings(); else { capture("settings", event.currentTarget); setSettings(true); setWatching(false); } }}>Settings</button>
+    <span>{auth.account?.displayName ?? auth.status?.user?.login ?? t("app.notConnected")}</span>
+    {auth.sessionId && <button className="quiet" disabled={auth.busy === "logout"} onClick={() => { void auth.run("logout"); }}>{t("app.signOut")}</button>}
+    <button ref={watchingButton} className="quiet" aria-label={t("app.watching")} title={t("app.watchingShortcut", { shortcut: shortcuts.watching })} aria-expanded={watching} onClick={event => { if (watching) closeWatching(); else { capture("watching", event.currentTarget); setWatching(true); setSettings(false); } }}>{activeCount > 0 ? t("app.watchingCount", { count: activeCount }) : t("app.watching")}</button>
+    <button ref={settingsButton} className="quiet" title={t("app.settingsShortcut", { shortcut: shortcuts.settings })} aria-expanded={settings} onClick={event => { if (settings) closeSettings(); else { capture("settings", event.currentTarget); setSettings(true); setWatching(false); } }}>{t("app.settings")}</button>
   </div>;
   return <div className="application">
     <header className="app-bar"><div className="brand"><span aria-hidden="true">▶</span> Stream GUI RS</div>{controls}</header>
-    {settings && <section ref={settingsPanel} className="settings-panel" aria-label="Settings">
-      <div className="settings-header"><h2 tabIndex={-1} ref={settingsHeading}>Settings</h2><button className="quiet" onClick={closeSettings}>Close Settings</button><button className="quiet" onClick={() => setSupport(true)}>Prepare support report</button><button className="quiet" onClick={developer}>Developer tools</button><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.quit); }}>{activeCount ? `Quit (stops ${activeCount} streams)` : "Quit"}</button></div>
+    {settings && <section ref={settingsPanel} className="settings-panel" aria-label={t("app.settings")}>
+      <div className="settings-header"><h2 tabIndex={-1} ref={settingsHeading}>{t("app.settings")}</h2><button className="quiet" onClick={closeSettings}>{t("app.closeSettings")}</button><button className="quiet" onClick={() => setSupport(true)}>{t("app.prepareSupportReport")}</button><button className="quiet" onClick={developer}>{t("app.developerTools")}</button><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.quit); }}>{activeCount ? count("app.quitStops", activeCount) : t("app.quit")}</button></div>
       <PlaybackSettings desktop={desktop} saved={playback.settings} saving={playback.savingSettings} commit={playback.commitSettings} />
-      {auth.status?.phase === "not_configured" && <p>This build does not include a Twitch application ID. If you built it from source, follow the authentication setup in the project documentation.</p>}
+      {auth.status?.phase === "not_configured" && <p>{t("auth.clientIdMissing")}</p>}
     </section>}
-    <div className={playback.error ? "error playback-feedback" : playback.message ? "notice playback-feedback" : "playback-feedback empty-feedback"} role={playback.error ? "alert" : "status"} aria-atomic="true">{playback.error ?? playback.message}{(playback.error || playback.message) && <button className="quiet" onClick={playback.dismiss}>Dismiss</button>}</div>
-    {watching && <div className="watching-panel" ref={watchingPanel}><button className="quiet close-panel" onClick={closeWatching}>Close Watching</button><Playback sessions={playback.sessions}
+    <div className={playback.error ? "error playback-feedback" : playback.message ? "notice playback-feedback" : "playback-feedback empty-feedback"} role={playback.error ? "alert" : "status"} aria-atomic="true">{playback.error ?? playback.message}{(playback.error || playback.message) && <button className="quiet" onClick={playback.dismiss}>{t("app.dismiss")}</button>}</div>
+    {watching && <div className="watching-panel" ref={watchingPanel}><button className="quiet close-panel" onClick={closeWatching}>{t("app.closeWatching")}</button><Playback sessions={playback.sessions}
       isStopping={id => playback.pending.has(`stop:${id}`)} isRestarting={id => playback.pending.has(`restart:${id}`)}
-      stop={id => { void playback.run(`stop:${id}`, () => api.stop(id), "Playback stopped."); }}
-      restart={(session, quality) => { void playback.run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), "Streamlink process restarted."); }} /></div>}
-    {desktop.status?.navigation && !auth.sessionId && desktop.status.navigation.intent.kind !== "show" && <p className="notice" role="status">Connect to Twitch to open the requested destination.</p>}
+      stop={id => { void playback.run(`stop:${id}`, () => api.stop(id), t("app.playbackStopped")); }}
+      restart={(session, quality) => { void playback.run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), t("app.playbackRestarted")); }} /></div>}
+    {desktop.status?.navigation && !auth.sessionId && desktop.status.navigation.intent.kind !== "show" && <p className="notice" role="status">{t("app.linkRequiresSignIn")}</p>}
     {auth.error && <p className="error" role="alert">{auth.error}</p>}
     {notificationTest ? <main className="settings-panel">
-      <h1 tabIndex={-1} ref={testHeading}>TEST notification · Synthetic channel</h1>
-      <p>The native notification activated this local target. No Twitch channel data or playback is involved.</p>
-      <button onClick={() => setNotificationTest(false)}>Back to browsing</button>
-      <button onClick={developer}>Developer tools</button>
+      <h1 tabIndex={-1} ref={testHeading}>{t("app.testNotificationSyntheticChannel")}</h1>
+      <p>{t("app.notificationTestResult")}</p>
+      <button onClick={() => setNotificationTest(false)}>{t("app.backToBrowsing2")}</button>
+      <button onClick={developer}>{t("app.developerTools")}</button>
     </main> : auth.sessionId ? <BrowserWorkspace preferences={playback.settings} saveLanguage={playback.saveLanguage} actionsRef={workspace} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} pending={playback.pending} /> :
       <SignIn status={auth.status} account={auth.account} busy={auth.busy} run={auth.run} />}
     {about && <About activation={about} close={() => setAbout(null)} />}
     {support && <SupportReport close={() => setSupport(false)} />}
-    <footer className="app-footer"><span>Twitch browsing · Streamlink desktop</span><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.showAbout); }}>About Stream GUI RS</button><span>{auth.sessionId ? "Connected to Twitch" : "Connect your Twitch account"}</span></footer>
+    <footer className="app-footer"><span>{t("app.twitchBrowsingStreamlinkDesktop")}</span><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.showAbout); }}>{t("app.aboutStreamGuiRs")}</button><span>{auth.sessionId ? t("app.connectedToTwitch") : t("app.connectAccount")}</span></footer>
   </div>;
 }
 function SignIn({ status, busy, run }: { status: AuthStatus | null; account: Account | null; busy: string | null; run: ReturnType<typeof useAuthentication>["run"] }) {
+  const { t, count } = useI18n();
   const pending = status?.phase === "authorizing" || busy === "login";
   return <main className="sign-in">
-    <div className="eyebrow">YOUR STREAMS, IN ONE PLACE</div>
-    <h1>Find what’s live.</h1>
-    <p>Browse the channels you follow, discover categories,<br />and find your next stream.</p>
-    {!isTauri() ? <p className="notice">This is a browser preview. Open the desktop application to connect to Twitch.</p> : !status || status.phase === "restoring" ? <p role="status">Restoring your Twitch session…</p> : <>
+    <div className="eyebrow">{t("app.tagline")}</div>
+    <h1>{t("app.findWhatSLive")}</h1>
+    <p>{t("app.signInIntro")}</p>
+    {!isTauri() ? <p className="notice">{t("app.browserPreview")}</p> : !status || status.phase === "restoring" ? <p role="status">{t("app.restoringYourTwitchSession")}</p> : <>
       {pending ? <div className="sign-in-flow">
-        {status.authorization ? <><p>Enter this code on Twitch:</p><strong className="user-code">{status.authorization.userCode}</strong><p className="muted">Code expires in {Math.ceil(status.authorization.expiresIn / 60)} minutes.</p><button disabled={busy === "openVerification"} onClick={() => { void run("openVerification"); }}>Open Twitch sign-in</button><p className="path">{status.authorization.verificationUri}</p><p role="status">Waiting for authorization…</p></> : <p role="status">Starting secure sign-in…</p>}
-        <button className="quiet" disabled={busy === "cancel"} onClick={() => { void run("cancel"); }}>Cancel sign-in</button>
-      </div> : <button className="primary" disabled={!!busy || status.phase === "not_configured"} onClick={() => { void run("login"); }}>Connect to Twitch</button>}
+        {status.authorization ? <><p>{t("auth.codePrompt")}</p><strong className="user-code">{status.authorization.userCode}</strong><p className="muted">{count("app.codeExpires", Math.ceil(status.authorization.expiresIn / 60))}</p><button disabled={busy === "openVerification"} onClick={() => { void run("openVerification"); }}>{t("app.openTwitchSignIn")}</button><p className="path">{status.authorization.verificationUri}</p><p role="status">{t("app.waitingForAuthorization")}</p></> : <p role="status">{t("app.startingSecureSignIn")}</p>}
+        <button className="quiet" disabled={busy === "cancel"} onClick={() => { void run("cancel"); }}>{t("app.cancelSignIn")}</button>
+      </div> : <button className="primary" disabled={!!busy || status.phase === "not_configured"} onClick={() => { void run("login"); }}>{t("app.connectToTwitch")}</button>}
       {status.error && <p role="alert" className="error">{friendlyError(status.error)}</p>}
-      {status.phase === "not_configured" && <p className="notice">Twitch sign-in needs to be configured for this build. Open Settings for instructions.</p>}
+      {status.phase === "not_configured" && <p className="notice">{t("auth.setupRequired")}</p>}
     </>}
-    <p className="muted">Sign-in opens in your browser. Credentials stay in secure system storage.</p>
+    <p className="muted">{t("app.signInPrivacy")}</p>
   </main>;
 }

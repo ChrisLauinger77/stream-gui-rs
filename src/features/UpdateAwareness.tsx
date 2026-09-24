@@ -1,8 +1,10 @@
+import { useI18n } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/ipc";
 import type { UpdateStatus } from "../lib/generated";
 
 export function UpdateAwareness() {
+  const { t } = useI18n();
   const [status, setStatus] = useState<UpdateStatus>({ phase: "not_checked", latestVersion: null });
   const [busy, setBusy] = useState<"check" | "release" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,27 +29,27 @@ export function UpdateAwareness() {
     try { await action(); } catch {
       if (mounted.current) {
         if (kind === "check") setStatus({ phase: "unavailable", latestVersion: null });
-        else setError("The update action could not be completed. Try again later.");
+        else setError(t("updates.actionFailed"));
       }
     }
     finally { inFlight.current = false; if (mounted.current) setBusy(null); }
   };
   // Request progress is local UI state; opening a page leaves the accepted result visible.
-  const message = busy === "check" ? "Checking for updates…" : {
-    not_checked: "Updates have not been checked.", checking: "Checking for updates…",
-    current: "Stream GUI RS is up to date", available: `Version ${status.latestVersion} is available`,
-    development: `This build is newer than stable version ${status.latestVersion}.`,
-    no_stable_release: "No stable release was returned.", unavailable: "Unable to check for updates",
+  const message = busy === "check" ? t("updates.checking") : {
+    not_checked: t("updates.notChecked"), checking: t("updates.checking"),
+    current: t("updates.current"), available: t("updates.available", { version: status.latestVersion ?? "" }),
+    development: t("updates.development", { version: status.latestVersion ?? "" }),
+    no_stable_release: t("updates.noStableRelease"), unavailable: t("updates.unavailable"),
   }[status.phase];
-  return <section className="setting-group update-awareness" aria-label="Update awareness">
-    <p>Checks the official GitHub repository for stable releases. Checks are manual; nothing is installed or downloaded automatically.</p>
+  return <section className="setting-group update-awareness" aria-label={t("updateAwareness.updateAwareness")}>
+    <p>{t("updates.sourceHelp")}</p>
     <p role="status">{message}</p>
     <div className="settings-save">
-      <button type="button" disabled={!!busy || status.phase === "checking"} onClick={() => { void run("check", async () => { const value = await api.checkUpdates(); if (mounted.current) setStatus(value); }); }}>Check for updates</button>
-      {status.phase !== "not_checked" && <button type="button" disabled={!!busy || status.phase === "checking"} onClick={() => { void run("check", async () => { const value = await api.refreshUpdates(); if (mounted.current) setStatus(value); }); }}>Refresh update check</button>}
-      {status.latestVersion && <button type="button" disabled={!!busy} onClick={() => { void run("release", async () => { await api.openUpdateRelease(); }); }}>View release</button>}
+      <button type="button" disabled={!!busy || status.phase === "checking"} onClick={() => { void run("check", async () => { const value = await api.checkUpdates(); if (mounted.current) setStatus(value); }); }}>{t("updateAwareness.checkForUpdates")}</button>
+      {status.phase !== "not_checked" && <button type="button" disabled={!!busy || status.phase === "checking"} onClick={() => { void run("check", async () => { const value = await api.refreshUpdates(); if (mounted.current) setStatus(value); }); }}>{t("updateAwareness.refreshUpdateCheck")}</button>}
+      {status.latestVersion && <button type="button" disabled={!!busy} onClick={() => { void run("release", async () => { await api.openUpdateRelease(); }); }}>{t("updateAwareness.viewRelease")}</button>}
     </div>
-    <p className="muted">Results, including failures, are kept for 24 hours while this app runs. Explicit refresh is limited to once per minute. No background checks or notifications.</p>
+    <p className="muted">{t("updates.cacheHelp")}</p>
     {error && <p role="alert" className="error">{error}</p>}
   </section>;
 }

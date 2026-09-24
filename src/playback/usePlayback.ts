@@ -2,16 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { api } from "../lib/ipc";
 import { errorCode, friendlyError } from "../browse/errors";
+import { currentLocale, translate } from "../i18n";
 import { useSettings } from "../settings/useSettings";
 import type { SessionSnapshot } from "../lib/generated";
 
 export function playbackError(error: unknown) {
   const code = errorCode(error);
-  if (code === "capacity") return "Playback is busy or eight streams are already active. Stop a stream or try again shortly.";
-  if (code === "timeout") return "The playback operation took too long. Check Watching and test Streamlink in Settings.";
-  if (code === "not_found") return "This session is no longer in the playback history.";
-  if (code === "settings") return "Playback settings could not be saved or read. Check the settings file and try again.";
-  if (code === "invalid_input") return "Check the executable path and playback selection, then try again.";
+  if (code === "capacity") return translate(currentLocale(), "playbackErrors.capacity");
+  if (code === "timeout") return translate(currentLocale(), "playbackErrors.timeout");
+  if (code === "not_found") return translate(currentLocale(), "playbackErrors.notFound");
+  if (code === "settings") return translate(currentLocale(), "playbackErrors.settings");
+  if (code === "invalid_input") return translate(currentLocale(), "playbackErrors.invalidInput");
   return friendlyError(error);
 }
 
@@ -55,8 +56,8 @@ export function usePlayback() {
           return old ? items.map(item => item.id === snapshot.id ? snapshot : item) : [...items, snapshot].slice(-16);
         });
         if (snapshot.failure || snapshot.phase === "failed") setError(playbackError({ code: snapshot.failure ?? "process_failed" }));
-        else if (!key.startsWith("stop:") && ["stopping", "exited"].includes(snapshot.phase)) setMessage("The Streamlink process has already stopped or is stopping.");
-        else if (key.startsWith("stop:") && !["exited", "failed"].includes(snapshot.phase)) setMessage("Stopping the Streamlink process…");
+        else if (!key.startsWith("stop:") && ["stopping", "exited"].includes(snapshot.phase)) setMessage(translate(currentLocale(), "playback.alreadyStopped"));
+        else if (key.startsWith("stop:") && !["exited", "failed"].includes(snapshot.phase)) setMessage(translate(currentLocale(), "playback.stopping"));
         else setMessage(success);
       }
     } catch (error) { if (mounted.current) setError(playbackError(error)); }
