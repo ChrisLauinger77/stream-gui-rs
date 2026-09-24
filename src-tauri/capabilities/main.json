@@ -34,6 +34,8 @@
     "allow-list-followed-channels",
     "allow-list-streams",
     "allow-save-discovery-language",
+    "allow-save-ui-language",
+    "allow-system-ui-language",
     "allow-list-categories",
     "allow-list-category-streams",
     "allow-search-channels",

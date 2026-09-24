@@ -21,7 +21,7 @@ use std::{
 };
 use ts_rs::TS;
 
-pub const SETTINGS_VERSION: u32 = 7;
+pub const SETTINGS_VERSION: u32 = 8;
 const MAX_SETTINGS_BYTES: u64 = 256 * 1024;
 const MAX_CHANNEL_OVERRIDES: usize = 1000;
 
@@ -32,6 +32,17 @@ pub enum Theme {
     System,
     Light,
     Dark,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum UiLanguage {
+    #[default]
+    System,
+    En,
+    De,
+    Es,
+    Fr,
 }
 
 /// Curated Twitch discovery languages (ISO 639-1) plus Helix's `other` value.
@@ -131,6 +142,7 @@ pub struct Settings {
     pub default_quality: QualityPolicy,
     pub automatic_chat: bool,
     pub theme: Theme,
+    pub ui_language: UiLanguage,
     pub background: BackgroundSettings,
     pub discovery_language: Option<StreamLanguage>,
     pub low_latency: bool,
@@ -457,7 +469,10 @@ impl SettingsDocument {
                     .get_mut("settings")
                     .and_then(|s| s.as_object_mut())
                     .ok_or_else(|| settings_error("Invalid version 6 settings."))?;
-                if fields.contains_key("discovery") || fields.contains_key("shortcuts") {
+                if fields.contains_key("discovery")
+                    || fields.contains_key("shortcuts")
+                    || fields.contains_key("uiLanguage")
+                {
                     return Err(settings_error("Invalid version 6 settings."));
                 }
                 fields.insert(
@@ -470,11 +485,26 @@ impl SettingsDocument {
                     serde_json::to_value(shortcuts::ShortcutBindings::default())
                         .expect("shortcut defaults"),
                 );
+                fields.insert("uiLanguage".into(), serde_json::json!("system"));
                 value["version"] = SETTINGS_VERSION.into();
                 serde_json::from_value(value)
                     .map_err(|_| settings_error("Invalid version 6 settings."))?
             }
-            Some(7) => serde_json::from_value(value).map_err(|_| {
+            Some(7) => {
+                let mut value = value;
+                let fields = value
+                    .get_mut("settings")
+                    .and_then(|s| s.as_object_mut())
+                    .ok_or_else(|| settings_error("Invalid version 7 settings."))?;
+                if fields.contains_key("uiLanguage") {
+                    return Err(settings_error("Invalid version 7 settings."));
+                }
+                fields.insert("uiLanguage".into(), serde_json::json!("system"));
+                value["version"] = SETTINGS_VERSION.into();
+                serde_json::from_value(value)
+                    .map_err(|_| settings_error("Invalid version 7 settings."))?
+            }
+            Some(8) => serde_json::from_value(value).map_err(|_| {
                 settings_error("Settings schema is invalid; the file was not changed.")
             })?,
             _ => {
@@ -629,6 +659,14 @@ impl SettingsStore {
         *value = next;
         Ok(value.settings.clone())
     }
+    pub fn set_ui_language(&self, language: UiLanguage) -> Result<Settings> {
+        let mut value = self.value.lock().expect("settings mutex poisoned");
+        let mut next = value.clone();
+        next.settings.ui_language = language;
+        self.persist(&next)?;
+        *value = next;
+        Ok(value.settings.clone())
+    }
     pub fn set_streamlink_path(&self, path: Option<String>) -> Result<()> {
         let mut value = self.value.lock().expect("settings mutex poisoned");
         let mut next = value.clone();
@@ -650,6 +688,7 @@ impl SettingsStore {
         // These collections/references are read-only in global settings IPC.
         // Preserve them at the write boundary too, including cancelled callers.
         settings.discovery = value.settings.discovery.clone();
+        settings.ui_language = value.settings.ui_language;
         settings.shortcuts = value.settings.shortcuts.clone();
         settings.profiles = value.settings.profiles.clone();
         settings.selected_profile_id = value.settings.selected_profile_id.clone();

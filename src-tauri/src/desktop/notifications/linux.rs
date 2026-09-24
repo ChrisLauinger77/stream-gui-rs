@@ -153,8 +153,9 @@ impl Worker {
             .lock()
             .expect("native notification state poisoned")
             .clicks;
+        let locale = self.shared.locale();
         let actions = if clicks {
-            vec!["default", "Show channel"]
+            vec!["default", localization::text(locale, "native.showChannel")]
         } else {
             vec![]
         };
@@ -171,7 +172,11 @@ impl Worker {
                         "Stream GUI RS",
                         0_u32,
                         "stream-gui-rs",
-                        format!("{} is live", event.display_name),
+                        escaped(&localization::named(
+                            locale,
+                            "native.live",
+                            &event.display_name,
+                        )),
                         escaped(&format!("{}\n{}", event.title, event.category)),
                         actions,
                         hints,

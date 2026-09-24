@@ -7,6 +7,7 @@ use tauri::Manager;
 #[cfg(target_os = "macos")]
 mod about;
 pub(crate) mod browser;
+mod localization;
 mod navigation;
 mod notifications;
 #[cfg(target_os = "linux")]
@@ -59,6 +60,15 @@ pub(crate) fn show_about(app: &tauri::AppHandle) {
             id: uuid::Uuid::new_v4().to_string(),
         });
     }
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn update_about_menu(app: &tauri::AppHandle) {
+    about::update_menu(app);
+}
+
+pub(crate) fn system_ui_language() -> crate::config::UiLanguage {
+    localization::system_language()
 }
 
 fn build_app(initial: Option<crate::navigation::NavigationIntent>) -> tauri::Result<tauri::App> {
@@ -134,6 +144,8 @@ fn build_app(initial: Option<crate::navigation::NavigationIntent>) -> tauri::Res
             commands::list_followed_channels,
             commands::list_streams,
             commands::save_discovery_language,
+            commands::save_ui_language,
+            commands::system_ui_language,
             commands::list_categories,
             commands::list_category_streams,
             commands::search_channels,
@@ -165,6 +177,8 @@ fn install_services(app: &tauri::App, services: Arc<Services>) {
     let lifecycle = Arc::new(Lifecycle::default());
     app.manage(services.clone());
     app.manage(lifecycle.clone());
+    #[cfg(target_os = "macos")]
+    about::update_menu(app.handle());
     let notifications = notifications::Notifications::new(app.handle().clone());
     services.monitor.set_sink(notifications.clone());
     app.manage(notifications);
@@ -387,6 +401,8 @@ mod tests {
             "get_team",
             "acknowledge_navigation_intent",
             "save_discovery_language",
+            "save_ui_language",
+            "system_ui_language",
             "lookup_channel",
             "support_report",
             "app_info",

@@ -2,8 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   TeamRequest, TeamDetails, DiscoveryMutation, ShortcutBindings, ProfileMutation, UpdateStatus, DesktopStatus, MonitorStatus, AcknowledgeDesktopAction, NotificationTestAction,
   ChatRequest, ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
-  LookupChannelRequest, ChannelIdentity, StreamLanguage, StreamBrowseRequest, CategoryStreamsRequest, BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
-  Account, AppError, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
+  LookupChannelRequest, ChannelIdentity, StreamLanguage, UiLanguage, StreamBrowseRequest, CategoryStreamsRequest, BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
+  Account, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
   ProbeResult, SessionSnapshot, StopRequest, SupportReport, AppInfo,
 } from "./generated";
 
@@ -23,6 +23,8 @@ type Commands = {
   list_followed_streams: [BrowseRequest, PagedResult<StreamSummary>];
   list_followed_channels: [BrowseRequest, PagedResult<ChannelSummary>];
   save_discovery_language: [StreamLanguage | null, Settings];
+  save_ui_language: [UiLanguage, Settings];
+  system_ui_language: [undefined, UiLanguage];
   list_streams: [StreamBrowseRequest, PagedResult<StreamSummary>];
   list_categories: [BrowseRequest, PagedResult<CategorySummary>];
   list_category_streams: [CategoryStreamsRequest, CategoryDetails];
@@ -86,6 +88,8 @@ export const api = {
   followedStreams: (request: BrowseRequest) => call("list_followed_streams", request),
   followedChannels: (request: BrowseRequest) => call("list_followed_channels", request),
   saveDiscoveryLanguage: (language: StreamLanguage | null) => call("save_discovery_language", language),
+  saveUiLanguage: (language: UiLanguage) => call("save_ui_language", language),
+  systemUiLanguage: () => call("system_ui_language"),
   streams: (request: StreamBrowseRequest) => call("list_streams", request),
   categories: (request: BrowseRequest) => call("list_categories", request),
   category: (request: CategoryStreamsRequest) => call("list_category_streams", request),
@@ -126,12 +130,3 @@ export const api = {
   cancel: () => call("auth_cancel"),
   account: () => call("auth_account"),
 };
-
-export function errorMessage(error: unknown): string {
-  if (typeof error === "object" && error !== null && "code" in error && "message" in error) {
-    const typed = error as AppError;
-    return `${typed.code}: ${typed.message}`;
-  }
-  // Do not stringify unknown IPC payloads into the UI or console.
-  return "The backend could not complete the request. Run the desktop app with npm run tauri dev.";
-}

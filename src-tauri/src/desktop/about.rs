@@ -1,4 +1,5 @@
 //! Keep the standard AppKit About panel, including its icon and native link handling.
+use super::localization as l10n;
 use crate::build_info;
 use objc2::{AnyThread, MainThreadMarker, rc::Retained, runtime::AnyObject};
 use objc2_app_kit::{
@@ -27,7 +28,10 @@ pub(super) fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let about = MenuItem::with_id(
         app,
         MENU_ID,
-        format!("About {}", build_info::NAME),
+        l10n::text(
+            l10n::selected(crate::config::UiLanguage::System),
+            "native.about",
+        ),
         true,
         None::<&str>,
     )?;
@@ -38,9 +42,10 @@ pub(super) fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 
 pub(super) fn show<R: Runtime>(app: &AppHandle<R>) {
     let info = build_info::snapshot();
+    let locale = l10n::current(app);
     let _ = app.run_on_main_thread(move || {
         if let Some(main) = MainThreadMarker::new() {
-            let options = options(&info.name, &info.version, &info.commit);
+            let options = options(&info.name, &info.version, &info.commit, locale);
             // SAFETY: all option keys have their documented AppKit value types;
             // the panel is opened on the main thread and retains its own values.
             unsafe {
@@ -51,11 +56,29 @@ pub(super) fn show<R: Runtime>(app: &AppHandle<R>) {
     });
 }
 
-fn options(name: &str, version: &str, commit: &str) -> Retained<NSDictionary<NSString, AnyObject>> {
+pub(super) fn update_menu<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(item) = app
+        .menu()
+        .and_then(|menu| menu.items().ok())
+        .and_then(|items| items.into_iter().next())
+        .and_then(|item| item.as_submenu().cloned())
+        .and_then(|submenu| submenu.get(MENU_ID))
+        .and_then(|item| item.as_menuitem().cloned())
+    {
+        let _ = item.set_text(l10n::text(l10n::current(app), "native.about"));
+    }
+}
+
+fn options(
+    name: &str,
+    version: &str,
+    commit: &str,
+    locale: l10n::Locale,
+) -> Retained<NSDictionary<NSString, AnyObject>> {
     let name = NSString::from_str(name);
     let version = NSString::from_str(version);
     let commit = NSString::from_str(commit);
-    let label = NSString::from_str("Github Repository");
+    let label = NSString::from_str(l10n::text(locale, "native.repository"));
     let repository = NSURL::URLWithString(&NSString::from_str(build_info::REPOSITORY))
         .expect("The compiled repository URL is valid");
     let color = NSColor::linkColor();
@@ -102,7 +125,7 @@ mod tests {
 
     #[test]
     fn native_options_separate_version_and_commit_and_include_repository_link() {
-        let options = options("Stream GUI RS", "1.2.3", "a1b2c3d");
+        let options = options("Stream GUI RS", "1.2.3", "a1b2c3d", l10n::Locale::En);
         // SAFETY: known option/attribute keys, indices within the fixed label,
         // and a null effective-range output is supported.
         unsafe {
@@ -126,7 +149,7 @@ mod tests {
             );
             let credits = options.objectForKey(NSAboutPanelOptionCredits).unwrap();
             let credits = credits.downcast_ref::<NSAttributedString>().unwrap();
-            assert_eq!(credits.string().to_string(), "Github Repository");
+            assert_eq!(credits.string().to_string(), "GitHub repository");
             for index in 0..credits.length() {
                 let attribute = |key| {
                     credits
@@ -156,5 +179,15 @@ mod tests {
                 );
             }
         }
+        let german = options("Stream GUI RS", "1.2.3", "a1b2c3d", l10n::Locale::De);
+        let credits = german.objectForKey(NSAboutPanelOptionCredits).unwrap();
+        assert_eq!(
+            credits
+                .downcast_ref::<NSAttributedString>()
+                .unwrap()
+                .string()
+                .to_string(),
+            "GitHub-Repository"
+        );
     }
 }
