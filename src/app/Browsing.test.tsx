@@ -444,6 +444,17 @@ test.each([
   expect(text()).toContain(message); expect(text()).not.toContain("PRIVATE BACKEND PAYLOAD");
   expect(container.querySelectorAll(".session")).toHaveLength(0); expect(button("Watch Example Channel").disabled).toBe(false);
 });
+test("a visible playback alert follows a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  vi.mocked(api.launch).mockRejectedValue({ code: "streamlink_not_found", message: "PRIVATE BACKEND PAYLOAD" });
+  await render(); await click("Live"); await click("Watch Example Channel");
+  expect(container.querySelector(".playback-feedback")?.textContent).toContain("Streamlink was not found");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(container.querySelector(".playback-feedback")?.textContent).toContain("Streamlink wurde nicht gefunden");
+  expect(container.querySelector(".playback-feedback")?.textContent).not.toContain("Streamlink was not found");
+  expect(text()).not.toContain("PRIVATE BACKEND PAYLOAD");
+});
 test("Watching reconstructs multiple sessions and stops only the selected one", async () => {
   const first = playing(); const second = playing("play-two", "channel-two");
   vi.mocked(api.sessions).mockResolvedValue([first, second]);

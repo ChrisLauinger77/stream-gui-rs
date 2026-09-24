@@ -127,8 +127,8 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const watch = useCallback((broadcasterId: string) => {
     if (!auth.sessionId) return;
     capture("watching"); setWatching(true); setSettings(false);
-    void run(`launch:${broadcasterId}`, () => api.launch({ authSessionId: auth.sessionId!, broadcasterId, quality: null }), t("app.playbackStarted"));
-  }, [auth.sessionId, run, capture, t]);
+    void run(`launch:${broadcasterId}`, () => api.launch({ authSessionId: auth.sessionId!, broadcasterId, quality: null }), "app.playbackStarted");
+  }, [auth.sessionId, run, capture]);
   const activeCount = playback.sessions.filter(session => session.restarting || ["starting", "running", "stopping"].includes(session.phase)).length;
   const controls = <div className="account-controls">
     <span className="connection-dot" aria-hidden="true" />
@@ -147,8 +147,8 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
     <div className={playback.error ? "error playback-feedback" : playback.message ? "notice playback-feedback" : "playback-feedback empty-feedback"} role={playback.error ? "alert" : "status"} aria-atomic="true">{playback.error ?? playback.message}{(playback.error || playback.message) && <button className="quiet" onClick={playback.dismiss}>{t("app.dismiss")}</button>}</div>
     {watching && <div className="watching-panel" ref={watchingPanel}><button className="quiet close-panel" onClick={closeWatching}>{t("app.closeWatching")}</button><Playback sessions={playback.sessions}
       isStopping={id => playback.pending.has(`stop:${id}`)} isRestarting={id => playback.pending.has(`restart:${id}`)}
-      stop={id => { void playback.run(`stop:${id}`, () => api.stop(id), t("app.playbackStopped")); }}
-      restart={(session, quality) => { void playback.run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), t("app.playbackRestarted")); }} /></div>}
+      stop={id => { void playback.run(`stop:${id}`, () => api.stop(id), "app.playbackStopped"); }}
+      restart={(session, quality) => { void playback.run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), "app.playbackRestarted"); }} /></div>}
     {desktop.status?.navigation && !auth.sessionId && desktop.status.navigation.intent.kind !== "show" && <p className="notice" role="status">{t("app.linkRequiresSignIn")}</p>}
     {auth.error && <p className="error" role="alert">{auth.error}</p>}
     {notificationTest ? <main className="settings-panel">
