@@ -608,6 +608,73 @@ async fn discovery_language_queries_cache_refresh_and_cursors_are_isolated() {
 }
 
 #[tokio::test]
+async fn discovery_ignores_unused_stream_metadata_without_weakening_identity() {
+    use crate::config::StreamLanguage::{En, Other};
+    let mut english: serde_json::Value = serde_json::from_str(STREAM).unwrap();
+    let item = english["data"][0].as_object_mut().unwrap();
+    item.remove("is_mature");
+    item.insert("tags".into(), serde_json::Value::Null);
+    item.insert(
+        "provider_secret".into(),
+        serde_json::json!("never-cache-this"),
+    );
+    let mut other = english.clone();
+    other["data"][0]["is_mature"] = serde_json::json!({ "unexpected": true });
+    other["data"][0]["tags"] = serde_json::json!({ "unexpected": true });
+    other["data"][0]["language"] = serde_json::json!("other");
+    let mut invalid = other.clone();
+    invalid["data"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("user_login");
+    let (server, client, page) = client(vec![
+        Reply::json(200, english.to_string()),
+        Reply::json(200, other.to_string()),
+        Reply::json(200, invalid.to_string()),
+        Reply::json(200, other.to_string()),
+    ])
+    .await;
+    let cancel = CancellationToken::new();
+    let mut request = StreamBrowseRequest {
+        page,
+        language: Some(En),
+    };
+    let english = client
+        .browse_streams(request.clone(), &cancel)
+        .await
+        .unwrap();
+    assert_eq!(english.items[0].login, "example");
+    assert!(english.warnings.is_empty());
+    assert_eq!(
+        client
+            .browse_streams(request.clone(), &cancel)
+            .await
+            .unwrap()
+            .freshness,
+        DataFreshness::Cached
+    );
+    request.language = Some(Other);
+    let other = client
+        .browse_streams(request.clone(), &cancel)
+        .await
+        .unwrap();
+    assert_eq!(other.items[0].language.as_deref(), Some("other"));
+    assert!(other.warnings.is_empty());
+    request.page.refresh = true;
+    let error = client
+        .browse_streams(request.clone(), &cancel)
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidResponse);
+    assert!(!error.message.contains("never-cache-this"));
+    let recovered = client.browse_streams(request, &cancel).await.unwrap();
+    assert_eq!(recovered.items.len(), 1);
+    assert_eq!(server.requests().len(), 4);
+    assert!(server.requests()[0].contains("language=en"));
+    assert!(server.requests()[1].contains("language=other"));
+}
+
+#[tokio::test]
 async fn category_language_and_cross_scope_cursor_do_not_mix() {
     let body = STREAM.replace(
         "\"pagination\": {}",

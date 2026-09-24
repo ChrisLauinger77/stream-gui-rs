@@ -20,7 +20,7 @@ The implementation follows the [Twitch API reference](https://dev.twitch.tv/docs
 | `teams` | `teams` | Metadata |
 | `channel_teams` | `teams/channel` | Metadata |
 
-Models use current wire fields, opaque string IDs, nullable team images and optional deprecated fields. Unknown fields are ignored. User email is deliberately omitted from the model/cache. `Account` is a separate safe IPC DTO containing only ID, login, display name and a validated optional profile image URL. Teams' `info` may contain HTML; future UI must treat it as untrusted content.
+Models use current wire fields, opaque string IDs, nullable team images and optional deprecated fields. Unknown fields are ignored. The stream model omits unused `tags` and deprecated `is_mature` metadata, so missing or nonstandard values for those fields do not reject a Live page; stream and broadcaster identity remain required. User email is deliberately omitted from the model/cache. `Account` is a separate safe IPC DTO containing only ID, login, display name and a validated optional profile image URL. Teams' `info` may contain HTML; future UI must treat it as untrusted content.
 
 Every request obtains an internal auth lease. Followed endpoints derive `user_id` from that lease and require `user:read:follows`. Frontend input cannot select an arbitrary URL, access token, or account authorization. Endpoint methods accept a `CancellationToken`; rate waits, requests, bodies and retry delays are cancellable. Dropping a caller does not interrupt a refresh whose result must still be persisted. Logout invalidates leases and prevents their responses from populating usable cache entries.
 
