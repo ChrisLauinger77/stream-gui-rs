@@ -52,13 +52,10 @@ pub struct Stream {
     #[serde(rename = "type")]
     pub stream_type: String,
     pub title: String,
-    #[serde(default)]
-    pub tags: Vec<String>,
     pub viewer_count: u64,
     pub started_at: String,
     pub language: String,
     pub thumbnail_url: String,
-    pub is_mature: bool,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Game {
