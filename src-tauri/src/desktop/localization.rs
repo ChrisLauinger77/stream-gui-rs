@@ -27,11 +27,10 @@ fn from_tag(tag: &str) -> Locale {
 fn system_locale() -> Locale {
     #[cfg(target_os = "macos")]
     {
-        from_tag(
-            &objc2_foundation::NSLocale::currentLocale()
-                .languageCode()
-                .to_string(),
-        )
+        // The formatting locale can differ from the preferred interface language.
+        objc2_foundation::NSLocale::preferredLanguages()
+            .firstObject()
+            .map_or(Locale::En, |tag| from_tag(&tag.to_string()))
     }
     #[cfg(windows)]
     {
