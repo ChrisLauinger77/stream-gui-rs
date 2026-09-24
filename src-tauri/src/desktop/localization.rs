@@ -27,11 +27,11 @@ fn from_tag(tag: &str) -> Locale {
 fn system_locale() -> Locale {
     #[cfg(target_os = "macos")]
     {
-        return from_tag(
+        from_tag(
             &objc2_foundation::NSLocale::currentLocale()
                 .languageCode()
                 .to_string(),
-        );
+        )
     }
     #[cfg(windows)]
     {
@@ -64,7 +64,7 @@ fn system_locale() -> Locale {
         if loaded == 0 || count == 0 || length as usize > names.len() {
             return Locale::En;
         }
-        return first_preferred_locale(&names[..length as usize]);
+        first_preferred_locale(&names[..length as usize])
     }
     #[cfg(not(any(target_os = "macos", windows)))]
     {
