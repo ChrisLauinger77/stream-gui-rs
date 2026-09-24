@@ -178,16 +178,16 @@ mod tests {
                     NSUnderlineStyle::Single.0
                 );
             }
+            let german = super::options("Stream GUI RS", "1.2.3", "a1b2c3d", l10n::Locale::De);
+            let credits = german.objectForKey(NSAboutPanelOptionCredits).unwrap();
+            assert_eq!(
+                credits
+                    .downcast_ref::<NSAttributedString>()
+                    .unwrap()
+                    .string()
+                    .to_string(),
+                "GitHub-Repository"
+            );
         }
-        let german = super::options("Stream GUI RS", "1.2.3", "a1b2c3d", l10n::Locale::De);
-        let credits = german.objectForKey(NSAboutPanelOptionCredits).unwrap();
-        assert_eq!(
-            credits
-                .downcast_ref::<NSAttributedString>()
-                .unwrap()
-                .string()
-                .to_string(),
-            "GitHub-Repository"
-        );
     }
 }
