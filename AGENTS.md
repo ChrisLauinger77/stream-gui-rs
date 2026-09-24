@@ -10,7 +10,7 @@ React playback action → typed IPC → Rust services / Supervisor → Streamlin
 ```
 
 This guide defines engineering rules and invariants. Read the relevant code and detailed documentation
-before changing a contract; do not infer implementation from a phase number in a task description.
+before changing a contract; use current code and durable docs rather than an old milestone label.
 
 ## Ownership and module map
 
@@ -290,13 +290,18 @@ cross-compilation or process status does not prove native behavior.
   When committing, use Conventional Commits with a short lowercase imperative subject. Aim for a clean tree
   without discarding others' work; report any remaining changes. Never rewrite history, push or publish
   unasked.
+- Develop application behavior on feature branches, run relevant automated and focused native checks, and
+  merge only after changed behavior is accepted. Reuse the merged implementation baseline during release
+  preparation. See `docs/testing.md` for the stage-specific policy.
 - A user request to `create release X.Y.Z` authorizes the complete documented release sequence: update every
-  version location with `npm run release:version -- X.Y.Z`, validate and review the result, commit and push the
-  preparation to `main`, wait for Desktop checks and CodeQL, build a candidate and complete the documented
-  native acceptance gate, then create and push the annotated `vX.Y.Z` tag with its approved `Candidate-Run`
-  trailer. Do not request separate permission for already authorized steps. A hardening-only request that
-  forbids tagging/publication stops before that final step. The manual workflow builds packages; the
-  tag-triggered workflow publishes those exact tested bytes without rebuilding.
+  version location with `npm run release:version -- X.Y.Z`, validate and review the focused metadata/release
+  preparation, commit and push it to `main`, wait for fresh Desktop checks and CodeQL on that commit, audit a
+  manual candidate and complete release-specific exact-package smoke, then create and push the annotated
+  `vX.Y.Z` tag on the accepted preparation commit with its approved `Candidate-Run` trailer. Metadata-only
+  preparation preserves the merged branch's native feature acceptance; repeat full native acceptance when
+  runtime/native/package behavior changes after it. Do not request separate permission for already
+  authorized steps. A hardening-only request that forbids tagging/publication stops before that final step.
+  The tag-triggered workflow publishes the exact tested candidate bytes without rebuilding.
 
 ## Documentation and current scope
 
@@ -304,19 +309,14 @@ cross-compilation or process status does not prove native behavior.
 - `docs/architecture.md`: detailed ownership, IPC, playback and settings contracts.
 - `docs/authentication.md`: OAuth/storage, build/runtime ID precedence and native checks.
 - `docs/helix.md`: HTTP, retry, pagination, cache and session-isolation contracts.
-- `docs/phase-0-validation.md`, `docs/phase-1-validation.md`, `docs/phase-2-validation.md`,
-  `docs/phase-3-validation.md`, `docs/phase-4-validation.md`, `docs/phase-5-validation.md`,
-  `docs/phase-6-validation.md`, `docs/phase-7-validation.md`: historical evidence and manual gaps, not proof of a current run. Use current
-  README/CI build commands.
+- `docs/testing.md`: development, PR, native acceptance and release smoke policy.
+- `docs/releasing.md`: version preparation, exact candidate, tagging and publication gates.
+- `docs/road-to-1.0.md`: released milestones, deferred ideas and current goals.
+- `docs/notification-acceptance.md`: specialized debug-package procedure for native notification changes.
 
-The current tree includes Phase 8 development on the v0.4.0 baseline: browsing/playback/settings and Rust followed-live monitoring, plus
-server-side discovery language filtering, exact-login lookup, opt-in low latency, persisted text size, safe
-support-report previews and cross-platform About. Preserve quiet baselines on startup,
-resume and recovery, session cancellation, bounded stream-ID deduplication and foreground rate priority.
-Phase 7 adds manual release awareness, independent Chatterino chat and bounded global player profiles.
-Advanced transports, other chat clients, legacy import and automatic updating remain deferred. Annotated `vMAJOR.MINOR.PATCH` tags trigger the
-native publishing workflow; version preparation is documented in `docs/releasing.md`. Do not start another phase as incidental cleanup. Keep detailed architecture, user setup and validation history in
-their respective documents rather than expanding this guide.
+Preserve quiet monitor baselines on startup, resume and recovery, session cancellation, bounded stream-ID
+deduplication and foreground rate priority. Advanced transports, other chat clients, legacy import and
+automatic updating remain deferred. Do not start unrelated roadmap work as incidental cleanup.
 
 The support report is a separate explicit allowlist, not redacted full diagnostics: no identities, paths,
 arguments, raw logs/errors, credentials, environment reads, probes or HTTP. Build/About metadata comes from

@@ -4,7 +4,7 @@ The implementation follows the [Twitch API reference](https://dev.twitch.tv/docs
 
 ## Entry points and ownership
 
-`Services` constructs one `TwitchHttp` pool, one `AuthService`, and one `HelixClient`. Foreground browsing and the Phase 5 Rust monitor share these exact instances. They do not create independent pools, rate budgets or caches.
+`Services` constructs one `TwitchHttp` pool, one `AuthService`, and one `HelixClient`. Foreground browsing and the Rust monitor share these exact instances. They do not create independent pools, rate budgets or caches.
 
 | Rust method | Helix path | Cache class |
 | --- | --- | --- |

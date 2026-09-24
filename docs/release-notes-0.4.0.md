@@ -36,7 +36,7 @@ Migration remains in memory until settings are saved. Downgrading to 0.3.0 after
 
 ## Validation
 
-Phase 7 native acceptance passed on Linux, macOS and Windows, including Chatterino from Flathub, Homebrew and WinGet respectively. Hosted desktop checks and CodeQL passed for the completed Phase 7 implementation. The release procedure additionally validates the versioned candidate and promotes its tested files without rebuilding.
+Native feature acceptance passed on Linux, macOS and Windows, including Chatterino from Flathub, Homebrew and WinGet respectively. Hosted desktop checks and CodeQL passed for the completed implementation. The release procedure additionally validates the versioned candidate and promotes its tested files without rebuilding.
 
 ## Known limitations
 

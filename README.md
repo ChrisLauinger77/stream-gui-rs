@@ -34,7 +34,7 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
 - About on every desktop platform and a previewable support report
 
-See the [0.5.0 release notes](docs/release-notes-0.5.0.md) for changes and upgrade guidance, and [Phase 8 validation](docs/phase-8-validation.md) for feature acceptance. Candidate builds are not published releases.
+See the [0.5.0 release notes](docs/release-notes-0.5.0.md) for changes and upgrade guidance, and the [road to 1.0](docs/road-to-1.0.md) for completed milestones and current goals. Candidate builds are not published releases.
 
 Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. Background features are available in 0.2.0 and later; v0.1.0 packages retain their original close-to-exit behavior.
 
@@ -170,10 +170,10 @@ Notification clicks restore the app and select the channel while the original si
 **Keep Stream GUI RS running in the background when the window is closed** is opt-in. Normal minimize remains the OS minimize action. Background close hides the window when a tray is available, or minimizes it when there is no usable tray. Playback continues in both cases; restore the app to use Stop/Restart.
 
 - **Linux:** notification delivery and click actions depend on the desktop notification server. The UI reports OS-managed delivery, not a permission grant. A StatusNotifier host and an Ayatana/AppIndicator library are needed for the tray; GNOME may need an indicator extension. A missing library/host falls back to minimize. Losing the host restores a hidden window.
-- **Windows:** native toast notifications use the application's installed identity. After a banner times out, its Notification Center entry remains actionable for up to 15 minutes while the app and original monitoring/sign-in session remain active. Pause, logout and Quit retire those entries; notification clicks cannot reopen the app after Quit. Use the installer and its Start-menu shortcut for notification testing; an unregistered portable executable may not support delivery/activation. Installed Notification Center behavior still needs the [native acceptance checks](docs/release-smoke-test.md#windows-notification-center-acceptance).
+- **Windows:** native toast notifications use the application's installed identity. After a banner times out, its Notification Center entry remains actionable for up to 15 minutes while the app and original monitoring/sign-in session remain active. Pause, logout and Quit retire those entries; notification clicks cannot reopen the app after Quit. Use the installer and its Start-menu shortcut for notification testing; an unregistered portable executable may not support delivery/activation. When this behavior changes, use the [native notification acceptance procedure](docs/notification-acceptance.md#windows-retained-notification-acceptance) and real followed-stream checks.
 - **macOS:** allow notifications explicitly in Settings, then manage denial in macOS System Settings. Notifications require an installed, correctly signed app bundle; a bare development executable reports unavailable. Authorization failures remain visible and can be retried after correcting the installation. See the [notification acceptance guide](docs/notification-acceptance.md) if no permission prompt appears.
 
-See the [release smoke checklist](docs/release-smoke-test.md) for native package acceptance requirements.
+See the [testing policy](docs/testing.md) for native acceptance and exact-package smoke requirements.
 
 ## Current limitations
 
@@ -226,10 +226,10 @@ For native notification acceptance without a Twitch live transition, build with 
 
 [Open a GitHub issue](https://github.com/ChrisLauinger77/stream-gui-rs/issues) with reproduction steps and the previewed **Settings → Prepare support report** text. Add OS/player version details manually if useful; the report intentionally excludes identifying data and logs. Do not paste OAuth tokens, refresh tokens, device codes, credential-store exports, or other secrets.
 
-Release maintainers should use the [release process](docs/releasing.md) and [exact-artifact smoke checklist](docs/release-smoke-test.md). Historical implementation evidence remains in the phase validation documents; it is not proof of a current artifact.
+Release maintainers should use the [release process](docs/releasing.md) and [testing policy](docs/testing.md). Earlier accepted feature behavior need not be retested in full for a metadata-only version bump; fresh CI and exact-package checks remain required.
 
 ## License and acknowledgements
 
 Stream GUI RS is licensed under [GNU GPL version 3 only](LICENSE). It relies on open-source Rust and npm dependencies under their respective licenses. Playback is provided by the separately installed [Streamlink](https://streamlink.github.io/) project. No assets from Streamlink Twitch GUI are distributed here.
 
-Phase 6 implementation and platform verification evidence: [validation record](docs/phase-6-validation.md).
+Released milestones and deferred ideas are summarized in the [road to 1.0](docs/road-to-1.0.md).

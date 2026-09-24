@@ -105,14 +105,12 @@ OAuth and Helix share a fixed-endpoint HTTPS pool with redirects disabled, a 5-s
 
 ## Opt-in live acceptance checklist
 
-Normal tests use synthetic credentials, mock storage and loopback HTTP only. On 2026-09-18, live macOS testing successfully verified Device Flow login, authenticated account retrieval, and restoration across a complete application restart. The registered public application is `stream-gui-rs`; the project is now **Stream GUI RS** / `stream-gui-rs`. The acceptance run preceded the application identity rename. The current names match by choice, not an OAuth requirement; the new credential namespace requires a fresh login. See [the validation record](phase-1-validation.md).
-
-On 2026-09-18, the user also verified Twitch sign-in and credential persistence across application restart in the packaged Windows 11 build. Native Linux sign-in and restart restoration were verified separately. See [Phase 4 validation](phase-4-validation.md) for these platform observations and the Windows console finding; real logout/deletion, refresh rotation and denied-store cases remain separate manual checks.
+Normal tests use synthetic credentials, mock storage and loopback HTTP only. The registered public application is `stream-gui-rs`; the app identity is **Stream GUI RS** / `stream-gui-rs`. Native acceptance must use an installed package and the current credential namespace. Record real login, restoration, rotation and deletion results for the changed behavior and platform under [testing policy](testing.md); an older run is not evidence for a new package.
 
 The checklist remains available for further platform testing and the remaining manual cases:
 
-1. Register/configure the new public client, authorize `user:read:follows`, and confirm account/avatar/scopes. **Login and account retrieval verified on macOS.**
-2. Restart the desktop app with the same client ID and confirm automatic restoration plus validation. **Complete restart persistence verified on macOS.**
+1. Register/configure the public client, authorize `user:read:follows`, and confirm account/avatar/scopes.
+2. Restart the desktop app with the same client ID and confirm automatic restoration plus validation.
 3. Refresh twice and restart again to check rotation with the platform store.
 4. Cancel during device authorization; test denial/expiry and try again.
 5. Disconnect the app in Twitch account settings, then Validate; local auth must clear.
