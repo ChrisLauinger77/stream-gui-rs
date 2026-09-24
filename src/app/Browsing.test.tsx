@@ -106,6 +106,16 @@ test("language change updates an open support dialog after the settings save res
   expect(container.querySelector("dialog h2")?.textContent).toBe("Supportbericht");
   expect(document.activeElement).toBe(focused);
 });
+test("settings confirmation follows a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.savePlaybackSettings).mockResolvedValue(original);
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  await render(); await click("Settings"); await click("Save settings");
+  expect(text()).toContain("Settings saved");
+  await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(text()).toContain("Einstellungen gespeichert");
+  expect(text()).not.toContain("Settings saved");
+});
 test("System mode uses the native desktop language when it differs from browser defaults", async () => {
   Object.defineProperty(navigator, "languages", { configurable: true, value: ["en-US"] });
   vi.mocked(api.systemUiLanguage).mockResolvedValue("de");

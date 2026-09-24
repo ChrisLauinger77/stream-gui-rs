@@ -1,4 +1,4 @@
-import { useI18n } from "../i18n";
+import { useI18n, type MessageKey } from "../i18n";
 import { useRef, useState } from "react";
 import { api } from "../lib/ipc";
 import type { ChatProvider, PlayerDiscovery, ProbeResult, Settings, TextScale, Theme, UiLanguage } from "../lib/generated";
@@ -47,7 +47,7 @@ function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { save
   const [busy, setBusy] = useState<string | null>(null);
   const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<MessageKey | null>(null);
   const run = async (key: string, action: () => Promise<void>) => {
     if (inFlight.current || saving) return;
     inFlight.current = true; setBusy(key); setError(null); setMessage(null);
@@ -60,7 +60,7 @@ function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { save
       event.preventDefault();
       void run("save", async () => {
         await commit(() => api.savePlaybackSettings(draft));
-        setEdits({}); setMessage(t("settings.saved"));
+        setEdits({}); setMessage("settings.saved");
       });
     }}>
       <fieldset disabled={!!busy}>
@@ -119,11 +119,11 @@ function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { save
         {section === "Hidden items" && <SavedItems list="hidden" />}
         {section === "Updates" && <UpdateAwareness />}
         {section === "Shortcuts" && <ShortcutEditor />}
-        {section !== "Shortcuts" && section !== "Updates" && section !== "Hidden items" && <div className="settings-save"><button type="submit" disabled={saving}>{t("playbackSettings.saveSettings")}</button><button type="button" onClick={() => { setEdits({}); setProbe(null); setError(null); setMessage(t("settings.discarded")); }}>{t("playbackSettings.cancelChanges")}</button><span className="muted">{JSON.stringify(draft) !== JSON.stringify(saved) ? t("settings.unsaved") : t("settings.savedPreferences")}</span></div>}
+        {section !== "Shortcuts" && section !== "Updates" && section !== "Hidden items" && <div className="settings-save"><button type="submit" disabled={saving}>{t("playbackSettings.saveSettings")}</button><button type="button" onClick={() => { setEdits({}); setProbe(null); setError(null); setMessage("settings.discarded"); }}>{t("playbackSettings.cancelChanges")}</button><span className="muted">{JSON.stringify(draft) !== JSON.stringify(saved) ? t("settings.unsaved") : t("settings.savedPreferences")}</span></div>}
       </fieldset>
       {(busy || saving) && <p role="status">{busy === "probe" ? t("settings.testingStreamlink") : t("settings.working")}</p>}
       {error && <p className="error" role="alert">{error}</p>}
-      {message && <p role="status">{message}</p>}
+      {message && <p role="status">{t(message)}</p>}
     </form>
   </div>;
 }
