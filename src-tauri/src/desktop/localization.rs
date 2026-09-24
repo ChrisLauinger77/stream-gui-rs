@@ -35,19 +35,36 @@ fn system_locale() -> Locale {
     }
     #[cfg(windows)]
     {
-        let mut name = [0_u16; 85];
-        // SAFETY: the system writes at most the supplied capacity to this stack buffer.
-        let length = unsafe {
-            windows_sys::Win32::Globalization::GetUserDefaultLocaleName(
-                name.as_mut_ptr(),
-                name.len() as i32,
+        // Regional formatting can differ from the user's display language.
+        use windows_sys::Win32::Globalization::{GetUserPreferredUILanguages, MUI_LANGUAGE_NAME};
+        let mut count = 0_u32;
+        let mut length = 0_u32;
+        // SAFETY: a null buffer with zero length asks Windows for the required size.
+        let measured = unsafe {
+            GetUserPreferredUILanguages(
+                MUI_LANGUAGE_NAME,
+                &mut count,
+                std::ptr::null_mut(),
+                &mut length,
             )
         };
-        return if length > 1 {
-            from_tag(&String::from_utf16_lossy(&name[..length as usize - 1]))
-        } else {
-            Locale::En
+        if measured == 0 || !(2..=4096).contains(&length) {
+            return Locale::En;
+        }
+        let mut names = vec![0_u16; length as usize];
+        // SAFETY: Windows receives the allocated capacity and writes within it.
+        let loaded = unsafe {
+            GetUserPreferredUILanguages(
+                MUI_LANGUAGE_NAME,
+                &mut count,
+                names.as_mut_ptr(),
+                &mut length,
+            )
         };
+        if loaded == 0 || count == 0 || length as usize > names.len() {
+            return Locale::En;
+        }
+        return first_preferred_locale(&names[..length as usize]);
     }
     #[cfg(not(any(target_os = "macos", windows)))]
     {
@@ -58,6 +75,12 @@ fn system_locale() -> Locale {
             .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
             .map_or(Locale::En, |tag| from_tag(&tag))
     }
+}
+
+#[cfg(windows)]
+fn first_preferred_locale(names: &[u16]) -> Locale {
+    let first = names.split(|code| *code == 0).next().unwrap_or(&[]);
+    String::from_utf16(first).map_or(Locale::En, |tag| from_tag(&tag))
 }
 
 pub(super) fn selected(language: UiLanguage) -> Locale {
@@ -150,5 +173,14 @@ mod tests {
             );
         }
         assert_eq!(selected(UiLanguage::De), Locale::De);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_preferred_ui_language_uses_first_tag() {
+        let tags = "fr-CA\0de-DE\0\0".encode_utf16().collect::<Vec<_>>();
+        assert_eq!(first_preferred_locale(&tags), Locale::Fr);
+        let unsupported = "ja-JP\0fr-FR\0\0".encode_utf16().collect::<Vec<_>>();
+        assert_eq!(first_preferred_locale(&unsupported), Locale::En);
     }
 }

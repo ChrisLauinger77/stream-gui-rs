@@ -179,7 +179,7 @@ mod tests {
                 );
             }
         }
-        let german = options("Stream GUI RS", "1.2.3", "a1b2c3d", l10n::Locale::De);
+        let german = super::options("Stream GUI RS", "1.2.3", "a1b2c3d", l10n::Locale::De);
         let credits = german.objectForKey(NSAboutPanelOptionCredits).unwrap();
         assert_eq!(
             credits
