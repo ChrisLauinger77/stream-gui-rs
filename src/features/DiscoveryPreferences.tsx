@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import type { DiscoveryList, ItemKind, SavedItem } from "../lib/generated";
+import type { DiscoveryList, ErrorCode, ItemKind, SavedItem } from "../lib/generated";
 import { useSettings } from "../settings/useSettings";
-import { friendlyError } from "../browse/errors";
-import { useI18n } from "../i18n";
+import { errorCode, errorText } from "../browse/errors";
+import { useI18n, type MessageKey } from "../i18n";
 
 function useDiscoveryMutation() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { settings, modifyDiscovery } = useSettings();
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<MessageKey | null>(null);
+  const [error, setError] = useState<ErrorCode | null>(null);
   const busy = useRef(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -18,11 +18,11 @@ function useDiscoveryMutation() {
     busy.current = true; setPending(true); setError(null); setMessage(null);
     try {
       await modifyDiscovery({ list, item, present });
-      if (alive.current) setMessage(t(list === "bookmarks" ? present ? "discovery.bookmarkSaved" : "discovery.bookmarkRemoved" : present ? "discovery.hidden" : "discovery.restored"));
-    } catch (failure) { if (alive.current) setError(friendlyError(failure)); }
+      if (alive.current) setMessage(list === "bookmarks" ? present ? "discovery.bookmarkSaved" : "discovery.bookmarkRemoved" : present ? "discovery.hidden" : "discovery.restored");
+    } catch (failure) { if (alive.current) setError(errorCode(failure)); }
     finally { busy.current = false; if (alive.current) setPending(false); }
   };
-  return { settings, pending, change, feedback: <><p role="status">{message}</p>{error && <p role="alert" className="error">{error}</p>}</> };
+  return { settings, pending, change, feedback: <><p role="status">{message && t(message)}</p>{error && <p role="alert" className="error">{errorText(error, locale)}</p>}</> };
 }
 export function LocalItemActions({ kind, id, name }: SavedItem) {
   const { t } = useI18n();

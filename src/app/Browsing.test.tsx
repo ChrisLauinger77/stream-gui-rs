@@ -1866,6 +1866,10 @@ test("Enter in the profile editor saves only that profile and leaves global draf
 function localPreferences(initial = playbackSettings) {
   let saved = structuredClone(initial);
   vi.mocked(api.playbackSettings).mockImplementation(async () => saved);
+  vi.mocked(api.saveUiLanguage).mockImplementation(async uiLanguage => {
+    saved = { ...saved, uiLanguage };
+    return saved;
+  });
   vi.mocked(api.modifyDiscovery).mockImplementation(async ({ list, item, present }) => {
     const items = saved.discovery[list].filter(value => value.kind !== item.kind || value.id !== item.id);
     saved = { ...saved, discovery: { ...saved.discovery, [list]: present ? [...items, item] : items } };
@@ -1886,6 +1890,31 @@ test("channel bookmarks remain reachable while hidden and are independent of Twi
   await click("Settings"); await click("Hidden items", ".settings-nav"); await click("Restore Example Channel");
   expect(saved().discovery.hidden).toHaveLength(0);
   await click("Close Settings"); await click("Live"); expect(container.querySelector(".stream-card")).not.toBeNull();
+});
+
+test("visible discovery feedback follows language changes after returning from Settings", async () => {
+  localPreferences();
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await click("Bookmark channel");
+  const feedback = container.querySelector(".local-item-actions")!;
+  expect(feedback.querySelector('[role="status"]')?.textContent).toBe("Bookmark saved locally.");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  await click("Einstellungen schließen");
+  expect(feedback.querySelector('[role="status"]')?.textContent).toBe("Lesezeichen lokal gespeichert.");
+
+  await click("Kanal aus Entdeckung ausblenden");
+  expect(feedback.querySelector('[role="status"]')?.textContent).toBe("Aus der Entdeckung ausgeblendet. Direkte Navigation bleibt möglich.");
+  await click("Einstellungen"); await click("Darstellung", ".settings-nav"); await chooseUiLanguage("en");
+  await click("Close Settings");
+  expect(feedback.querySelector('[role="status"]')?.textContent).toBe("Hidden from discovery. Direct navigation remains available.");
+
+  vi.mocked(api.modifyDiscovery).mockRejectedValueOnce({ code: "settings", message: "PRIVATE" });
+  await click("Remove bookmark");
+  expect(feedback.querySelector('[role="alert"]')?.textContent).toBe("The saved settings could not be read.");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  await click("Einstellungen schließen");
+  expect(feedback.querySelector('[role="alert"]')?.textContent).toBe("Die gespeicherten Einstellungen konnten nicht gelesen werden.");
+  expect(feedback.textContent).not.toContain("PRIVATE");
 });
 
 test("category hides filter passive discovery while search and saved categories stay reachable", async () => {
