@@ -7,7 +7,7 @@ license = "GPL-3.0-only"
 repository = "https://github.com/ChrisLauinger77/stream-gui-rs"
 homepage = "https://github.com/ChrisLauinger77/stream-gui-rs"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 default-run = "stream-gui-rs"
 
 [lib]
@@ -56,6 +56,7 @@ zeroize = { version = "1", features = ["serde"] }
 tempfile = "3"
 tokio-util = { version = "0.7", features = ["rt"] }
 fs2 = "0.4"
+keyring-core = "1"
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 # Native forwarding on argv-based platforms; macOS uses LaunchServices events.
@@ -68,13 +69,13 @@ block2 = { version = "0.6", optional = true }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSAttributedString", "NSColor"], optional = true }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSAttributedString", "NSBundle", "NSDictionary", "NSError", "NSObject", "NSString", "NSURL", "NSValue", "NSLocale"], optional = true }
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSettings", "UNNotificationTrigger"], optional = true }
-keyring = { version = "3.6.3", features = ["apple-native"] }
+apple-native-keyring-store = { version = "1.0.2", default-features = false, features = ["keychain"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gio = { version = "0.18", optional = true }
 # Already provided by Tauri; configure its existing native Wayland title bar.
 gtk = { version = "0.18", optional = true }
-keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust"] }
+dbus-secret-service-keyring-store = { version = "1.0.1", features = ["crypto-rust"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -83,5 +84,5 @@ libc = "0.2"
 # Required by windows::core::implement for the native COM activator.
 windows-core = { version = "0.61", optional = true }
 windows = { version = "0.61", features = ["UI_Notifications", "Data_Xml_Dom", "Foundation", "Win32_System_WinRT", "Win32_System_Com", "Win32_System_Registry", "Win32_UI_Notifications", "Win32_Security", "Win32_System_Threading"], optional = true }
-keyring = { version = "3.6.3", features = ["windows-native"] }
+windows-native-keyring-store = { version = "1.1.0", default-features = false }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_System_Console", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_Threading"] }

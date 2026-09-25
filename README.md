@@ -186,7 +186,7 @@ Stream GUI RS does not provide embedded video/chat, arbitrary chat applications,
 
 Build requirements are separate from the runtime requirements above:
 
-- stable Rust 1.85 or newer
+- stable Rust 1.88 or newer
 - Node.js 22.22.2+, 24.15.0+, or 26+ with npm; CI uses Node 24
 - [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for the target platform
 - on Debian/Ubuntu, `libayatana-appindicator3-dev` for tray support alongside the existing native prerequisites
