@@ -1,6 +1,6 @@
-import { useI18n } from "../i18n";
+import { useI18n, type MessageKey } from "../i18n";
 import { useEffect, useRef, useState } from "react";
-import type { ProfileDraft, ProfileMutation, QualityPolicy, Settings } from "../lib/generated";
+import type { ErrorCode, ProfileDraft, ProfileMutation, QualityPolicy, Settings } from "../lib/generated";
 import { api } from "../lib/ipc";
 import { errorCode } from "../browse/errors";
 import { playbackError } from "../playback/usePlayback";
@@ -9,14 +9,14 @@ import { PlayerFields } from "./PlayerFields";
 
 type Props = { saved: Settings; saving: boolean; commit: (action: () => Promise<Settings>) => Promise<Settings> };
 export function PlayerProfiles({ saved, saving, commit }: Props) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const qualityLabels = useQualityLabels();
   const [choice, setChoice] = useState<string | null>(null);
   const [editor, setEditor] = useState<{ id: string | null; draft: ProfileDraft } | null>(null);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorCode | null>(null);
+  const [message, setMessage] = useState<MessageKey | null>(null);
   const selection = useRef<HTMLSelectElement>(null);
   const focusAfter = useRef<Element | null>(null);
   useEffect(() => {
@@ -36,9 +36,9 @@ export function PlayerProfiles({ saved, saving, commit }: Props) {
       const accepted = await commit(() => api.modifyPlayerProfile(request));
       if (request.kind === "create") setChoice(accepted.profiles.find(profile => !saved.profiles.some(old => old.id === profile.id))?.id ?? null);
       if (request.kind === "delete") setChoice(null);
-      setEditor(null); setMessage(t(request.kind === "delete" ? "profiles.deleted" : "profiles.saved"));
+      setEditor(null); setMessage(request.kind === "delete" ? "profiles.deleted" : "profiles.saved");
     } catch (error) {
-      setError(errorCode(error) === "settings" ? t("profiles.saveFailed") : playbackError(error));
+      setError(errorCode(error));
     } finally { inFlight.current = false; setBusy(false); }
   };
   const edit = (change: Partial<ProfileDraft>) => setEditor(value => value && ({ ...value, draft: { ...value.draft, ...change } }));
@@ -70,7 +70,7 @@ export function PlayerProfiles({ saved, saving, commit }: Props) {
       <div className="settings-save"><button type="button" disabled={saving || !editor.draft.name.trim()} onClick={() => { void mutate(editor.id ? { kind: "update", id: editor.id, profile: editor.draft } : { kind: "create", profile: editor.draft }); }}>{t("playerProfiles.saveProfile")}</button><button type="button" onClick={() => { focusAfter.current = document.activeElement; setEditor(null); setError(null); }}>{t("playerProfiles.cancelProfile")}</button></div>
     </fieldset>}
     {busy && <p role="status">{t("playerProfiles.savingProfile")}</p>}
-    {error && <p role="alert" className="error">{error}</p>}
-    {message && <p role="status">{message}</p>}
+    {error && <p role="alert" className="error">{error === "settings" ? t("profiles.saveFailed") : playbackError({ code: error }, locale)}</p>}
+    {message && <p role="status">{t(message)}</p>}
   </section>;
 }

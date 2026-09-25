@@ -1677,6 +1677,24 @@ test("profile save errors retain the draft and do not expose raw backend text", 
   expect(text()).toContain("unique name"); expect(text()).not.toContain("secret backend text");
   expect(container.querySelector<HTMLInputElement>('.profile-editor input')?.value).toBe("Duplicate");
 });
+test("profile feedback follows UI language changes while the Player section stays mounted", async () => {
+  const store = profilesPersistence();
+  vi.mocked(api.saveUiLanguage).mockImplementation(async uiLanguage =>
+    store.acceptGlobal({ ...await api.playbackSettings(), uiLanguage }));
+  await render(); await openProfiles(); await createProfile();
+  expect(container.querySelector(".player-profiles [role='status']")?.textContent).toContain("Profile saved.");
+
+  await click("Appearance", ".settings-nav"); await chooseUiLanguage("de"); await click("Player", ".settings-nav");
+  expect(container.querySelector(".player-profiles [role='status']")?.textContent).toContain("Profil gespeichert.");
+
+  await click("Profil bearbeiten");
+  vi.mocked(api.modifyPlayerProfile).mockRejectedValueOnce({ code: "settings", message: "secret backend text" });
+  await click("Profil speichern");
+  expect(container.querySelector(".player-profiles [role='alert']")?.textContent).toContain("Das Profil konnte nicht gespeichert werden.");
+  await click("Darstellung", ".settings-nav"); await chooseUiLanguage("en"); await click("Player", ".settings-nav");
+  expect(container.querySelector(".player-profiles [role='alert']")?.textContent).toContain("The profile could not be saved.");
+  expect(text()).not.toContain("secret backend text");
+});
 test("profile writes survive closing settings and block competing global writes until accepted", async () => {
   const store = profilesPersistence(); const pending = deferred<typeof playbackSettings>();
   vi.mocked(api.modifyPlayerProfile).mockReturnValueOnce(pending.promise);
