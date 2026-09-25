@@ -2,6 +2,7 @@ import { useI18n } from "../i18n";
 import { useState } from "react";
 import type { DesktopStatus, NotificationTestAction } from "../lib/generated";
 import { api } from "../lib/ipc";
+import { errorText } from "../browse/errors";
 import type { useDesktop } from "./useDesktop";
 import { permissionMessages } from "../features/BackgroundSettings";
 
@@ -12,7 +13,7 @@ export function isNotificationTest(status: DesktopStatus | null) {
 }
 
 export function NotificationAcceptance({ desktop }: { desktop: ReturnType<typeof useDesktop> }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [message, setMessage] = useState<string | null>(null);
   if (!desktop.status?.notificationTestAvailable) return null;
   const permission = desktop.status.notificationPermission;
@@ -40,7 +41,7 @@ export function NotificationAcceptance({ desktop }: { desktop: ReturnType<typeof
       <button disabled={desktop.busy || !canSend} onClick={() => run("send")}>{t("notificationAcceptance.sendTestNotification")}</button>
       <button disabled={desktop.busy} onClick={() => run("clear")}>{t("notificationAcceptance.clearTestNotifications")}</button>
     </div>
-    {desktop.error && <p className="error" role="alert">{desktop.error}</p>}
+    {desktop.error && <p className="error" role="alert">{errorText(desktop.error, locale)}</p>}
     {message && <p role="status">{message}</p>}
   </section>;
 }

@@ -13,7 +13,7 @@ export const permissionMessages: Record<NotificationPermission, MessageKey> = {
   denied: "background.permissionDenied", unavailable: "background.permissionUnavailable", os_managed: "background.permissionOsManaged",
 };
 export function BackgroundSettings({ value, change, desktop }: { value: Preferences; change: (value: Partial<Preferences>) => void; desktop: ReturnType<typeof useDesktop> }) {
-  const { t, count, number } = useI18n();
+  const { t, count, number, locale } = useI18n();
   const status = desktop.status;
   return <div>
     <label className="checkbox-label"><input type="checkbox" checked={value.monitoringEnabled} onChange={event => change({ monitoringEnabled: event.target.checked })} />{t("backgroundSettings.monitorFollowedLiveStreams")}</label>
@@ -26,7 +26,7 @@ export function BackgroundSettings({ value, change, desktop }: { value: Preferen
     <p className="muted">{t("background.closeHelp")}</p>
     {status && <>
       <p role="status">{t(phases[status.monitor.phase])}{status.monitor.liveCount !== null && <> · {count("background.followedLive", status.monitor.liveCount)}{status.monitor.stale && ` ${t("background.previousCount")}`}</>}</p>
-      {status.monitor.error && <p className="muted">{t("background.retryIn", { error: errorText(status.monitor.error), seconds: number(status.monitor.retryInSeconds) })}</p>}
+      {status.monitor.error && <p className="muted">{t("background.retryIn", { error: errorText(status.monitor.error, locale), seconds: number(status.monitor.retryInSeconds) })}</p>}
       <button type="button" disabled={desktop.busy || status.monitor.phase === "disabled"} onClick={() => { void desktop.run(status.monitor.paused ? api.resumeMonitor : api.pauseMonitor); }}>{status.monitor.paused ? t("background.resumeMonitoring") : t("background.pauseMonitoring")}</button>
       <p className="muted">{t("background.pauseHelp")}</p>
       <p>{t(permissionMessages[status.notificationPermission])}</p>
@@ -36,6 +36,6 @@ export function BackgroundSettings({ value, change, desktop }: { value: Preferen
       {!status.trayAvailable && <p className="muted">{t("background.trayUnavailable")}</p>}
       {status.monitor.notificationError && <p role="status">{t("background.deliveryFailed")}</p>}
     </>}
-    {desktop.error && <p className="error" role="alert">{desktop.error}</p>}
+    {desktop.error && <p className="error" role="alert">{errorText(desktop.error, locale)}</p>}
   </div>;
 }

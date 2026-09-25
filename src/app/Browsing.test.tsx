@@ -822,6 +822,15 @@ test("failed native authorization stays visible and can be retried before a test
   expect(api.devNotificationTest).toHaveBeenCalledWith("send");
   expect(text()).toContain("OS delivery is not confirmed");
 });
+test("notification acceptance renders a rejected desktop action as a safe message", async () => {
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, notificationTestAvailable: true });
+  vi.mocked(api.diagnostics).mockRejectedValue({ code: "internal" });
+  vi.mocked(api.requestNotificationPermission).mockRejectedValue({ code: "notification", message: "PRIVATE" });
+  await render(); await click("Settings"); await click("Developer tools"); await click("Allow desktop notifications");
+  const alert = container.querySelector(".settings-panel[aria-label='Native notification acceptance'] [role='alert']")!;
+  expect(alert.textContent).toBe("Desktop notifications are unavailable. Check your system notification settings.");
+  expect(alert.textContent).not.toContain("PRIVATE");
+});
 test("test activation retries acknowledgement without reopening the dismissed target", async () => {
   vi.mocked(api.authStatus).mockResolvedValue(signedOut);
   vi.mocked(api.desktopStatus).mockImplementation(async () => ({ ...desktopSnapshot, notificationTestAvailable: true, action: testNotification }));
@@ -861,6 +870,18 @@ test("Background settings persist intent and pause independently of browsing", a
   await click("Resume monitoring"); expect(api.resumeMonitor).toHaveBeenCalledOnce();
   await click("Allow desktop notifications"); expect(api.requestNotificationPermission).toHaveBeenCalledOnce();
   expect(api.logout).not.toHaveBeenCalled(); expect(api.followedStreams).toHaveBeenCalledOnce();
+});
+test("background action errors follow a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.desktopStatus).mockResolvedValue(desktopSnapshot);
+  vi.mocked(api.pauseMonitor).mockRejectedValue({ code: "notification", message: "PRIVATE" });
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  await render(); await click("Settings"); await click("Background", ".settings-nav"); await click("Pause monitoring");
+  const alert = container.querySelector(".playback-settings [role='alert']")!;
+  expect(alert.textContent).toBe("Desktop notifications are unavailable. Check your system notification settings.");
+  await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(alert.textContent).toBe("Desktopbenachrichtigungen sind nicht verfügbar. Prüfe die Benachrichtigungseinstellungen des Systems.");
+  expect(alert.textContent).not.toContain("PRIVATE");
 });
 test("notification actions survive reconstruction, navigate once and never launch playback", async () => {
   vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action: {
