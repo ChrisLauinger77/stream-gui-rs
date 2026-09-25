@@ -14,13 +14,13 @@ Rust now owns authentication, Helix/cache/rate limits, settings, native integrat
 
 Advanced transports, more chat clients, legacy configuration import, an embedded player, automatic updating, a separate automation CLI and additional streaming services remain deferred. None is a prerequisite for 1.0; revisit them only for a demonstrated user workflow and a viable cross-platform maintenance plan.
 
-## Deferred native dependency migrations
+## Native dependency maintenance after 1.0
 
-The 1.0 localization work used the pre-migration native dependency stack. Handle these migrations separately after 1.0:
+The 1.0 localization work used the pre-migration native dependency stack. The post-1.0 migrations remain separate:
 
-- **keyring 3.6.3 → keyring-core 1 and native provider crates:** The dedicated migration keeps the old service/account identity, Linux target and stored record. Existing-login restoration, rotation and deletion must pass on macOS Keychain, Windows Credential Manager and Linux Secret Service before merge.
-- **GTK 0.18 / GIO 0.18 → newer generations:** Tauri 2 and Wry currently use the same GTK/GIO generation as this app. Move with their native stack, then check Linux title bar, browser dispatch, tray and notifications in a graphical session.
-- **windows / windows-core 0.61 → newer generations:** Tauri, Tao, Wry and WebView2 currently use the 0.61 Windows API generation. Review the app's two direct crates together when that stack moves, then check Windows activation, notifications, tray and process ownership on Windows.
+- **Credential storage completed:** The app moved from keyring 3.6.3 to keyring-core 1 with explicit macOS Keychain, Windows Credential Manager and Linux Secret Service providers. It retained the service/account identity, Linux target and stored record; existing-login upgrade and logout/relogin checks passed on all three platforms.
+- **Direct Windows bindings completed:** The app's `windows` and `windows-core` dependencies moved together from 0.61 to 0.62.2. Tauri, Tao, Wry and WebView2 still use the 0.61 generation, so both generations remain in the lockfile. The separate `windows-sys` 0.61 dependency still serves low-level process and console APIs. Hosted checks and Windows 24H2 installed-package acceptance passed for the direct-binding change. Revisit framework alignment when Tauri/Wry and their Windows dependencies adopt a compatible newer generation; review the resulting lockfile and repeat affected Windows activation, notification, tray and process checks.
+- **GTK 0.18 / GIO 0.18 deferred:** Tauri 2 and Wry currently use the same GTK/GIO generation as this app. Move with their native stack, then check Linux title bar, browser dispatch, tray and notifications in a graphical session.
 
 ## 1.0 release status
 
