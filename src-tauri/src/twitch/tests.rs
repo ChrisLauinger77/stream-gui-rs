@@ -981,29 +981,37 @@ async fn deletion_failure_prevents_refresh_and_cannot_claim_successful_logout() 
     );
 }
 
-/// Models a native adapter that loses the deletion status, as the locked macOS
-/// dependency does. No real OS credential entry is accessed.
+/// Models a native adapter that reports deletion without actually removing the
+/// entry. No real OS credential entry is accessed.
 struct UnverifiedDeleteCredential {
-    inner: keyring::mock::MockCredential,
+    inner: keyring_core::Entry,
     unreadable_after_delete: bool,
     deleted: AtomicBool,
 }
-impl keyring::credential::CredentialApi for UnverifiedDeleteCredential {
-    fn set_secret(&self, secret: &[u8]) -> keyring::Result<()> {
+impl keyring_core::api::CredentialApi for UnverifiedDeleteCredential {
+    fn set_secret(&self, secret: &[u8]) -> keyring_core::Result<()> {
         self.inner.set_secret(secret)
     }
-    fn get_secret(&self) -> keyring::Result<Vec<u8>> {
+    fn get_secret(&self) -> keyring_core::Result<Vec<u8>> {
         if self.unreadable_after_delete && self.deleted.load(Ordering::SeqCst) {
-            return Err(keyring::Error::Invalid(
+            return Err(keyring_core::Error::Invalid(
                 "synthetic-secret".into(),
                 "synthetic-secret".into(),
             ));
         }
         self.inner.get_secret()
     }
-    fn delete_credential(&self) -> keyring::Result<()> {
+    fn delete_credential(&self) -> keyring_core::Result<()> {
         self.deleted.store(true, Ordering::SeqCst);
         Ok(())
+    }
+    fn get_credential(
+        &self,
+    ) -> keyring_core::Result<Option<std::sync::Arc<keyring_core::Credential>>> {
+        Ok(None)
+    }
+    fn get_specifiers(&self) -> Option<(String, String)> {
+        Some(("io.github.stream-gui-rs.oauth".into(), "client".into()))
     }
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -1013,13 +1021,20 @@ impl keyring::credential::CredentialApi for UnverifiedDeleteCredential {
 #[tokio::test(start_paused = true)]
 async fn unverified_native_deletion_blocks_refresh_and_logout_without_leaking_secrets() {
     for unreadable_after_delete in [false, true] {
-        let store = crate::credentials::PlatformCredentialStore::with_test_credential(Box::new(
-            UnverifiedDeleteCredential {
-                inner: keyring::mock::MockCredential::default(),
+        let entry = keyring_core::api::CredentialStoreApi::build(
+            keyring_core::mock::Store::new().unwrap().as_ref(),
+            "io.github.stream-gui-rs.oauth",
+            "client",
+            None,
+        )
+        .unwrap();
+        let store = crate::credentials::PlatformCredentialStore::with_test_credential(
+            std::sync::Arc::new(UnverifiedDeleteCredential {
+                inner: entry,
                 unreadable_after_delete,
                 deleted: AtomicBool::new(false),
-            },
-        ));
+            }),
+        );
         let service = AuthService::new(FakeApi::default(), Some("client".into()), Box::new(store));
         authorize(&service).await;
         let refresh = service.refresh().await.unwrap_err();

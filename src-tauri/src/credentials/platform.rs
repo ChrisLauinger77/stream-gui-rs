@@ -1,5 +1,6 @@
 use super::{CredentialStore, Credentials};
 use crate::domain::{AppError, ErrorCode, Result};
+use keyring_core::{Entry, Error, api::CredentialStoreApi};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{File, OpenOptions},
@@ -10,7 +11,7 @@ use zeroize::Zeroizing;
 const SERVICE: &str = "io.github.stream-gui-rs.oauth";
 
 pub struct PlatformCredentialStore {
-    entry: keyring::Entry,
+    entry: Entry,
     client_id: String,
     // Only one process may rotate this application's stored credentials.
     _lease: File,
@@ -18,9 +19,11 @@ pub struct PlatformCredentialStore {
 
 impl PlatformCredentialStore {
     #[cfg(test)]
-    pub(crate) fn with_test_credential(credential: Box<keyring::credential::Credential>) -> Self {
+    pub(crate) fn with_test_credential(
+        credential: std::sync::Arc<keyring_core::Credential>,
+    ) -> Self {
         Self {
-            entry: keyring::Entry::new_with_credential(credential),
+            entry: Entry::new_with_credential(credential),
             client_id: "client".into(),
             _lease: tempfile::tempfile().unwrap(),
         }
@@ -37,13 +40,32 @@ impl PlatformCredentialStore {
             .map_err(|_| storage_error())?;
         fs2::FileExt::try_lock_exclusive(&lease).map_err(|_| AppError::new(
             ErrorCode::CredentialStore, "Authentication is already owned by another application instance, or its lock is unavailable."))?;
-        let entry = keyring::Entry::new(SERVICE, client_id).map_err(|_| storage_error())?;
+        let entry = native_entry(client_id).map_err(|_| storage_error())?;
         Ok(Self {
             entry,
             client_id: client_id.into(),
             _lease: lease,
         })
     }
+}
+
+#[cfg(target_os = "macos")]
+fn native_entry(client_id: &str) -> keyring_core::Result<Entry> {
+    // The old apple-native provider used the User (login) keychain.
+    apple_native_keyring_store::keychain::Store::new()?.build(SERVICE, client_id, None)
+}
+
+#[cfg(target_os = "linux")]
+fn native_entry(client_id: &str) -> keyring_core::Result<Entry> {
+    // keyring 3's sync Secret Service provider stored entries with target=default.
+    let modifiers = std::collections::HashMap::from([("target", "default")]);
+    dbus_secret_service_keyring_store::Store::new()?.build(SERVICE, client_id, Some(&modifiers))
+}
+
+#[cfg(windows)]
+fn native_entry(client_id: &str) -> keyring_core::Result<Entry> {
+    // The provider's default target is the old {user}.{service} name.
+    windows_native_keyring_store::Store::new()?.build(SERVICE, client_id, None)
 }
 
 // This private storage format is never an IPC DTO. Both tokens are replaced in
@@ -90,7 +112,7 @@ impl CredentialStore for PlatformCredentialStore {
     fn load(&self) -> Result<Option<Credentials>> {
         match self.entry.get_secret() {
             Ok(bytes) => decode(&Zeroizing::new(bytes), &self.client_id).map(Some),
-            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(Error::NoEntry) => Ok(None),
             Err(_) => Err(storage_error()),
         }
     }
@@ -101,13 +123,13 @@ impl CredentialStore for PlatformCredentialStore {
     }
     fn clear(&mut self) -> Result<()> {
         match self.entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Ok(()) | Err(Error::NoEntry) => {}
             Err(_) => return Err(storage_error()),
         }
-        // The macOS dependency can discard the native deletion error. Only an
-        // explicit NoEntry establishes absence; unreadable is not deleted.
+        // A successful native delete still needs verification: only NoEntry
+        // establishes absence, and an unreadable entry is not proven deleted.
         match self.entry.get_secret() {
-            Err(keyring::Error::NoEntry) => Ok(()),
+            Err(Error::NoEntry) => Ok(()),
             Ok(bytes) => {
                 drop(Zeroizing::new(bytes));
                 Err(storage_error())
@@ -154,8 +176,10 @@ mod tests {
     }
     #[test]
     fn platform_adapter_rotates_and_deletes_one_entry_without_os_access() {
-        let entry =
-            keyring::Entry::new_with_credential(Box::new(keyring::mock::MockCredential::default()));
+        let entry = keyring_core::mock::Store::new()
+            .unwrap()
+            .build(SERVICE, "client", None)
+            .unwrap();
         let mut store = PlatformCredentialStore {
             entry,
             client_id: "client".into(),

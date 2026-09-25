@@ -3,10 +3,10 @@ use super::*;
 use gtk::prelude::*;
 
 fn button(widget: &gtk::Widget, name: &str) -> Option<gtk::Button> {
-    if let Some(button) = widget.downcast_ref::<gtk::Button>() {
-        if button.style_context().has_class(name) {
-            return Some(button.clone());
-        }
+    if let Some(button) = widget.downcast_ref::<gtk::Button>()
+        && button.style_context().has_class(name)
+    {
+        return Some(button.clone());
     }
     let mut found = None;
     if let Some(container) = widget.downcast_ref::<gtk::Container>() {

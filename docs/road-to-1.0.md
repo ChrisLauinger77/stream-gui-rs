@@ -16,9 +16,9 @@ Advanced transports, more chat clients, legacy configuration import, an embedded
 
 ## Deferred native dependency migrations
 
-The 1.0 localization work uses the current native dependency stack. Revisit these migrations after 1.0 unless a confirmed security issue, required feature or defect makes one necessary sooner:
+The 1.0 localization work used the pre-migration native dependency stack. Handle these migrations separately after 1.0:
 
-- **keyring 3.6.3 → 4.x:** Version 4 separates the core API from platform credential providers. Move only in a dedicated change that proves existing credentials still restore, rotate and delete through macOS Keychain, Windows Credential Manager and Linux Secret Service.
+- **keyring 3.6.3 → keyring-core 1 and native provider crates:** The dedicated migration keeps the old service/account identity, Linux target and stored record. Existing-login restoration, rotation and deletion must pass on macOS Keychain, Windows Credential Manager and Linux Secret Service before merge.
 - **GTK 0.18 / GIO 0.18 → newer generations:** Tauri 2 and Wry currently use the same GTK/GIO generation as this app. Move with their native stack, then check Linux title bar, browser dispatch, tray and notifications in a graphical session.
 - **windows / windows-core 0.61 → newer generations:** Tauri, Tao, Wry and WebView2 currently use the 0.61 Windows API generation. Review the app's two direct crates together when that stack moves, then check Windows activation, notifications, tray and process ownership on Windows.
 

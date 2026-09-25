@@ -57,13 +57,13 @@ impl Worker {
                             if let Some((event, _)) = event {
                                 shared.activate(&event);
                             }
-                        } else if signal == "NotificationClosed" {
-                            if let Some((id, _)) = params.get::<(u32, u32)>() {
-                                actions
-                                    .lock()
-                                    .expect("notification registry poisoned")
-                                    .remove(&id);
-                            }
+                        } else if signal == "NotificationClosed"
+                            && let Some((id, _)) = params.get::<(u32, u32)>()
+                        {
+                            actions
+                                .lock()
+                                .expect("notification registry poisoned")
+                                .remove(&id);
                         }
                     });
                     // A replacement server can reuse IDs. Old actions cannot select new records.

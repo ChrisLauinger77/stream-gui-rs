@@ -444,10 +444,9 @@ impl<A: TwitchApi + 'static> AuthService<A> {
         if snapshot
             .grant_expires
             .is_some_and(|expiry| expiry > self.clock.now())
+            && let Some(auth) = snapshot.status.authorization
         {
-            if let Some(auth) = snapshot.status.authorization {
-                return Ok(auth.verification_uri);
-            }
+            return Ok(auth.verification_uri);
         }
         Err(AppError::new(
             ErrorCode::AuthExpired,
@@ -502,18 +501,17 @@ impl<A: TwitchApi + 'static> AuthService<A> {
             AuthPhase::NotConfigured
         };
         self.publish(&state);
-        if let (Some(credentials), Some(client)) = (credentials, &self.client_id) {
-            if self
+        if let (Some(credentials), Some(client)) = (credentials, &self.client_id)
+            && self
                 .api
                 .revoke(client, &credentials.access_token)
                 .await
                 .is_err()
-            {
-                state.status.error = Some(AppError::new(
-                    ErrorCode::Network,
-                    "Local credentials were deleted. Remote revocation could not be confirmed; disconnect the app in Twitch settings if needed.",
-                ));
-            }
+        {
+            state.status.error = Some(AppError::new(
+                ErrorCode::Network,
+                "Local credentials were deleted. Remote revocation could not be confirmed; disconnect the app in Twitch settings if needed.",
+            ));
         }
         Ok(state.status.clone())
     }

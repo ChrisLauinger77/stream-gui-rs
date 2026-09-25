@@ -125,19 +125,6 @@
         "major"
       ],
       "enabled": false
-    },
-    {
-      "description": "keyring majors require an explicit native-provider migration",
-      "matchManagers": [
-        "cargo"
-      ],
-      "matchPackageNames": [
-        "keyring"
-      ],
-      "matchUpdateTypes": [
-        "major"
-      ],
-      "enabled": false
     }
   ]
 }

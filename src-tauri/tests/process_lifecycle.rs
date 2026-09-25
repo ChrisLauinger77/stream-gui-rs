@@ -292,10 +292,10 @@ async fn shutdown_during_probe(launch: bool) {
     let marker = directory.path().join("timeout.pid");
     let pid: u32 = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if let Ok(pid) = std::fs::read_to_string(&marker) {
-                if let Ok(pid) = pid.parse() {
-                    break pid;
-                }
+            if let Ok(pid) = std::fs::read_to_string(&marker)
+                && let Ok(pid) = pid.parse()
+            {
+                break pid;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -465,10 +465,10 @@ async fn windows_child_cannot_execute_before_job_assignment_and_descendant_is_ow
     let tree = ProcessTree::attach(&child).unwrap();
     let descendant = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if let Ok(contents) = std::fs::read_to_string(&marker) {
-                if let Ok(pid) = contents.parse::<u32>() {
-                    break pid;
-                }
+            if let Ok(contents) = std::fs::read_to_string(&marker)
+                && let Ok(pid) = contents.parse::<u32>()
+            {
+                break pid;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -1324,10 +1324,10 @@ async fn support_report_reuses_validated_version_without_spawning_the_custom_exe
 async fn chat_fixture_result(executable: &Path) -> (u32, Vec<String>) {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if let Ok(data) = std::fs::read(executable.with_extension("chat.json")) {
-                if let Ok(result) = serde_json::from_slice(&data) {
-                    return result;
-                }
+            if let Ok(data) = std::fs::read(executable.with_extension("chat.json"))
+                && let Ok(result) = serde_json::from_slice(&data)
+            {
+                return result;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }

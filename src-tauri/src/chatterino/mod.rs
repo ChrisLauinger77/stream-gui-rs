@@ -56,13 +56,13 @@ fn resolve_with(
         return Ok(LaunchSource::Native(native));
     }
     #[cfg(target_os = "linux")]
-    if let Some(executable) = find("flatpak") {
-        if let Some(installation) = flatpak::detect(&executable) {
-            return Ok(LaunchSource::Flatpak {
-                executable,
-                installation,
-            });
-        }
+    if let Some(executable) = find("flatpak")
+        && let Some(installation) = flatpak::detect(&executable)
+    {
+        return Ok(LaunchSource::Flatpak {
+            executable,
+            installation,
+        });
     }
     Err(missing())
 }
