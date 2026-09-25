@@ -64,10 +64,9 @@ define_class!(
             // Only Apple's default click action selects the internally retained target.
             if response.actionIdentifier().to_string()
                 == "com.apple.UNNotificationDefaultActionIdentifier"
+                && let Some((event, _)) = event
             {
-                if let Some((event, _)) = event {
-                    self.ivars().shared.activate(&event);
-                }
+                self.ivars().shared.activate(&event);
             }
             completion.call(());
         }
@@ -251,12 +250,12 @@ impl Worker {
             !remove
         });
         drop(records);
-        if let Some(center) = &self.center {
-            if !expired.is_empty() {
-                let ids = NSArray::from_retained_slice(&expired);
-                center.removePendingNotificationRequestsWithIdentifiers(&ids);
-                center.removeDeliveredNotificationsWithIdentifiers(&ids);
-            }
+        if let Some(center) = &self.center
+            && !expired.is_empty()
+        {
+            let ids = NSArray::from_retained_slice(&expired);
+            center.removePendingNotificationRequestsWithIdentifiers(&ids);
+            center.removeDeliveredNotificationsWithIdentifiers(&ids);
         }
     }
     pub fn shutdown(&mut self) {

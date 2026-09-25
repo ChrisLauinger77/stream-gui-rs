@@ -465,10 +465,10 @@ async fn windows_child_cannot_execute_before_job_assignment_and_descendant_is_ow
     let tree = ProcessTree::attach(&child).unwrap();
     let descendant = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if let Ok(contents) = std::fs::read_to_string(&marker) {
-                if let Ok(pid) = contents.parse::<u32>() {
-                    break pid;
-                }
+            if let Ok(contents) = std::fs::read_to_string(&marker)
+                && let Ok(pid) = contents.parse::<u32>()
+            {
+                break pid;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
