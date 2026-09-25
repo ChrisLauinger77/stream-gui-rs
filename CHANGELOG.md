@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 1.0.0 - 2026-09-25
+
+### Added
+
+- Bundled English, German, Spanish and French interface catalogs, with a saved System or explicit language choice and English fallback.
+- Localized native tray, notification and macOS About text, plus accessible interface messages, counts and dates.
+- Open channel and Bookmarks shortcut actions, with platform defaults and migration of existing custom shortcut maps.
+
+### Improved
+
+- Switching interface languages updates visible feedback and errors without reopening the affected view.
+- Settings schema 8 preserves existing preferences while adding the interface language choice.
+
+### Fixed
+
+- Twitch discovery ignores unused stream metadata that could otherwise reject an otherwise usable response.
+
 ## 0.5.0 - 2026-09-23
 
 ### Added

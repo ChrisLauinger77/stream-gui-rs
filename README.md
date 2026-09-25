@@ -35,7 +35,7 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
 - About on every desktop platform and a previewable support report
 
-See the [0.5.0 release notes](docs/release-notes-0.5.0.md) for the latest published version and upgrade guidance, and the [road to 1.0](docs/road-to-1.0.md) for current development. The interface languages described here are part of the 1.0 development branch until a release is published. Candidate builds are not published releases.
+See the [1.0.0 release notes](docs/release-notes-1.0.0.md) for changes and upgrade guidance, and the [0.5.0 release notes](docs/release-notes-0.5.0.md) for the previous version. Candidate builds are not published releases.
 
 Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. Background features are available in 0.2.0 and later; v0.1.0 packages retain their original close-to-exit behavior.
 
