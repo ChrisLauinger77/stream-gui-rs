@@ -195,9 +195,10 @@ impl Worker {
         }
         let id = uuid::Uuid::new_v4().to_string();
         let content = UNMutableNotificationContent::new();
-        content.setTitle(&NSString::from_str(&format!(
-            "{} is live",
-            event.display_name
+        content.setTitle(&NSString::from_str(&localization::named(
+            self.shared.locale(),
+            "native.live",
+            &event.display_name,
         )));
         content.setSubtitle(&NSString::from_str(&event.category));
         content.setBody(&NSString::from_str(&event.title));

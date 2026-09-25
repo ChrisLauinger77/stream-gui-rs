@@ -2,14 +2,22 @@
 use super::*;
 
 pub(super) async fn evaluate(app: &tauri::AppHandle, script: &str) -> serde_json::Value {
-    let (send, mut receive) = tokio::sync::mpsc::unbounded_channel();
-    app.get_webview_window("main")
-        .unwrap()
-        .eval_with_callback(script, move |value| {
-            let _ = send.send(value);
-        })
-        .unwrap();
-    serde_json::from_str(&receive.recv().await.unwrap()).unwrap_or_default()
+    // A reload can dispose of a callback after accepting the evaluation.
+    // Retry briefly; the surrounding assertion still has a bounded deadline.
+    for _ in 0..3 {
+        let (send, mut receive) = tokio::sync::mpsc::unbounded_channel();
+        app.get_webview_window("main")
+            .unwrap()
+            .eval_with_callback(script, move |value| {
+                let _ = send.send(value);
+            })
+            .unwrap();
+        if let Some(value) = receive.recv().await {
+            return serde_json::from_str(&value).unwrap_or_default();
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    serde_json::Value::Null
 }
 pub(super) async fn until(app: &tauri::AppHandle, script: &str) {
     let result = tokio::time::timeout(Duration::from_secs(8), async {

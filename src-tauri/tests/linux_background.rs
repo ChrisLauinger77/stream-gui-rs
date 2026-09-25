@@ -34,6 +34,12 @@ fn phase_eight_navigation_preferences_and_native_links() {
     run_scenarios(&["phase8"]);
 }
 
+#[test]
+#[ignore = "requires a graphical Linux session and frontend dev server; synthetic isolated services only"]
+fn localized_settings_switch_and_scale_in_native_webview() {
+    run_scenarios(&["localization"]);
+}
+
 fn run_scenarios(actions: &[&str]) {
     for action in actions {
         let directory = tempfile::tempdir().unwrap();
@@ -43,6 +49,9 @@ fn run_scenarios(actions: &[&str]) {
             command
                 .env("GDK_BACKEND", "wayland")
                 .env("GTK_THEME", "Adwaita");
+        }
+        if *action == "localization" {
+            command.env("LANG", "de_DE.UTF-8").env_remove("LC_ALL");
         }
         let mut child = command
             .args(["--", env!("CARGO_BIN_EXE_background-smoke")])

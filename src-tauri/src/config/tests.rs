@@ -19,11 +19,12 @@ fn settings_version_and_round_trip() {
         SettingsDocument::from_json(&serde_json::to_string(&value).unwrap()).unwrap(),
         value
     );
-    assert_eq!(value.version, 7);
+    assert_eq!(value.version, 8);
     assert_eq!(value.settings.theme, Theme::System);
+    assert_eq!(value.settings.ui_language, UiLanguage::System);
     assert!(!value.settings.automatic_chat);
     assert_eq!(value.settings.default_quality, QualityPolicy::Source);
-    for text in ["{}", r#"{"version":8}"#, r#"{"version":0}"#] {
+    for text in ["{}", r#"{"version":9}"#, r#"{"version":0}"#] {
         assert_eq!(
             SettingsDocument::from_json(text).unwrap_err().code,
             ErrorCode::SettingsVersion
@@ -107,7 +108,7 @@ fn version_two_migration_preserves_every_playback_preference_without_rewriting()
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 7);
+    assert_eq!(persisted["version"], 8);
     assert_eq!(persisted["channelOverrides"], serde_json::json!({}));
 }
 
@@ -370,7 +371,7 @@ fn phase_five_migration_is_strict_preserves_channel_preferences_and_defaults_off
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 7);
+    assert_eq!(persisted["version"], 8);
     let reopened = SettingsStore::open(root.path()).unwrap();
     assert_eq!(reopened.snapshot(), expected);
     for id in ["123", "456"] {
@@ -508,7 +509,7 @@ fn version_four_migration_preserves_released_preferences_and_defaults_phase_six(
     check_channels(&reopened);
     let saved: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(saved["version"], 7);
+    assert_eq!(saved["version"], 8);
     assert!(saved["settings"]["discoveryLanguage"].is_null());
     assert_eq!(saved["settings"]["lowLatency"], false);
     assert_eq!(saved["settings"]["textScale"], "100");
@@ -706,7 +707,7 @@ fn released_schema_five_migration_preserves_all_values_and_starts_without_profil
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
     assert_eq!(persisted["channelOverrides"], old["channelOverrides"]);
-    assert_eq!(persisted["version"], 7);
+    assert_eq!(persisted["version"], 8);
     let mut hostile = old;
     hostile["settings"]["profiles"] = serde_json::json!([]);
     assert!(SettingsDocument::from_json(&hostile.to_string()).is_err());
@@ -920,6 +921,7 @@ fn version_six_migrates_in_memory_and_rejects_smuggled_phase_eight_fields() {
     let settings = old["settings"].as_object_mut().unwrap();
     settings.remove("discovery");
     settings.remove("shortcuts");
+    settings.remove("uiLanguage");
     let original = serde_json::to_string(&old).unwrap();
     fs::write(dir.path().join("settings.json"), &original).unwrap();
     let store = SettingsStore::open(dir.path()).unwrap();
@@ -930,14 +932,67 @@ fn version_six_migrates_in_memory_and_rejects_smuggled_phase_eight_fields() {
     assert_eq!(fs::read_to_string(store.path()).unwrap(), original);
     old["settings"]["discovery"] = serde_json::json!({"bookmarks":[],"hidden":[]});
     assert!(SettingsDocument::from_json(&old.to_string()).is_err());
+    old["settings"].as_object_mut().unwrap().remove("discovery");
+    old["settings"]["uiLanguage"] = "de".into();
+    assert!(SettingsDocument::from_json(&old.to_string()).is_err());
     store
         .set_shortcuts(shortcuts::ShortcutBindings::default())
         .unwrap();
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&fs::read_to_string(store.path()).unwrap())
             .unwrap()["version"],
-        7
+        8
     );
+}
+
+#[test]
+fn version_seven_migrates_language_without_changing_existing_settings() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut prior = SettingsDocument::default();
+    prior.settings.theme = Theme::Dark;
+    prior.settings.text_scale = TextScale::Largest;
+    prior.settings.discovery_language = Some(StreamLanguage::De);
+    prior.settings.background.close_to_background = true;
+    prior.settings.default_quality = QualityPolicy::Audio;
+    prior.channel_overrides.insert(
+        "123".into(),
+        ChannelOverrides {
+            quality: Some(QualityPolicy::High),
+            ..ChannelOverrides::default()
+        },
+    );
+    let mut old = serde_json::to_value(&prior).unwrap();
+    old["version"] = 7.into();
+    old["settings"]
+        .as_object_mut()
+        .unwrap()
+        .remove("uiLanguage");
+    let bytes = old.to_string();
+    fs::write(dir.path().join("settings.json"), &bytes).unwrap();
+    let store = SettingsStore::open(dir.path()).unwrap();
+    assert_eq!(fs::read_to_string(store.path()).unwrap(), bytes);
+    assert_eq!(store.snapshot(), prior.settings);
+    assert_eq!(
+        store.channel("123").unwrap().overrides,
+        prior.channel_overrides["123"]
+    );
+    let mut stale = store.snapshot();
+    stale.ui_language = UiLanguage::De;
+    store.set_ui_language(UiLanguage::Fr).unwrap();
+    store.update(stale).unwrap();
+    let persisted: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
+    assert_eq!(persisted["version"], 8);
+    assert_eq!(persisted["settings"]["uiLanguage"], "fr");
+    assert_eq!(
+        SettingsStore::open(dir.path())
+            .unwrap()
+            .snapshot()
+            .ui_language,
+        UiLanguage::Fr
+    );
+    old["settings"]["uiLanguage"] = "de".into();
+    assert!(SettingsDocument::from_json(&old.to_string()).is_err());
 }
 
 #[test]

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { api } from "../lib/ipc";
-import type { DiscoveryMutation, ShortcutBindings, SaveChannelSettingsRequest, Settings, StreamLanguage } from "../lib/generated";
+import type { DiscoveryMutation, ShortcutBindings, SaveChannelSettingsRequest, Settings, StreamLanguage, UiLanguage } from "../lib/generated";
 
 function useSettingsCoordinator() {
   const [settings, updateSettings] = useState<Settings | null>(null);
@@ -60,6 +60,8 @@ function useSettingsCoordinator() {
   }, [mutateSettings]);
   const saveLanguage = useCallback((language: StreamLanguage | null) =>
     mutateSettings(() => api.saveDiscoveryLanguage(language)), [mutateSettings]);
+  const saveUiLanguage = useCallback((language: UiLanguage) =>
+    mutateSettings(() => api.saveUiLanguage(language)), [mutateSettings]);
   const saveChannel = useCallback((request: SaveChannelSettingsRequest) => {
     const scope = `channel:${request.broadcasterId}`;
     // Full override drafts cannot be queued behind a save of the same record.
@@ -95,7 +97,7 @@ function useSettingsCoordinator() {
     });
     return () => { cancelled = true; mounted.current = false; };
   }, []);
-  return { settings, error, dismiss: () => setError(null), savingSettings, savingShortcuts, commitSettings, modifyDiscovery, saveShortcuts, saveLanguage, saveChannel, readChannel };
+  return { settings, error, dismiss: () => setError(null), savingSettings, savingShortcuts, commitSettings, modifyDiscovery, saveShortcuts, saveLanguage, saveUiLanguage, saveChannel, readChannel };
 }
 
 const SettingsContext = createContext<ReturnType<typeof useSettingsCoordinator> | null>(null);

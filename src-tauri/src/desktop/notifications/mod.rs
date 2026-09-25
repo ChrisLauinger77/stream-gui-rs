@@ -1,3 +1,4 @@
+use super::localization;
 use crate::{
     domain::{
         AppError, ErrorCode, Result,
@@ -47,6 +48,9 @@ pub(super) struct Shared {
     pub app: tauri::AppHandle,
 }
 impl Shared {
+    fn locale(&self) -> localization::Locale {
+        localization::current(&self.app)
+    }
     fn failed(&self) {
         if let Some(services) = self
             .app

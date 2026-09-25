@@ -98,7 +98,8 @@ impl Worker {
     fn show(&mut self, id: &str, event: &LiveNotification) -> Result<()> {
         let notifier = self.notifier.as_ref().ok_or_else(delivery_error)?;
         let document = XmlDocument::new().map_err(|_| delivery_error())?;
-        document.LoadXml(&HSTRING::from(format!("<toast launch=\"{id}\"><visual><binding template=\"ToastGeneric\"><text>{} is live</text><text>{}</text><text>{}</text></binding></visual></toast>", escaped(&event.display_name), escaped(&event.title), escaped(&event.category)))).map_err(|_| delivery_error())?;
+        let title = localization::named(self.shared.locale(), "native.live", &event.display_name);
+        document.LoadXml(&HSTRING::from(format!("<toast launch=\"{id}\"><visual><binding template=\"ToastGeneric\"><text>{}</text><text>{}</text><text>{}</text></binding></visual></toast>", escaped(&title), escaped(&event.title), escaped(&event.category)))).map_err(|_| delivery_error())?;
         let toast =
             ToastNotification::CreateToastNotification(&document).map_err(|_| delivery_error())?;
         // Two 16-character fields retain all 128 random bits and satisfy WinRT's

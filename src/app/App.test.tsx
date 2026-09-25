@@ -44,7 +44,7 @@ beforeEach(async () => {
   vi.resetAllMocks();
   vi.mocked(api.diagnostics).mockResolvedValue({
     name: "Stream GUI RS", version: "0.1.0", commit: "a1b2c3d", platform: "test", settingsPath: "settings.json",
-    settings: { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" }, authConfigured: true,
+    settings: { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" }, authConfigured: true,
   });
   vi.mocked(api.playbackSettings).mockImplementation(async () => (await api.diagnostics()).settings);
   vi.mocked(api.authStatus).mockResolvedValue(signedOut);
@@ -88,7 +88,7 @@ test("session polling progresses while auth status is waiting, without queuing a
   vi.mocked(api.authStatus).mockReturnValue(auth.promise);
   vi.mocked(api.sessions).mockResolvedValue([{ ...session("one"), phase: "exited", exitCode: 0 }]);
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
-  expect(container.querySelector(".session-heading strong")?.textContent).toBe("exited");
+  expect(container.querySelector(".session-heading strong")?.textContent).toBe("Exited");
   expect(api.authStatus).toHaveBeenCalledTimes(2);
   await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
   expect(api.sessions).toHaveBeenCalledTimes(5);
@@ -138,7 +138,7 @@ test("cancel remains available while starting device authorization is pending", 
   vi.mocked(api.authStatus).mockResolvedValue(cancelled);
   await act(async () => { button("Cancel authorization").click(); });
   expect(api.cancel).toHaveBeenCalledOnce();
-  expect(container.textContent).toContain("cancelled");
+  expect(container.textContent).toContain("Cancelled");
   await act(async () => { login.resolve(cancelled); });
 });
 
@@ -152,7 +152,7 @@ test("an account request finishing after logout cannot restore account informati
   await act(async () => { button("Log out").click(); });
   await act(async () => { pendingAccount.resolve(account); });
   expect(container.textContent).not.toContain("Example Account");
-  expect(container.textContent).toContain("signed out");
+  expect(container.textContent).toContain("Signed out");
 });
 
 test("account retrieval recovers after a temporary failure with bounded retries", async () => {

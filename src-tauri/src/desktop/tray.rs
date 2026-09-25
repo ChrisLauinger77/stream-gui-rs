@@ -1,3 +1,4 @@
+use super::localization as l10n;
 use super::*;
 use crate::domain::background::DesktopAction;
 use tauri::{
@@ -33,12 +34,49 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
     if !indicator_available() {
         return Ok(false);
     }
-    let show = MenuItem::with_id(app, "show", "Show Stream GUI RS", true, None::<&str>)?;
-    let hide = MenuItem::with_id(app, "hide", "Hide window", true, None::<&str>)?;
-    let pause = MenuItem::with_id(app, "monitor", "Pause monitoring", false, None::<&str>)?;
-    let watching = MenuItem::with_id(app, "watching", "Watching (0)", true, None::<&str>)?;
-    let about = MenuItem::with_id(app, "about", "About Stream GUI RS", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let locale = l10n::current(app);
+    let show = MenuItem::with_id(
+        app,
+        "show",
+        l10n::text(locale, "native.show"),
+        true,
+        None::<&str>,
+    )?;
+    let hide = MenuItem::with_id(
+        app,
+        "hide",
+        l10n::text(locale, "native.hide"),
+        true,
+        None::<&str>,
+    )?;
+    let pause = MenuItem::with_id(
+        app,
+        "monitor",
+        l10n::text(locale, "native.pause"),
+        false,
+        None::<&str>,
+    )?;
+    let watching = MenuItem::with_id(
+        app,
+        "watching",
+        l10n::counted(locale, "native.watching", 0),
+        true,
+        None::<&str>,
+    )?;
+    let about = MenuItem::with_id(
+        app,
+        "about",
+        l10n::text(locale, "native.about"),
+        true,
+        None::<&str>,
+    )?;
+    let quit = MenuItem::with_id(
+        app,
+        "quit",
+        l10n::text(locale, "native.quit"),
+        true,
+        None::<&str>,
+    )?;
     let menu = Menu::with_items(
         app,
         &[
@@ -95,7 +133,9 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
             }
             let services = app.state::<Arc<Services>>();
             let status = services.monitor.snapshot();
-            let enabled = services.settings.snapshot().background.monitoring_enabled;
+            let settings = services.settings.snapshot();
+            let enabled = settings.background.monitoring_enabled;
+            let locale = l10n::selected(settings.ui_language);
             let count = services
                 .sessions
                 .sessions()
@@ -118,24 +158,37 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
                 .lock()
                 .expect("native notification state poisoned")
                 .tray_host;
-            let current = (status.phase, status.paused, enabled, count, host);
+            let current = (status.phase, status.paused, enabled, count, host, locale);
             if previous != Some(current) {
+                let _ = show.set_text(l10n::text(locale, "native.show"));
+                let _ = hide.set_text(l10n::text(locale, "native.hide"));
+                let _ = about.set_text(l10n::text(locale, "native.about"));
                 let _ = pause.set_text(if status.paused {
-                    "Resume monitoring"
+                    l10n::text(locale, "native.resume")
                 } else {
-                    "Pause monitoring"
+                    l10n::text(locale, "native.pause")
                 });
                 let _ = pause.set_enabled(enabled);
-                let _ = watching.set_text(format!("Watching ({count})"));
+                let _ = watching.set_text(l10n::counted(locale, "native.watching", count));
                 let _ = quit.set_text(if count == 0 {
-                    "Quit".into()
+                    l10n::text(locale, "native.quit").into()
                 } else {
-                    format!("Quit (stops {count} streams)")
+                    l10n::counted(
+                        locale,
+                        if count == 1 {
+                            "native.quitStreams.one"
+                        } else {
+                            "native.quitStreams.other"
+                        },
+                        count,
+                    )
                 });
                 let _ = hide.set_enabled(host);
                 let _ = tray.set_tooltip(Some(format!(
-                    "Stream GUI RS · Monitoring: {:?} · Watching: {count}",
-                    status.phase
+                    "Stream GUI RS · {} · {}",
+                    l10n::text(locale, "native.monitoring")
+                        .replace("{phase}", l10n::phase(locale, status.phase)),
+                    l10n::counted(locale, "native.watching", count)
                 )));
                 // An indicator host disappearing must not strand a hidden app.
                 if !host

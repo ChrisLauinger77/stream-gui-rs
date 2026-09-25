@@ -157,6 +157,7 @@ pub fn typescript_bindings() -> String {
         crate::monitor::MonitorPhase::decl(&config),
         crate::monitor::MonitorStatus::decl(&config),
         Theme::decl(&config),
+        UiLanguage::decl(&config),
         TextScale::decl(&config),
         StreamLanguage::decl(&config),
         ChannelOverrides::decl(&config),

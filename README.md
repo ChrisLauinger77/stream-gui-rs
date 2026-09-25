@@ -30,11 +30,12 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Up to 16 reusable named player profiles, with optional quality and low-latency preferences
 - Manual stable-release awareness from the official GitHub repository (no automatic updater)
 - System, Light, and Dark themes, 100/125/150% text size, and focused application shortcuts
+- English, German, Spanish, and French interface languages, with a System setting and English fallback
 - Opt-in followed-stream monitoring, desktop notifications, and per-channel notification preferences
 - Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
 - About on every desktop platform and a previewable support report
 
-See the [0.5.0 release notes](docs/release-notes-0.5.0.md) for changes and upgrade guidance, and the [road to 1.0](docs/road-to-1.0.md) for completed milestones and current goals. Candidate builds are not published releases.
+See the [0.5.0 release notes](docs/release-notes-0.5.0.md) for the latest published version and upgrade guidance, and the [road to 1.0](docs/road-to-1.0.md) for current development. The interface languages described here are part of the 1.0 development branch until a release is published. Candidate builds are not published releases.
 
 Stream GUI RS does not bundle Streamlink or a media player. It does not contain an embedded player or chat client. Background features are available in 0.2.0 and later; v0.1.0 packages retain their original close-to-exit behavior.
 
@@ -111,6 +112,8 @@ The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectiv
 **Open channel** accepts an exact Twitch login (letters, numbers, underscores, up to 25 characters; case-insensitive). It opens the existing channel details, including offline channels. Enter a login, not a URL; lookup never starts playback. Search remains the discovery tool for partial names and categories.
 
 **Settings → Playback → Prefer low latency** defaults off. Channel preferences can inherit, enable, or disable it. This adds Streamlink's `--twitch-low-latency` flag; actual delay depends on the stream, connection, buffering and player. Saving leaves current processes unchanged. Restart applies current preferences to that session.
+
+**Settings → Appearance → Language** offers System, English, Deutsch, Español, and Français. System follows the operating system language for the supported languages and uses English otherwise; an OS language change is picked up on the next app launch. The selection saves immediately and persists across restarts. The separate **Stream language** filter controls Twitch discovery results, not interface text. UI translations ship in the app and require no download.
 
 **Settings → Appearance → Text size** supports 100%, 125%, and 150%. Save applies the Rust-persisted value; it combines with desktop/webview scaling. Closing Settings or Watching returns focus to its opener when still appropriate. Playback announcements describe the Streamlink process, not verified video rendering.
 

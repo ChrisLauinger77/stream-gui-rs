@@ -258,6 +258,7 @@ impl Services {
         // Discovery has its own narrow update; a stale playback draft cannot undo it.
         let current = self.settings.snapshot();
         settings.discovery_language = current.discovery_language;
+        settings.ui_language = current.ui_language;
         // Profiles have narrow mutations under this same operation lock. A reopened
         // global draft must never restore a deleted profile or an old selection.
         settings.profiles = current.profiles;
@@ -367,6 +368,16 @@ impl Services {
         self.ensure_open()?;
         let store = self.settings.clone();
         tokio::task::spawn_blocking(move || store.set_discovery_language(language))
+            .await
+            .map_err(|_| AppError::new(ErrorCode::Settings, "Settings operation failed."))?
+    }
+
+    pub async fn save_ui_language(&self, language: crate::config::UiLanguage) -> Result<Settings> {
+        self.ensure_open()?;
+        let _operation = self.streamlink_operation.lock().await;
+        self.ensure_open()?;
+        let store = self.settings.clone();
+        tokio::task::spawn_blocking(move || store.set_ui_language(language))
             .await
             .map_err(|_| AppError::new(ErrorCode::Settings, "Settings operation failed."))?
     }

@@ -1,40 +1,41 @@
+import { useI18n, type MessageKey } from "../i18n";
 import { api } from "../lib/ipc";
 import type { BackgroundSettings as Preferences, MonitorPhase, NotificationPermission } from "../lib/generated";
 import type { useDesktop } from "../app/useDesktop";
 import { errorText } from "../browse/errors";
 
-const phases: Record<MonitorPhase, string> = {
-  disabled: "Monitoring is disabled", signed_out: "Sign in to start monitoring", paused: "Monitoring is paused",
-  baseline: "Establishing a quiet baseline…", running: "Monitoring followed streams", recovering: "Waiting to recover", stopped: "Monitoring stopped",
+const phases: Record<MonitorPhase, MessageKey> = {
+  disabled: "background.phaseDisabled", signed_out: "background.phaseSignedOut", paused: "background.phasePaused",
+  baseline: "background.phaseBaseline", running: "background.phaseRunning", recovering: "background.phaseRecovering", stopped: "background.phaseStopped",
 };
-export const notificationPermissionMessages: Record<NotificationPermission, string> = {
-  unknown: "Checking system permission…", not_requested: "Permission has not been requested", granted: "Notifications allowed",
-  denied: "Notifications denied — change this in system settings", unavailable: "Native notifications unavailable. Check the app installation and OS permissions, then retry.",
-  os_managed: "Delivery is controlled by your desktop notification settings",
+export const permissionMessages: Record<NotificationPermission, MessageKey> = {
+  unknown: "background.permissionUnknown", not_requested: "background.permissionNotRequested", granted: "background.permissionGranted",
+  denied: "background.permissionDenied", unavailable: "background.permissionUnavailable", os_managed: "background.permissionOsManaged",
 };
 export function BackgroundSettings({ value, change, desktop }: { value: Preferences; change: (value: Partial<Preferences>) => void; desktop: ReturnType<typeof useDesktop> }) {
+  const { t, count, number, locale } = useI18n();
   const status = desktop.status;
   return <div>
-    <label className="checkbox-label"><input type="checkbox" checked={value.monitoringEnabled} onChange={event => change({ monitoringEnabled: event.target.checked })} />Monitor followed live streams</label>
-    <label>Check for live streams<select value={value.intervalSeconds} onChange={event => change({ intervalSeconds: Number(event.target.value) })}>
-      <option value={60}>Every minute</option><option value={120}>Every 2 minutes</option><option value={300}>Every 5 minutes</option>
+    <label className="checkbox-label"><input type="checkbox" checked={value.monitoringEnabled} onChange={event => change({ monitoringEnabled: event.target.checked })} />{t("backgroundSettings.monitorFollowedLiveStreams")}</label>
+    <label>{t("backgroundSettings.checkForLiveStreams")}<select value={value.intervalSeconds} onChange={event => change({ intervalSeconds: Number(event.target.value) })}>
+      <option value={60}>{t("backgroundSettings.everyMinute")}</option><option value={120}>{t("backgroundSettings.every2Minutes")}</option><option value={300}>{t("backgroundSettings.every5Minutes")}</option>
     </select></label>
-    <label className="checkbox-label"><input type="checkbox" checked={value.notificationsEnabled} onChange={event => change({ notificationsEnabled: event.target.checked })} />Notify when followed channels go live</label>
-    <p className="muted">Channel settings can override this notification default. Startup, Resume and recovery establish a quiet baseline; already-live streams do not trigger alerts.</p>
-    <label className="checkbox-label"><input type="checkbox" checked={value.closeToBackground} onChange={event => change({ closeToBackground: event.target.checked })} />Keep Stream GUI RS running in the background when the window is closed</label>
-    <p className="muted">Monitoring and playback continue while hidden. Restore from the tray menu. If no tray is available, closing minimizes instead. Normal minimize is unchanged. Quit stops all owned playback.</p>
+    <label className="checkbox-label"><input type="checkbox" checked={value.notificationsEnabled} onChange={event => change({ notificationsEnabled: event.target.checked })} />{t("background.notifyToggle")}</label>
+    <p className="muted">{t("background.channelOverrideHelp")}</p>
+    <label className="checkbox-label"><input type="checkbox" checked={value.closeToBackground} onChange={event => change({ closeToBackground: event.target.checked })} />{t("background.closeToggle")}</label>
+    <p className="muted">{t("background.closeHelp")}</p>
     {status && <>
-      <p role="status">{phases[status.monitor.phase]}{status.monitor.liveCount !== null && ` · ${status.monitor.liveCount} followed live${status.monitor.stale ? " (previous count)" : ""}`}</p>
-      {status.monitor.error && <p className="muted">{errorText(status.monitor.error)} Retrying in about {status.monitor.retryInSeconds} seconds.</p>}
-      <button type="button" disabled={desktop.busy || status.monitor.phase === "disabled"} onClick={() => { void desktop.run(status.monitor.paused ? api.resumeMonitor : api.pauseMonitor); }}>{status.monitor.paused ? "Resume monitoring" : "Pause monitoring"}</button>
-      <p className="muted">Pause lasts until Resume or application restart.</p>
-      <p>{notificationPermissionMessages[status.notificationPermission]}</p>
-      {status.notificationPermission === "not_requested" && <button type="button" disabled={desktop.busy} onClick={() => { void desktop.run(api.requestNotificationPermission); }}>Allow desktop notifications</button>}
-      {status.notificationPermission === "unavailable" && <button type="button" disabled={desktop.busy} onClick={() => { void desktop.run(api.requestNotificationPermission); }}>Retry desktop notifications</button>}
-      {!status.notificationClickSupported && <p className="muted">This notification provider does not support channel click actions. Restore the app from its tray or taskbar.</p>}
-      {!status.trayAvailable && <p className="muted">A tray is not available. Background close will minimize the window.</p>}
-      {status.monitor.notificationError && <p role="status">A notification could not be delivered. Monitoring continues.</p>}
+      <p role="status">{t(phases[status.monitor.phase])}{status.monitor.liveCount !== null && <> · {count("background.followedLive", status.monitor.liveCount)}{status.monitor.stale && ` ${t("background.previousCount")}`}</>}</p>
+      {status.monitor.error && <p className="muted">{t("background.retryIn", { error: errorText(status.monitor.error, locale), seconds: number(status.monitor.retryInSeconds) })}</p>}
+      <button type="button" disabled={desktop.busy || status.monitor.phase === "disabled"} onClick={() => { void desktop.run(status.monitor.paused ? api.resumeMonitor : api.pauseMonitor); }}>{status.monitor.paused ? t("background.resumeMonitoring") : t("background.pauseMonitoring")}</button>
+      <p className="muted">{t("background.pauseHelp")}</p>
+      <p>{t(permissionMessages[status.notificationPermission])}</p>
+      {status.notificationPermission === "not_requested" && <button type="button" disabled={desktop.busy} onClick={() => { void desktop.run(api.requestNotificationPermission); }}>{t("backgroundSettings.allowDesktopNotifications")}</button>}
+      {status.notificationPermission === "unavailable" && <button type="button" disabled={desktop.busy} onClick={() => { void desktop.run(api.requestNotificationPermission); }}>{t("backgroundSettings.retryDesktopNotifications")}</button>}
+      {!status.notificationClickSupported && <p className="muted">{t("background.clickUnavailable")}</p>}
+      {!status.trayAvailable && <p className="muted">{t("background.trayUnavailable")}</p>}
+      {status.monitor.notificationError && <p role="status">{t("background.deliveryFailed")}</p>}
     </>}
-    {desktop.error && <p className="error" role="alert">{desktop.error}</p>}
+    {desktop.error && <p className="error" role="alert">{errorText(desktop.error, locale)}</p>}
   </div>;
 }

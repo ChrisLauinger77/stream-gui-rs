@@ -10,8 +10,9 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
-    "build": "npm run typecheck && vite build",
+    "build": "npm run i18n:check && npm run typecheck && vite build",
     "test": "vitest run",
+    "i18n:check": "node scripts/validate-translations.mjs && node --test scripts/validate-translations.fixtures.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "tauri": "tauri",
     "bindings": "cargo run --manifest-path src-tauri/Cargo.toml --no-default-features --example export_bindings",

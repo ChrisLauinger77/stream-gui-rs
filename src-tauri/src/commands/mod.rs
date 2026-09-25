@@ -306,6 +306,25 @@ pub async fn save_discovery_language(
 }
 
 #[tauri::command]
+pub async fn save_ui_language(
+    services: State<'_, Arc<Services>>,
+    app: tauri::AppHandle,
+    request: crate::config::UiLanguage,
+) -> Result<Settings> {
+    let settings = services.save_ui_language(request).await?;
+    #[cfg(target_os = "macos")]
+    crate::desktop::update_about_menu(&app);
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+    Ok(settings)
+}
+
+#[tauri::command]
+pub fn system_ui_language() -> crate::config::UiLanguage {
+    crate::desktop::system_ui_language()
+}
+
+#[tauri::command]
 pub async fn lookup_channel(
     services: State<'_, Arc<Services>>,
     request: LookupChannelRequest,

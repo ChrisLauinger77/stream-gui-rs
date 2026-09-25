@@ -6,7 +6,7 @@ import { App } from "./App";
 import { Media } from "../browse/components";
 import { defaultBindings } from "./shortcuts";
 import { api } from "../lib/ipc";
-import type { AuthStatus, CategorySummary, ChannelDetails, ChannelSummary, PagedResult, StreamSummary } from "../lib/generated";
+import type { AuthStatus, CategorySummary, ChannelDetails, ChannelSummary, PagedResult, Settings, StreamSummary, UiLanguage } from "../lib/generated";
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: vi.fn() }));
 vi.mock("../lib/ipc", async importOriginal => {
   const actual = await importOriginal<typeof import("../lib/ipc")>();
@@ -28,6 +28,17 @@ function button(label: string, area = "") {
   return found;
 }
 async function click(label: string, area = "") { await act(async () => { button(label, area).click(); }); }
+async function chooseUiLanguage(language: UiLanguage) {
+  const select = [...container.querySelectorAll<HTMLLabelElement>("label")]
+    .find(label => label.querySelector("select")
+      && ["Language", "Sprache", "Idioma", "Langue"].some(name => label.textContent?.startsWith(name)))
+    ?.querySelector("select");
+  if (!select) throw new Error("Missing UI language selector");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, language);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
 async function type(value: string) {
   const input = container.querySelector<HTMLInputElement>('input[type="search"]')!;
   await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); });
@@ -39,8 +50,9 @@ beforeEach(() => {
   Object.defineProperty(navigator, "platform", { configurable: true, value: "Linux x86_64" });
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
   vi.mocked(api.sessions).mockResolvedValue([]);
+  vi.mocked(api.systemUiLanguage).mockResolvedValue("en");
   vi.mocked(api.acknowledgeDesktopAction).mockResolvedValue(null);
-  vi.mocked(api.playbackSettings).mockResolvedValue({ chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
+  vi.mocked(api.playbackSettings).mockResolvedValue({ chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
   vi.mocked(api.channelSettings).mockImplementation(async broadcasterId => ({ broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: "source", defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false, effective: { profileId: null, chatProvider: "browser" as const, chatterinoPath: null, lowLatency: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, quality: "source", automaticChat: false } }));
   vi.mocked(api.authStatus).mockResolvedValue(signedIn);
   vi.mocked(api.account).mockResolvedValue({ id: "viewer", login: "viewer", displayName: "Viewer", profileImageUrl: null });
@@ -56,6 +68,71 @@ test("signed-out view offers login without fetching browsing data", async () => 
   vi.mocked(api.authStatus).mockResolvedValue(signedOut); await render();
   expect(text()).toContain("Find what’s live."); expect(button("Connect to Twitch").disabled).toBe(false);
   expect(api.followedStreams).not.toHaveBeenCalled();
+});
+test.each([
+  ["de", "Einstellungen", "Darstellung"], ["es", "Ajustes", "Apariencia"],
+  ["fr", "Paramètres", "Apparence"], ["system", "Settings", "Appearance"],
+] as const)("UI language %s applies immediately and persists on restart", async (language, settingsLabel, appearanceLabel) => {
+  const original = await api.playbackSettings() as Settings;
+  const accepted = { ...original, uiLanguage: language };
+  vi.mocked(api.saveUiLanguage).mockResolvedValue(accepted);
+  await render(); await click("Settings"); await click("Appearance", ".settings-nav");
+  await chooseUiLanguage(language);
+  expect(api.saveUiLanguage).toHaveBeenCalledWith(language);
+  expect(document.documentElement.lang).toBe(language === "system" ? "en" : language);
+  expect(button(settingsLabel).textContent).toBe(settingsLabel);
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  vi.mocked(api.playbackSettings).mockResolvedValue(accepted);
+  await render(); await click(settingsLabel); await click(appearanceLabel, ".settings-nav");
+  const selector = [...container.querySelectorAll<HTMLLabelElement>("label")]
+    .find(label => label.textContent?.startsWith(language === "de" ? "Sprache" : language === "es" ? "Idioma" : language === "fr" ? "Langue" : "Language"))
+    ?.querySelector("select");
+  expect(selector?.value).toBe(language);
+});
+test("language change updates an open support dialog after the settings save resolves", async () => {
+  const original = await api.playbackSettings() as Settings;
+  const pending = deferred<Settings>();
+  vi.mocked(api.saveUiLanguage).mockReturnValue(pending.promise);
+  vi.mocked(api.supportReport).mockResolvedValue({ text: "Synthetic support report" });
+  await render(); await click("Settings"); await click("Appearance", ".settings-nav");
+  await chooseUiLanguage("de");
+  expect(document.documentElement.lang).toBe("en");
+  await click("Prepare support report");
+  expect(container.querySelector("dialog h2")?.textContent).toBe("Support report");
+  const focused = document.activeElement;
+  await act(async () => pending.resolve({ ...original, uiLanguage: "de" }));
+  expect(document.documentElement.lang).toBe("de");
+  expect(container.querySelector("dialog h2")?.textContent).toBe("Supportbericht");
+  expect(document.activeElement).toBe(focused);
+});
+test("settings confirmation follows a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.savePlaybackSettings).mockResolvedValue(original);
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  await render(); await click("Settings"); await click("Save settings");
+  expect(text()).toContain("Settings saved");
+  await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(text()).toContain("Einstellungen gespeichert");
+  expect(text()).not.toContain("Settings saved");
+});
+test("authentication errors follow a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.authStatus).mockRejectedValue({ code: "network", message: "PRIVATE" });
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  await render();
+  const alert = container.querySelector(".application > p.error[role='alert']")!;
+  expect(alert.textContent).toContain("Check your connection");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(alert.textContent).toContain("Prüfe deine Verbindung");
+  expect(alert.textContent).not.toContain("PRIVATE");
+});
+test("System mode uses the native desktop language when it differs from browser defaults", async () => {
+  Object.defineProperty(navigator, "languages", { configurable: true, value: ["en-US"] });
+  vi.mocked(api.systemUiLanguage).mockResolvedValue("de");
+  await render();
+  expect(document.documentElement.lang).toBe("de");
+  expect(button("Einstellungen").textContent).toBe("Einstellungen");
 });
 test("device authorization shows code and permits cancellation", async () => {
   vi.mocked(api.authStatus).mockResolvedValue(signedOut); vi.mocked(api.login).mockResolvedValue({ ...signedOut, phase: "authorizing", authorization: { userCode: "ABCD", verificationUri: "https://www.twitch.tv/activate", expiresIn: 600 } });
@@ -337,7 +414,7 @@ const playing = (id = "play-one", broadcasterId = "channel-one"): import("../lib
   url: "https://www.twitch.tv/example", quality: "best", exitCode: null, stopRequested: false,
   logs: [{ sequence: 1, source: "stderr", text: "Synthetic diagnostic warning" }], droppedLogEntries: 5,
 });
-const playbackSettings: import("../lib/generated").Settings = { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
+const playbackSettings: import("../lib/generated").Settings = { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
 async function editControl(label: string, value: string, kind: "input" | "select" = "input") {
   const control = [...container.querySelectorAll<HTMLInputElement | HTMLSelectElement>(kind)].find(el => el.labels?.[0]?.textContent?.startsWith(label));
   if (!control) throw new Error(`Missing control: ${label}`);
@@ -355,7 +432,7 @@ test.each(["Following", "Live", "Category"])("Watch launches trusted broadcaster
   await click("Watch Example Channel");
   expect(api.launch).toHaveBeenCalledWith({ authSessionId: "1", broadcasterId: "channel-one", quality: null });
   expect(container.querySelector(".workspace")).not.toBeNull();
-  expect(container.querySelector(".watching-panel")?.textContent).toContain("running");
+  expect(container.querySelector(".watching-panel")?.textContent).toContain("Running");
   expect(text()).toContain("Streamlink process started");
 });
 test("live search and Channel details offer Watch but offline and unknown channels do not", async () => {
@@ -388,6 +465,17 @@ test.each([
   expect(text()).toContain(message); expect(text()).not.toContain("PRIVATE BACKEND PAYLOAD");
   expect(container.querySelectorAll(".session")).toHaveLength(0); expect(button("Watch Example Channel").disabled).toBe(false);
 });
+test("a visible playback alert follows a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  vi.mocked(api.launch).mockRejectedValue({ code: "streamlink_not_found", message: "PRIVATE BACKEND PAYLOAD" });
+  await render(); await click("Live"); await click("Watch Example Channel");
+  expect(container.querySelector(".playback-feedback")?.textContent).toContain("Streamlink was not found");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(container.querySelector(".playback-feedback")?.textContent).toContain("Streamlink wurde nicht gefunden");
+  expect(container.querySelector(".playback-feedback")?.textContent).not.toContain("Streamlink was not found");
+  expect(text()).not.toContain("PRIVATE BACKEND PAYLOAD");
+});
 test("Watching reconstructs multiple sessions and stops only the selected one", async () => {
   const first = playing(); const second = playing("play-two", "channel-two");
   vi.mocked(api.sessions).mockResolvedValue([first, second]);
@@ -397,7 +485,7 @@ test("Watching reconstructs multiple sessions and stops only the selected one", 
   expect(button("Watching").textContent).toContain("2");
   await click("Stop", '[aria-label="Playback Second Channel"]');
   expect(api.stop).toHaveBeenCalledWith("play-two");
-  expect(container.querySelector('[aria-label="Playback Example Channel"] .session-heading strong')?.textContent).toBe("running");
+  expect(container.querySelector('[aria-label="Playback Example Channel"] .session-heading strong')?.textContent).toBe("Running");
   expect(button("Stop", '[aria-label="Playback Second Channel"]').disabled).toBe(true);
   expect(button("Watching").textContent).toContain("1");
 });
@@ -734,6 +822,15 @@ test("failed native authorization stays visible and can be retried before a test
   expect(api.devNotificationTest).toHaveBeenCalledWith("send");
   expect(text()).toContain("OS delivery is not confirmed");
 });
+test("notification acceptance renders a rejected desktop action as a safe message", async () => {
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, notificationTestAvailable: true });
+  vi.mocked(api.diagnostics).mockRejectedValue({ code: "internal" });
+  vi.mocked(api.requestNotificationPermission).mockRejectedValue({ code: "notification", message: "PRIVATE" });
+  await render(); await click("Settings"); await click("Developer tools"); await click("Allow desktop notifications");
+  const alert = container.querySelector(".settings-panel[aria-label='Native notification acceptance'] [role='alert']")!;
+  expect(alert.textContent).toBe("Desktop notifications are unavailable. Check your system notification settings.");
+  expect(alert.textContent).not.toContain("PRIVATE");
+});
 test("test activation retries acknowledgement without reopening the dismissed target", async () => {
   vi.mocked(api.authStatus).mockResolvedValue(signedOut);
   vi.mocked(api.desktopStatus).mockImplementation(async () => ({ ...desktopSnapshot, notificationTestAvailable: true, action: testNotification }));
@@ -759,7 +856,7 @@ test("Background settings persist intent and pause independently of browsing", a
   vi.mocked(api.desktopStatus).mockResolvedValue(desktopSnapshot);
   vi.mocked(api.savePlaybackSettings).mockImplementation(async value => value);
   await render(); await click("Settings"); await click("Background", ".settings-nav");
-  expect(text()).toContain("Monitoring followed streams"); expect(text()).toContain("3 followed live");
+  expect(text()).toContain("Monitoring followed streams"); expect(text()).toContain("3 followed channels live");
   await toggleControl("Monitor followed live streams");
   await toggleControl("Notify when followed channels go live");
   await editControl("Check for live streams", "120", "select");
@@ -773,6 +870,18 @@ test("Background settings persist intent and pause independently of browsing", a
   await click("Resume monitoring"); expect(api.resumeMonitor).toHaveBeenCalledOnce();
   await click("Allow desktop notifications"); expect(api.requestNotificationPermission).toHaveBeenCalledOnce();
   expect(api.logout).not.toHaveBeenCalled(); expect(api.followedStreams).toHaveBeenCalledOnce();
+});
+test("background action errors follow a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.desktopStatus).mockResolvedValue(desktopSnapshot);
+  vi.mocked(api.pauseMonitor).mockRejectedValue({ code: "notification", message: "PRIVATE" });
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  await render(); await click("Settings"); await click("Background", ".settings-nav"); await click("Pause monitoring");
+  const alert = container.querySelector(".playback-settings [role='alert']")!;
+  expect(alert.textContent).toBe("Desktop notifications are unavailable. Check your system notification settings.");
+  await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(alert.textContent).toBe("Desktopbenachrichtigungen sind nicht verfügbar. Prüfe die Benachrichtigungseinstellungen des Systems.");
+  expect(alert.textContent).not.toContain("PRIVATE");
 });
 test("notification actions survive reconstruction, navigate once and never launch playback", async () => {
   vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action: {
@@ -869,6 +978,17 @@ test("language save errors preserve accepted preference and filtered network err
   expect(text()).not.toContain("No streams in this language");
   expect(text()).toContain("Check your connection");
 });
+test("stream language save errors follow a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.saveDiscoveryLanguage).mockRejectedValue({ code: "settings", message: "PRIVATE" });
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  await render(); await click("Live"); await selectLanguage("fr");
+  const alert = container.querySelector(".language-filter [role='alert']")!;
+  expect(alert.textContent).toBe("The saved settings could not be read.");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(alert.textContent).toBe("Die gespeicherten Einstellungen konnten nicht gelesen werden.");
+  expect(alert.textContent).not.toContain("PRIVATE");
+});
 
 async function lookupLogin(login: string) {
   const input = container.querySelector<HTMLInputElement>(".exact-lookup input")!;
@@ -893,6 +1013,17 @@ test("exact lookup distinguishes invalid, missing and network failures", async (
     expect(text()).toContain(message); expect(text()).not.toContain("untrusted");
   }
   expect(api.channel).not.toHaveBeenCalled(); expect(api.launch).not.toHaveBeenCalled();
+});
+test("a visible lookup error follows a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.lookupChannel).mockRejectedValue({ code: "not_found", message: "PRIVATE" });
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  await render(); await click("Open channel", ".side-nav"); await lookupLogin("example"); await submitLookup();
+  const alert = container.querySelector(".exact-lookup [role='alert']")!;
+  expect(alert.textContent).toBe("No channel has that Twitch login.");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(alert.textContent).toBe("Kein Kanal hat diesen Twitch-Namen.");
+  expect(alert.textContent).not.toContain("PRIVATE");
 });
 test("lookup blocks duplicate submission and ignores changed login or account responses", async () => {
   const old = deferred<Awaited<ReturnType<typeof api.lookupChannel>>>();
@@ -1331,6 +1462,17 @@ function channelChoice(label: string) {
 async function changeGlobalText() {
   await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Text size", "150", "select"); await click("Save settings");
 }
+test("channel chat errors follow a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.openBrowserChat).mockRejectedValue({ code: "browser_open", message: "PRIVATE" });
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  await openChannelPreferences(); await click("Open chat in browser");
+  const alert = container.querySelector(".channel-preferences [role='alert']")!;
+  expect(alert.textContent).toContain("could not be opened in your default browser");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(alert.textContent).toContain("konnte nicht im Standardbrowser geöffnet werden");
+  expect(alert.textContent).not.toContain("PRIVATE");
+});
 
 test.each(["global-first", "channel-first"] as const)("channel and global defaults reconcile all Rust effective fields: %s", async order => {
   const store = settingsPersistence();
@@ -1600,6 +1742,24 @@ test("profile save errors retain the draft and do not expose raw backend text", 
   expect(text()).toContain("unique name"); expect(text()).not.toContain("secret backend text");
   expect(container.querySelector<HTMLInputElement>('.profile-editor input')?.value).toBe("Duplicate");
 });
+test("profile feedback follows UI language changes while the Player section stays mounted", async () => {
+  const store = profilesPersistence();
+  vi.mocked(api.saveUiLanguage).mockImplementation(async uiLanguage =>
+    store.acceptGlobal({ ...await api.playbackSettings(), uiLanguage }));
+  await render(); await openProfiles(); await createProfile();
+  expect(container.querySelector(".player-profiles [role='status']")?.textContent).toContain("Profile saved.");
+
+  await click("Appearance", ".settings-nav"); await chooseUiLanguage("de"); await click("Player", ".settings-nav");
+  expect(container.querySelector(".player-profiles [role='status']")?.textContent).toContain("Profil gespeichert.");
+
+  await click("Profil bearbeiten");
+  vi.mocked(api.modifyPlayerProfile).mockRejectedValueOnce({ code: "settings", message: "secret backend text" });
+  await click("Profil speichern");
+  expect(container.querySelector(".player-profiles [role='alert']")?.textContent).toContain("Das Profil konnte nicht gespeichert werden.");
+  await click("Darstellung", ".settings-nav"); await chooseUiLanguage("en"); await click("Player", ".settings-nav");
+  expect(container.querySelector(".player-profiles [role='alert']")?.textContent).toContain("The profile could not be saved.");
+  expect(text()).not.toContain("secret backend text");
+});
 test("profile writes survive closing settings and block competing global writes until accepted", async () => {
   const store = profilesPersistence(); const pending = deferred<typeof playbackSettings>();
   vi.mocked(api.modifyPlayerProfile).mockReturnValueOnce(pending.promise);
@@ -1789,6 +1949,10 @@ test("Enter in the profile editor saves only that profile and leaves global draf
 function localPreferences(initial = playbackSettings) {
   let saved = structuredClone(initial);
   vi.mocked(api.playbackSettings).mockImplementation(async () => saved);
+  vi.mocked(api.saveUiLanguage).mockImplementation(async uiLanguage => {
+    saved = { ...saved, uiLanguage };
+    return saved;
+  });
   vi.mocked(api.modifyDiscovery).mockImplementation(async ({ list, item, present }) => {
     const items = saved.discovery[list].filter(value => value.kind !== item.kind || value.id !== item.id);
     saved = { ...saved, discovery: { ...saved.discovery, [list]: present ? [...items, item] : items } };
@@ -1809,6 +1973,31 @@ test("channel bookmarks remain reachable while hidden and are independent of Twi
   await click("Settings"); await click("Hidden items", ".settings-nav"); await click("Restore Example Channel");
   expect(saved().discovery.hidden).toHaveLength(0);
   await click("Close Settings"); await click("Live"); expect(container.querySelector(".stream-card")).not.toBeNull();
+});
+
+test("visible discovery feedback follows language changes after returning from Settings", async () => {
+  localPreferences();
+  await render(); await click("Live"); await click("Open channel Example Channel");
+  await click("Bookmark channel");
+  const feedback = container.querySelector(".local-item-actions")!;
+  expect(feedback.querySelector('[role="status"]')?.textContent).toBe("Bookmark saved locally.");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  await click("Einstellungen schließen");
+  expect(feedback.querySelector('[role="status"]')?.textContent).toBe("Lesezeichen lokal gespeichert.");
+
+  await click("Kanal aus Entdeckung ausblenden");
+  expect(feedback.querySelector('[role="status"]')?.textContent).toBe("Aus der Entdeckung ausgeblendet. Direkte Navigation bleibt möglich.");
+  await click("Einstellungen"); await click("Darstellung", ".settings-nav"); await chooseUiLanguage("en");
+  await click("Close Settings");
+  expect(feedback.querySelector('[role="status"]')?.textContent).toBe("Hidden from discovery. Direct navigation remains available.");
+
+  vi.mocked(api.modifyDiscovery).mockRejectedValueOnce({ code: "settings", message: "PRIVATE" });
+  await click("Remove bookmark");
+  expect(feedback.querySelector('[role="alert"]')?.textContent).toBe("The saved settings could not be read.");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  await click("Einstellungen schließen");
+  expect(feedback.querySelector('[role="alert"]')?.textContent).toBe("Die gespeicherten Einstellungen konnten nicht gelesen werden.");
+  expect(feedback.textContent).not.toContain("PRIVATE");
 });
 
 test("category hides filter passive discovery while search and saved categories stay reachable", async () => {

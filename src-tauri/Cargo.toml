@@ -66,7 +66,7 @@ objc2 = { version = "0.6", optional = true }
 block2 = { version = "0.6", optional = true }
 # Tauri's string-only About credits cannot carry a clickable macOS link.
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSAttributedString", "NSColor"], optional = true }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSAttributedString", "NSBundle", "NSDictionary", "NSError", "NSObject", "NSString", "NSURL", "NSValue"], optional = true }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSAttributedString", "NSBundle", "NSDictionary", "NSError", "NSObject", "NSString", "NSURL", "NSValue", "NSLocale"], optional = true }
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSettings", "UNNotificationTrigger"], optional = true }
 keyring = { version = "3.6.3", features = ["apple-native"] }
 
@@ -84,4 +84,4 @@ libc = "0.2"
 windows-core = { version = "0.61", optional = true }
 windows = { version = "0.61", features = ["UI_Notifications", "Data_Xml_Dom", "Foundation", "Win32_System_WinRT", "Win32_System_Com", "Win32_System_Registry", "Win32_UI_Notifications", "Win32_Security", "Win32_System_Threading"], optional = true }
 keyring = { version = "3.6.3", features = ["windows-native"] }
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Console", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_Threading"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_System_Console", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_Threading"] }

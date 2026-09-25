@@ -1,15 +1,18 @@
+import { useI18n } from "../i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { useSettings } from "../settings/useSettings";
 import { Panel } from "../components/Panel";
 import { Authentication } from "../features/Authentication";
 import { Playback } from "../features/Playback";
-import type { Account, AuthStatus, BackendDiagnostics, ProbeResult, SessionSnapshot } from "../lib/generated";
-import { api, errorMessage } from "../lib/ipc";
+import type { Account, AuthStatus, BackendDiagnostics, ErrorCode, ProbeResult, SessionSnapshot } from "../lib/generated";
+import { api } from "../lib/ipc";
+import { errorCode, errorText } from "../browse/errors";
 
 type ActionKey = "auth" | "cancel" | "probe" | `restart:${string}` | `stop:${string}`;
 
 export function DeveloperTools() {
+  const { t, locale } = useI18n();
   const { settings, savingSettings, commitSettings } = useSettings();
   const [backend, setBackend] = useState<BackendDiagnostics | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
@@ -19,7 +22,7 @@ export function DeveloperTools() {
   const customPath = pathEdit ?? settings?.streamlinkPath ?? "";
   const [probe, setProbe] = useState<ProbeResult | null>(null);
   const [pending, setPending] = useState<ReadonlySet<ActionKey>>(new Set());
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorCode | null>(null);
   const actionPending = useRef(new Set<ActionKey>());
   const refreshAuth = useCallback(async () => {
     setAuth(await api.authStatus());
@@ -34,13 +37,13 @@ export function DeveloperTools() {
     const timers = new Set<ReturnType<typeof setTimeout>>();
     void api.diagnostics().then((diagnostics) => {
       if (!cancelled) setBackend(diagnostics);
-    }).catch((error: unknown) => { if (!cancelled) setError(errorMessage(error)); });
+    }).catch((error: unknown) => { if (!cancelled) setError(errorCode(error)); });
     const startPolling = <T,>(read: () => Promise<T>, apply: (value: T) => void) => {
       const poll = async () => {
         try {
           const value = await read();
           if (!cancelled) apply(value);
-        } catch (error) { if (!cancelled) setError(errorMessage(error)); }
+        } catch (error) { if (!cancelled) setError(errorCode(error)); }
         if (!cancelled) {
           const timer = setTimeout(() => { timers.delete(timer); void poll(); }, 1000);
           timers.add(timer);
@@ -67,7 +70,7 @@ export function DeveloperTools() {
           if (!cancelled && account.id === accountId) setAccount(account);
         } catch (error) {
           if (!cancelled) {
-            setError(errorMessage(error));
+            setError(errorCode(error));
             retry = setTimeout(() => { void load(); }, 60_000);
           }
         }
@@ -83,9 +86,9 @@ export function DeveloperTools() {
     setPending(new Set(actionPending.current)); setError(null);
     void (async () => {
       try { await action(); }
-      catch (error) { setError(errorMessage(error)); }
+      catch (error) { setError(errorCode(error)); }
       finally {
-        try { await refresh?.(); } catch (error) { setError(errorMessage(error)); }
+        try { await refresh?.(); } catch (error) { setError(errorCode(error)); }
         actionPending.current.delete(key);
         setPending(new Set(actionPending.current));
       }
@@ -93,12 +96,12 @@ export function DeveloperTools() {
   };
 
   return <main className="developer-tools">
-    <header><h1>Stream GUI RS</h1><p>Backend diagnostics and authentication tools</p></header>
-    {!isTauri() && <p className="notice">Browser preview only. Backend controls require the desktop app: <code>npm run tauri dev</code>.</p>}
-    {error && <p role="alert" className="error">{error}</p>}
-    <Panel title="Backend">
-      <p>{backend ? `Ready · ${backend.version} (${backend.commit}) · ${backend.platform}` : "Not connected"}</p>
-      {backend && <p className="muted path">Settings: {backend.settingsPath}</p>}
+    <header><h1>Stream GUI RS</h1><p>{t("developer.intro")}</p></header>
+    {!isTauri() && <p className="notice">{t("developer.browserPreview")}{" "}<code>{t("developerTools.npmRunTauriDev")}</code>.</p>}
+    {error && <p role="alert" className="error">{errorText(error, locale)}</p>}
+    <Panel title={t("developerTools.backend")}>
+      <p>{backend ? t("developer.ready", { version: backend.version, commit: backend.commit, platform: backend.platform }) : t("app.notConnected")}</p>
+      {backend && <p className="muted path">{t("developerTools.settings")}{" "}{backend.settingsPath}</p>}
     </Panel>
     <Authentication status={auth} account={account} busy={pending.has("auth")}
       cancelling={pending.has("cancel")} cancel={() => run("cancel", api.cancel, refreshAuth)}
@@ -115,12 +118,12 @@ export function DeveloperTools() {
           setBackend(await api.diagnostics());
         });
       }}>
-        <label>Custom executable path<input value={customPath} placeholder="Leave empty to discover on PATH" onChange={(event) => { setPathEdit(event.target.value); setProbe(null); }} /></label>
-        <button type="submit" disabled={pending.has("probe") || savingSettings || !settings || !backend}>Probe and save</button>
+        <label>{t("developerTools.customExecutablePath")}<input value={customPath} placeholder={t("developer.pathHint")} onChange={(event) => { setPathEdit(event.target.value); setProbe(null); }} /></label>
+        <button type="submit" disabled={pending.has("probe") || savingSettings || !settings || !backend}>{t("developerTools.probeAndSave")}</button>
       </form>
-      <p>Detected executable: <span className="path">{probe?.executable ?? "Not probed"}</span></p>
-      <p>Version: {probe?.version ?? "—"}</p>
-      <p className="muted">A successful probe saves this choice. Launch checks the saved executable again.</p>
+      <p>{t("developerTools.detectedExecutable")}{" "}<span className="path">{probe?.executable ?? t("developer.notProbed")}</span></p>
+      <p>{t("developerTools.version")}{" "}{probe?.version ?? "—"}</p>
+      <p className="muted">{t("developer.probeHelp")}</p>
     </Panel>
     <Playback sessions={sessions} isStopping={id => pending.has(`stop:${id}`)} isRestarting={id => pending.has(`restart:${id}`)}
       restart={(session, quality) => run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), refreshSessions)}

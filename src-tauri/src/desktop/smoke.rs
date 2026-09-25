@@ -2,6 +2,7 @@
 use super::*;
 use crate::{domain::LaunchRequest, streamlink::SessionPhase};
 use std::{path::Path, time::Duration};
+mod localization;
 mod notification_server;
 mod phase_eight;
 mod phase_seven;
@@ -16,7 +17,8 @@ pub fn run(
     let phase_six = action == "phase6";
     let phase_seven = action == "phase7";
     let phase_eight = action == "phase8";
-    let quit = action == "quit" || phase_six || phase_seven || phase_eight;
+    let localization = action == "localization";
+    let quit = action == "quit" || phase_six || phase_seven || phase_eight || localization;
     let titlebar_only = action == "titlebar";
     let directory = tempfile::tempdir()?;
     // No client ID: this fixture cannot open any production credential entry.
@@ -25,6 +27,10 @@ pub fn run(
     settings.streamlink_path = Some(helper.to_string_lossy().into_owned());
     settings.background.close_to_background = true;
     services.settings.update(settings)?;
+    // Existing native UI assertions use English labels regardless of host locale.
+    services
+        .settings
+        .set_ui_language(crate::config::UiLanguage::En)?;
     let marker = marker.to_owned();
     // The parent launches this executable under dbus-run-session. Never register
     // a fixture on the user's desktop bus or deliver a real desktop notification.
@@ -48,7 +54,14 @@ pub fn run(
                 let checked = tokio::time::timeout(
                     Duration::from_secs(45),
                     tokio::spawn(async move {
-                        scenario(&check_app, &check_marker, &notifications, titlebar_only).await?;
+                        scenario(
+                            &check_app,
+                            &check_marker,
+                            &notifications,
+                            titlebar_only,
+                            localization,
+                        )
+                        .await?;
                         if phase_six {
                             phase_six::check(&check_app).await;
                         }
@@ -57,6 +70,9 @@ pub fn run(
                         }
                         if phase_seven {
                             phase_seven::check(&check_app).await;
+                        }
+                        if localization {
+                            localization::check(&check_app).await;
                         }
                         Ok::<(), crate::domain::AppError>(())
                     }),
@@ -114,6 +130,7 @@ async fn scenario(
     marker: &Path,
     server: &notification_server::Server,
     titlebar_only: bool,
+    localization_only: bool,
 ) -> crate::domain::Result<()> {
     let services = app.state::<Arc<Services>>();
     for channel in ["hold", "holdb"] {
@@ -176,7 +193,9 @@ async fn scenario(
         .await;
     let sessions = services.sessions.sessions().await;
     assert!(sessions.iter().all(|s| s.phase == SessionPhase::Running));
-    check_notifications(app, server).await?;
+    if !localization_only {
+        check_notifications(app, server).await?;
+    }
     // A webview reload reconstructs from the same Supervisor snapshots.
     window
         .eval("window.__streamGuiSmokeReload = true; location.reload()")

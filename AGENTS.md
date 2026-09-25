@@ -47,6 +47,7 @@ authoritative Twitch state, it probably belongs in Rust. Theme preference also p
 | Browsing, details, search and navigation snapshots | `src/browse/` |
 | Playback hook / Watching and settings panels | `src/playback/`, `src/features/` |
 | Shared presentation / theme tokens | `src/components/`, `src/styles/base.css` |
+| Bundled UI translations / native labels | `src/i18n/`, `src-tauri/src/desktop/localization.rs` |
 | Typed frontend boundary / generated DTOs | `src/lib/ipc.ts`, `src/lib/generated.ts` |
 
 Keep backend modules independent of Tauri; native composition/adapters use the optional `desktop` feature.
@@ -161,9 +162,9 @@ user.
 
 ## Settings and launch configuration
 
-- `SettingsStore` owns strict version 7 settings: global Streamlink/player/quality/low-latency/chat/theme/background/language/text-scale preferences
+- `SettingsStore` owns strict version 8 settings: global Streamlink/player/quality/low-latency/chat/theme/background/discovery-language/UI-language/text-scale preferences
   and sparse channel overrides, under Tauri's app config directory. Preserve atomic replacement, in-memory
-  migrations from this app's versions 1, 2, 3, 4, 5 and 6, and rejection of malformed/unknown schemas without overwrite.
+  migrations from this app's versions 1, 2, 3, 4, 5, 6 and 7, and rejection of malformed/unknown schemas without overwrite.
   Files are bounded to 256 KiB and channel overrides to 1,000 records.
 - Precedence is global defaults → selected player profile → optional channel overrides → optional request quality → immutable
   effective snapshot in `LaunchSpec` and the session. `quality: null` inherits; resolve only in Rust.
@@ -243,7 +244,7 @@ Run commands from the repository root. Setup is `npm ci`, stable Rust and Node.j
 plus the native prerequisites in README. There is one Cargo package at `src-tauri/Cargo.toml`, not a root
 Cargo workspace.
 
-Fast iteration: run the affected tests; for frontend work use `npm run typecheck` and `npm test`. For Rust,
+Fast iteration: run the affected tests; for frontend work use `npm run i18n:check`, `npm run typecheck` and `npm test`. For Rust,
 run formatting and the backend test command below (narrow to relevant tests during iteration).
 Documentation-only changes need path/command/claim review and `git diff --check`, not a native rebuild.
 

@@ -1,8 +1,10 @@
+import { useI18n } from "../i18n";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
 // The native dialog keeps focus inside the modal and makes the rest of the
 // application inert. It remains part of the main window's existing lifecycle.
 export function Modal({ title, children, close, activation = "", className = "" }: { title: string; children: ReactNode; close: () => void; activation?: string; className?: string }) {
+  const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
@@ -50,6 +52,6 @@ export function Modal({ title, children, close, activation = "", className = "" 
   return <dialog ref={dialog} className={`app-dialog ${className}`} aria-labelledby={titleId} aria-modal="true" role="dialog" onCancel={event => { event.preventDefault(); close(); }}>
     <h2 id={titleId} ref={heading} tabIndex={-1}>{title}</h2>
     {children}
-    <div className="dialog-actions"><button onClick={close}>Close</button></div>
+    <div className="dialog-actions"><button onClick={close}>{t("modal.close")}</button></div>
   </dialog>;
 }
