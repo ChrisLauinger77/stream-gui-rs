@@ -4,7 +4,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { DeveloperTools } from "./DeveloperTools";
 import { useAuthentication } from "./useAuthentication";
 import { BrowserWorkspace, type BrowserActions } from "../browse/Workspace";
-import { friendlyError } from "../browse/errors";
+import { errorText, friendlyError } from "../browse/errors";
 import type { Account, AuthStatus } from "../lib/generated";
 
 import { SettingsProvider } from "../settings/useSettings";
@@ -33,7 +33,7 @@ function AppContent() {
   return <Application desktop={desktop} developer={() => setDeveloper(true)} />;
 }
 function Application({ desktop, developer }: { desktop: ReturnType<typeof useDesktop>; developer: () => void }) {
-  const { t, count } = useI18n();
+  const { t, count, locale } = useI18n();
   const auth = useAuthentication();
   const actionState = desktop.actions.current;
   const [notificationTest, setNotificationTest] = useState(() => isNotificationTest(desktop.status) && actionState.handled !== desktop.status?.action?.id);
@@ -150,7 +150,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       stop={id => { void playback.run(`stop:${id}`, () => api.stop(id), "app.playbackStopped"); }}
       restart={(session, quality) => { void playback.run(`restart:${session.id}`, () => api.restart({ sessionId: session.id, generation: session.generation, quality }), "app.playbackRestarted"); }} /></div>}
     {desktop.status?.navigation && !auth.sessionId && desktop.status.navigation.intent.kind !== "show" && <p className="notice" role="status">{t("app.linkRequiresSignIn")}</p>}
-    {auth.error && <p className="error" role="alert">{auth.error}</p>}
+    {auth.error && <p className="error" role="alert">{errorText(auth.error, locale)}</p>}
     {notificationTest ? <main className="settings-panel">
       <h1 tabIndex={-1} ref={testHeading}>{t("app.testNotificationSyntheticChannel")}</h1>
       <p>{t("app.notificationTestResult")}</p>

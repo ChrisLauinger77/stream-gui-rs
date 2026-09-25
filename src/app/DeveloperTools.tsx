@@ -5,14 +5,14 @@ import { useSettings } from "../settings/useSettings";
 import { Panel } from "../components/Panel";
 import { Authentication } from "../features/Authentication";
 import { Playback } from "../features/Playback";
-import type { Account, AuthStatus, BackendDiagnostics, ProbeResult, SessionSnapshot } from "../lib/generated";
+import type { Account, AuthStatus, BackendDiagnostics, ErrorCode, ProbeResult, SessionSnapshot } from "../lib/generated";
 import { api } from "../lib/ipc";
-import { friendlyError } from "../browse/errors";
+import { errorCode, errorText } from "../browse/errors";
 
 type ActionKey = "auth" | "cancel" | "probe" | `restart:${string}` | `stop:${string}`;
 
 export function DeveloperTools() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { settings, savingSettings, commitSettings } = useSettings();
   const [backend, setBackend] = useState<BackendDiagnostics | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
@@ -22,7 +22,7 @@ export function DeveloperTools() {
   const customPath = pathEdit ?? settings?.streamlinkPath ?? "";
   const [probe, setProbe] = useState<ProbeResult | null>(null);
   const [pending, setPending] = useState<ReadonlySet<ActionKey>>(new Set());
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorCode | null>(null);
   const actionPending = useRef(new Set<ActionKey>());
   const refreshAuth = useCallback(async () => {
     setAuth(await api.authStatus());
@@ -37,13 +37,13 @@ export function DeveloperTools() {
     const timers = new Set<ReturnType<typeof setTimeout>>();
     void api.diagnostics().then((diagnostics) => {
       if (!cancelled) setBackend(diagnostics);
-    }).catch((error: unknown) => { if (!cancelled) setError(friendlyError(error)); });
+    }).catch((error: unknown) => { if (!cancelled) setError(errorCode(error)); });
     const startPolling = <T,>(read: () => Promise<T>, apply: (value: T) => void) => {
       const poll = async () => {
         try {
           const value = await read();
           if (!cancelled) apply(value);
-        } catch (error) { if (!cancelled) setError(friendlyError(error)); }
+        } catch (error) { if (!cancelled) setError(errorCode(error)); }
         if (!cancelled) {
           const timer = setTimeout(() => { timers.delete(timer); void poll(); }, 1000);
           timers.add(timer);
@@ -70,7 +70,7 @@ export function DeveloperTools() {
           if (!cancelled && account.id === accountId) setAccount(account);
         } catch (error) {
           if (!cancelled) {
-            setError(friendlyError(error));
+            setError(errorCode(error));
             retry = setTimeout(() => { void load(); }, 60_000);
           }
         }
@@ -86,9 +86,9 @@ export function DeveloperTools() {
     setPending(new Set(actionPending.current)); setError(null);
     void (async () => {
       try { await action(); }
-      catch (error) { setError(friendlyError(error)); }
+      catch (error) { setError(errorCode(error)); }
       finally {
-        try { await refresh?.(); } catch (error) { setError(friendlyError(error)); }
+        try { await refresh?.(); } catch (error) { setError(errorCode(error)); }
         actionPending.current.delete(key);
         setPending(new Set(actionPending.current));
       }
@@ -98,7 +98,7 @@ export function DeveloperTools() {
   return <main className="developer-tools">
     <header><h1>Stream GUI RS</h1><p>{t("developer.intro")}</p></header>
     {!isTauri() && <p className="notice">{t("developer.browserPreview")}{" "}<code>{t("developerTools.npmRunTauriDev")}</code>.</p>}
-    {error && <p role="alert" className="error">{error}</p>}
+    {error && <p role="alert" className="error">{errorText(error, locale)}</p>}
     <Panel title={t("developerTools.backend")}>
       <p>{backend ? t("developer.ready", { version: backend.version, commit: backend.commit, platform: backend.platform }) : t("app.notConnected")}</p>
       {backend && <p className="muted path">{t("developerTools.settings")}{" "}{backend.settingsPath}</p>}

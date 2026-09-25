@@ -116,6 +116,17 @@ test("settings confirmation follows a later UI language change", async () => {
   expect(text()).toContain("Einstellungen gespeichert");
   expect(text()).not.toContain("Settings saved");
 });
+test("authentication errors follow a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.authStatus).mockRejectedValue({ code: "network", message: "PRIVATE" });
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  await render();
+  const alert = container.querySelector(".application > p.error[role='alert']")!;
+  expect(alert.textContent).toContain("Check your connection");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(alert.textContent).toContain("Prüfe deine Verbindung");
+  expect(alert.textContent).not.toContain("PRIVATE");
+});
 test("System mode uses the native desktop language when it differs from browser defaults", async () => {
   Object.defineProperty(navigator, "languages", { configurable: true, value: ["en-US"] });
   vi.mocked(api.systemUiLanguage).mockResolvedValue("de");
@@ -946,6 +957,17 @@ test("language save errors preserve accepted preference and filtered network err
   expect(text()).not.toContain("No streams in this language");
   expect(text()).toContain("Check your connection");
 });
+test("stream language save errors follow a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.saveDiscoveryLanguage).mockRejectedValue({ code: "settings", message: "PRIVATE" });
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  await render(); await click("Live"); await selectLanguage("fr");
+  const alert = container.querySelector(".language-filter [role='alert']")!;
+  expect(alert.textContent).toBe("The saved settings could not be read.");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(alert.textContent).toBe("Die gespeicherten Einstellungen konnten nicht gelesen werden.");
+  expect(alert.textContent).not.toContain("PRIVATE");
+});
 
 async function lookupLogin(login: string) {
   const input = container.querySelector<HTMLInputElement>(".exact-lookup input")!;
@@ -970,6 +992,17 @@ test("exact lookup distinguishes invalid, missing and network failures", async (
     expect(text()).toContain(message); expect(text()).not.toContain("untrusted");
   }
   expect(api.channel).not.toHaveBeenCalled(); expect(api.launch).not.toHaveBeenCalled();
+});
+test("a visible lookup error follows a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.lookupChannel).mockRejectedValue({ code: "not_found", message: "PRIVATE" });
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  await render(); await click("Open channel", ".side-nav"); await lookupLogin("example"); await submitLookup();
+  const alert = container.querySelector(".exact-lookup [role='alert']")!;
+  expect(alert.textContent).toBe("No channel has that Twitch login.");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(alert.textContent).toBe("Kein Kanal hat diesen Twitch-Namen.");
+  expect(alert.textContent).not.toContain("PRIVATE");
 });
 test("lookup blocks duplicate submission and ignores changed login or account responses", async () => {
   const old = deferred<Awaited<ReturnType<typeof api.lookupChannel>>>();
@@ -1408,6 +1441,17 @@ function channelChoice(label: string) {
 async function changeGlobalText() {
   await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Text size", "150", "select"); await click("Save settings");
 }
+test("channel chat errors follow a later UI language change", async () => {
+  const original = await api.playbackSettings() as Settings;
+  vi.mocked(api.openBrowserChat).mockRejectedValue({ code: "browser_open", message: "PRIVATE" });
+  vi.mocked(api.saveUiLanguage).mockResolvedValue({ ...original, uiLanguage: "de" });
+  await openChannelPreferences(); await click("Open chat in browser");
+  const alert = container.querySelector(".channel-preferences [role='alert']")!;
+  expect(alert.textContent).toContain("could not be opened in your default browser");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await chooseUiLanguage("de");
+  expect(alert.textContent).toContain("konnte nicht im Standardbrowser geöffnet werden");
+  expect(alert.textContent).not.toContain("PRIVATE");
+});
 
 test.each(["global-first", "channel-first"] as const)("channel and global defaults reconcile all Rust effective fields: %s", async order => {
   const store = settingsPersistence();

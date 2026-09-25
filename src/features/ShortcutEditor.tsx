@@ -1,17 +1,19 @@
 import { useI18n } from "../i18n";
 import { useRef, useState } from "react";
-import type { ShortcutAction, ShortcutBindings } from "../lib/generated";
+import type { ErrorCode, ShortcutAction, ShortcutBindings } from "../lib/generated";
 import { useSettings } from "../settings/useSettings";
 import { actionLabel, bindingError, bindingLabel, capturedBinding, defaultBindings, shortcutActions, shortcutErrors } from "../app/shortcuts";
-import { friendlyError } from "../browse/errors";
+import { errorCode, errorText } from "../browse/errors";
+
+type ShortcutEditorError = { kind: "backend"; code: ErrorCode } | { kind: "binding"; text: string };
 
 export function ShortcutEditor() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { settings, saveShortcuts, savingShortcuts: pending } = useSettings();
   const [edits, setEdits] = useState<ShortcutBindings | null>(null);
   const [capture, setCapture] = useState<ShortcutAction | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ShortcutEditorError | null>(null);
   const busy = useRef(false);
   const draft = edits ?? settings?.shortcuts ?? defaultBindings();
   const errors = shortcutErrors(draft);
@@ -19,7 +21,7 @@ export function ShortcutEditor() {
     if (busy.current || errors.length) return;
     busy.current = true; setError(null);
     try { await saveShortcuts(draft); setEdits(null); setFeedback(t("shortcuts.saved")); }
-    catch (failure) { setError(friendlyError(failure)); }
+    catch (failure) { setError({ kind: "backend", code: errorCode(failure) }); }
     finally { busy.current = false; }
   };
   return <div className="shortcut-editor">
@@ -33,7 +35,7 @@ export function ShortcutEditor() {
         if (event.key === "Escape") { setCapture(null); setFeedback(t("shortcuts.captureCancelled")); return; }
         if (["Control", "Alt", "Meta", "Shift"].includes(event.key) || event.repeat || event.nativeEvent.isComposing) return;
         const binding = capturedBinding(event); const invalid = bindingError(binding);
-        if (invalid) { setError(invalid); return; }
+        if (invalid) { setError({ kind: "binding", text: invalid }); return; }
         setEdits({ ...draft, [action]: binding }); setCapture(null); setError(null); setFeedback(t("shortcuts.setTo", { action: actionLabel(action), binding: bindingLabel(binding) }));
       }}>{capture === action ? t("shortcuts.listening") : t("shortcuts.change")}</button>
       <button type="button" disabled={pending || !draft[action]} aria-label={t("shortcuts.unassignLabel", { action: actionLabel(action) })} onClick={() => { setEdits({ ...draft, [action]: null }); setCapture(null); }}>{t("shortcutEditor.unassign")}</button>
@@ -42,6 +44,6 @@ export function ShortcutEditor() {
     {capture && <button type="button" onMouseDown={event => event.preventDefault()} onClick={() => { setCapture(null); setFeedback(t("shortcuts.captureCancelled")); }}>{t("shortcutEditor.cancelCapture")}</button>}
     <div className="settings-save"><button type="button" disabled={pending || !!capture || !!errors.length || !settings} onClick={() => { void save(); }}>{t("shortcutEditor.saveShortcuts")}</button><button type="button" disabled={pending} onClick={() => { setEdits(defaultBindings()); setCapture(null); setError(null); setFeedback(t("shortcuts.defaultsRestored")); }}>{t("shortcutEditor.resetShortcutsToDefaults")}</button><button type="button" disabled={pending} onClick={() => { setEdits(null); setCapture(null); setError(null); setFeedback(t("shortcuts.changesDiscarded")); }}>{t("shortcutEditor.discardShortcutChanges")}</button></div>
     {errors.map(message => <p role="alert" className="error" key={message}>{message}</p>)}
-    {error && <p role="alert" className="error">{error}</p>}<p role="status">{pending ? t("shortcuts.saving") : feedback}</p>
+    {error && <p role="alert" className="error">{error.kind === "backend" ? errorText(error.code, locale) : error.text}</p>}<p role="status">{pending ? t("shortcuts.saving") : feedback}</p>
   </div>;
 }

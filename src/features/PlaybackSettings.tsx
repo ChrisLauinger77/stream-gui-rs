@@ -1,9 +1,10 @@
 import { useI18n, type MessageKey } from "../i18n";
 import { useRef, useState } from "react";
 import { api } from "../lib/ipc";
-import type { ChatProvider, PlayerDiscovery, ProbeResult, Settings, TextScale, Theme, UiLanguage } from "../lib/generated";
+import type { ChatProvider, ErrorCode, PlayerDiscovery, ProbeResult, Settings, TextScale, Theme, UiLanguage } from "../lib/generated";
 import { QualitySelect } from "../playback/QualitySelect";
 import { playbackError } from "../playback/usePlayback";
+import { errorCode } from "../browse/errors";
 import { ShortcutEditor } from "./ShortcutEditor";
 
 import { SavedItems } from "./DiscoveryPreferences";
@@ -28,7 +29,7 @@ export function PlaybackSettings(props: SettingsProps) {
   return <SettingsForm {...props} saved={props.saved} />;
 }
 function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { saved: Settings }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { saveUiLanguage } = useSettings();
   const [languageDraft, setLanguageDraft] = useState<UiLanguage | null>(null);
   const [section, setSection] = useState<Section>("Playback");
@@ -46,12 +47,12 @@ function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { save
   const [players, setPlayers] = useState<PlayerDiscovery | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const inFlight = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorCode | null>(null);
   const [message, setMessage] = useState<MessageKey | null>(null);
   const run = async (key: string, action: () => Promise<void>) => {
     if (inFlight.current || saving) return;
     inFlight.current = true; setBusy(key); setError(null); setMessage(null);
-    try { await action(); } catch (error) { setError(playbackError(error)); }
+    try { await action(); } catch (error) { setError(errorCode(error)); }
     finally { inFlight.current = false; setBusy(null); }
   };
   return <div className="settings-content">
@@ -106,7 +107,7 @@ function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { save
           <label>{t("settings.language")}<select value={languageDraft ?? saved.uiLanguage} disabled={!!busy || saving || languageDraft !== null} onChange={event => {
             const language = event.target.value as UiLanguage;
             setLanguageDraft(language); setError(null);
-            void saveUiLanguage(language).catch(failure => setError(playbackError(failure))).finally(() => setLanguageDraft(null));
+            void saveUiLanguage(language).catch(failure => setError(errorCode(failure))).finally(() => setLanguageDraft(null));
           }}><option value="system">{t("settings.languageSystem")}</option><option value="en">English</option><option value="de">Deutsch</option><option value="es">Español</option><option value="fr">Français</option></select></label>
           <p className="muted">{t("settings.languageHint")}</p>
           <label>{t("playbackSettings.textSize")}<select value={draft.textScale} onChange={event => edit({ textScale: event.target.value as TextScale })}><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option></select></label>
@@ -122,7 +123,7 @@ function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { save
         {section !== "Shortcuts" && section !== "Updates" && section !== "Hidden items" && <div className="settings-save"><button type="submit" disabled={saving}>{t("playbackSettings.saveSettings")}</button><button type="button" onClick={() => { setEdits({}); setProbe(null); setError(null); setMessage("settings.discarded"); }}>{t("playbackSettings.cancelChanges")}</button><span className="muted">{JSON.stringify(draft) !== JSON.stringify(saved) ? t("settings.unsaved") : t("settings.savedPreferences")}</span></div>}
       </fieldset>
       {(busy || saving) && <p role="status">{busy === "probe" ? t("settings.testingStreamlink") : t("settings.working")}</p>}
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <p className="error" role="alert">{playbackError({ code: error }, locale)}</p>}
       {message && <p role="status">{t(message)}</p>}
     </form>
   </div>;

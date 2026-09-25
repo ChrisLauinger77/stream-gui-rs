@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { api } from "../lib/ipc";
-import type { Account, AuthStatus } from "../lib/generated";
-import { friendlyError } from "../browse/errors";
+import type { Account, AuthStatus, ErrorCode } from "../lib/generated";
+import { errorCode } from "../browse/errors";
 
 export function useAuthentication() {
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorCode | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const revision = useRef(0);
   const loggingOut = useRef(false);
@@ -22,7 +22,7 @@ export function useAuthentication() {
       try {
         const next = await api.authStatus();
         if (!stopped && version === revision.current && !loggingOut.current) setStatus(next);
-      } catch (e) { if (!stopped) setError(friendlyError(e)); }
+      } catch (e) { if (!stopped) setError(errorCode(e)); }
       if (!stopped) timer = setTimeout(() => { void poll(); }, 1000);
     };
     void poll();
@@ -52,7 +52,7 @@ export function useAuthentication() {
     try {
       const next = await api[name]();
       if (alive.current && version === revision.current && next) setStatus(next);
-    } catch (e) { if (alive.current && version === revision.current) setError(friendlyError(e)); }
+    } catch (e) { if (alive.current && version === revision.current) setError(errorCode(e)); }
     finally { if (alive.current && version === revision.current) { loggingOut.current = false; setBusy(null); } }
   };
   const lost = useCallback(() => { revision.current++; setStatus(null); setAccount(null); }, []);

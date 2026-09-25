@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { api } from "../lib/ipc";
-import type { DesktopStatus } from "../lib/generated";
-import { friendlyError } from "../browse/errors";
+import type { DesktopStatus, ErrorCode } from "../lib/generated";
+import { errorCode } from "../browse/errors";
 
 // Snapshot presentation only: this does not request Twitch data or own monitoring.
 export function useDesktop() {
   const [status, setStatus] = useState<DesktopStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorCode | null>(null);
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const mounted = useRef(false);
@@ -39,7 +39,7 @@ export function useDesktop() {
       await action();
       const value = await api.desktopStatus();
       if (mounted.current && value) setStatus(value);
-    } catch (error) { if (mounted.current) setError(friendlyError(error)); }
+    } catch (error) { if (mounted.current) setError(errorCode(error)); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   };
   return { status, busy, error, run, actions, navigationActions };

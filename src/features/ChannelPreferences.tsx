@@ -1,14 +1,16 @@
-import { useI18n } from "../i18n";
+import { useI18n, type MessageKey } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import { useSettings } from "../settings/useSettings";
 import { api } from "../lib/ipc";
-import type { ChannelOverrides, ChannelSettings, QualityPolicy } from "../lib/generated";
+import type { ChannelOverrides, ChannelSettings, ErrorCode, QualityPolicy } from "../lib/generated";
 import { useQualityLabels } from "../playback/QualitySelect";
 import { playbackError } from "../playback/usePlayback";
-import { friendlyError } from "../browse/errors";
+import { errorCode, errorText } from "../browse/errors";
+
+type PreferenceError = { code: ErrorCode; context: "playback" | "general" };
 
 export function ChannelPreferences({ broadcasterId, sessionId }: { broadcasterId: string; sessionId: string }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const qualityLabels = useQualityLabels();
   const { settings, readChannel, saveChannel } = useSettings();
   const [saved, setSaved] = useState<ChannelSettings | null>(null);
@@ -17,8 +19,8 @@ export function ChannelPreferences({ broadcasterId, sessionId }: { broadcasterId
   // replace only the Rust snapshot; deliberate edits and save guards survive.
   const draft: ChannelOverrides = { quality: null, automaticChat: null, notifications: null, lowLatency: null, ...saved?.overrides, ...edits };
   const edit = (change: Partial<ChannelOverrides>) => setEdits(current => ({ ...current, ...change }));
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<PreferenceError | null>(null);
+  const [message, setMessage] = useState<MessageKey | null>(null);
   const [busy, setBusy] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -33,7 +35,7 @@ export function ChannelPreferences({ broadcasterId, sessionId }: { broadcasterId
     const request = new AbortController();
     void readChannel(broadcasterId, request.signal).then(value => {
       if (!request.signal.aborted && value) setSaved(value);
-    }).catch(error => { if (!request.signal.aborted) setError(playbackError(error)); });
+    }).catch(error => { if (!request.signal.aborted) setError({ code: errorCode(error), context: "playback" }); });
     return () => request.abort();
   }, [broadcasterId, settings, retry, readChannel]);
   const openChat = async (browser = false) => {
@@ -41,8 +43,8 @@ export function ChannelPreferences({ broadcasterId, sessionId }: { broadcasterId
     opening.current = true; setChatBusy(true); setError(null); setMessage(null);
     try {
       await (browser ? api.openBrowserChat : api.openChat)({ authSessionId: sessionId, broadcasterId });
-      if (mounted.current) setMessage(t(browser || settings?.chatProvider !== "chatterino" ? "channel.chatBrowserOpened" : "channel.chatterinoRequested"));
-    } catch (error) { if (mounted.current) setError(friendlyError(error)); }
+      if (mounted.current) setMessage(browser || settings?.chatProvider !== "chatterino" ? "channel.chatBrowserOpened" : "channel.chatterinoRequested");
+    } catch (error) { if (mounted.current) setError({ code: errorCode(error), context: "general" }); }
     finally { if (mounted.current) { opening.current = false; setChatBusy(false); } }
   };
   return <section className="channel-preferences" aria-label={t("channelPreferences.channelPreferences")}>
@@ -54,8 +56,8 @@ export function ChannelPreferences({ broadcasterId, sessionId }: { broadcasterId
         if (saving.current) return;
         saving.current = true; setBusy(true); setError(null); setMessage(null);
         void saveChannel({ broadcasterId, overrides: draft }).then(value => {
-          if (mounted.current) { setSaved(value); setEdits({}); setMessage(t("channel.saved")); }
-        }).catch(error => { if (mounted.current) setError(playbackError(error)); })
+          if (mounted.current) { setSaved(value); setEdits({}); setMessage("channel.saved"); }
+        }).catch(error => { if (mounted.current) setError({ code: errorCode(error), context: "playback" }); })
           .finally(() => { if (mounted.current) { saving.current = false; setBusy(false); } });
       }}>
         <fieldset disabled={busy}>
@@ -79,7 +81,7 @@ export function ChannelPreferences({ broadcasterId, sessionId }: { broadcasterId
         </fieldset>
       </form>}
     </details>
-    {error && <p role="alert" className="error">{error}</p>}
-    {message && <p role="status">{message}</p>}
+    {error && <p role="alert" className="error">{error.context === "playback" ? playbackError({ code: error.code }, locale) : errorText(error.code, locale)}</p>}
+    {message && <p role="status">{t(message)}</p>}
   </section>;
 }

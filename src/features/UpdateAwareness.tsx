@@ -1,4 +1,4 @@
-import { useI18n } from "../i18n";
+import { useI18n, type MessageKey } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/ipc";
 import type { UpdateStatus } from "../lib/generated";
@@ -7,7 +7,7 @@ export function UpdateAwareness() {
   const { t } = useI18n();
   const [status, setStatus] = useState<UpdateStatus>({ phase: "not_checked", latestVersion: null });
   const [busy, setBusy] = useState<"check" | "release" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<MessageKey | null>(null);
   const mounted = useRef(false);
   const inFlight = useRef(false);
   const revision = useRef(0);
@@ -29,7 +29,7 @@ export function UpdateAwareness() {
     try { await action(); } catch {
       if (mounted.current) {
         if (kind === "check") setStatus({ phase: "unavailable", latestVersion: null });
-        else setError(t("updates.actionFailed"));
+        else setError("updates.actionFailed");
       }
     }
     finally { inFlight.current = false; if (mounted.current) setBusy(null); }
@@ -50,6 +50,6 @@ export function UpdateAwareness() {
       {status.latestVersion && <button type="button" disabled={!!busy} onClick={() => { void run("release", async () => { await api.openUpdateRelease(); }); }}>{t("updateAwareness.viewRelease")}</button>}
     </div>
     <p className="muted">{t("updates.cacheHelp")}</p>
-    {error && <p role="alert" className="error">{error}</p>}
+    {error && <p role="alert" className="error">{t(error)}</p>}
   </section>;
 }

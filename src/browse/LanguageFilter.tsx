@@ -1,7 +1,7 @@
 import { useI18n, type MessageKey } from "../i18n";
 import { useEffect, useRef, useState } from "react";
-import type { Settings, StreamLanguage } from "../lib/generated";
-import { friendlyError } from "./errors";
+import type { ErrorCode, Settings, StreamLanguage } from "../lib/generated";
+import { errorCode, errorText } from "./errors";
 
 const languages: Record<StreamLanguage, MessageKey> = {
   ar: "streamLanguage.ar", bg: "streamLanguage.bg", cs: "streamLanguage.cs", da: "streamLanguage.da", de: "streamLanguage.de", el: "streamLanguage.el",
@@ -11,9 +11,9 @@ const languages: Record<StreamLanguage, MessageKey> = {
   sv: "streamLanguage.sv", th: "streamLanguage.th", tr: "streamLanguage.tr", uk: "streamLanguage.uk", vi: "streamLanguage.vi", zh: "streamLanguage.zh", other: "streamLanguage.other",
 };
 export function LanguageFilter({ value, saved, persist }: { persist: (language: StreamLanguage | null) => Promise<Settings>; value: StreamLanguage | null; saved: (settings: Settings) => void }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorCode | null>(null);
   const pending = useRef(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -23,7 +23,7 @@ export function LanguageFilter({ value, saved, persist }: { persist: (language: 
     try {
       const result = await persist(language);
       if (alive.current) saved(result);
-    } catch (failure) { if (alive.current) setError(friendlyError(failure)); }
+    } catch (failure) { if (alive.current) setError(errorCode(failure)); }
     finally { pending.current = false; if (alive.current) setBusy(false); }
   };
   return <div className="language-filter">
@@ -32,6 +32,6 @@ export function LanguageFilter({ value, saved, persist }: { persist: (language: 
     </select></label>
     {value && <button disabled={busy} onClick={() => { void change(null); }}>{t("languageFilter.resetLanguage")}</button>}
     {busy && <span role="status">{t("languageFilter.savingLanguage")}</span>}
-    {error && <p className="error" role="alert">{error}</p>}
+    {error && <p className="error" role="alert">{errorText(error, locale)}</p>}
   </div>;
 }
