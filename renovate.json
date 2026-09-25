@@ -78,7 +78,7 @@
       "groupName": "Windows API crates"
     },
     {
-      "description": "Defer Windows API generation changes (breaking 0.x minor and major updates) until deliberately re-enabled after v0.2.0; allow compatible patches",
+      "description": "Keep windows-core below 0.100 until a matching windows crate is available; review future paired updates together",
       "matchManagers": [
         "cargo"
       ],
@@ -86,14 +86,9 @@
         "crate"
       ],
       "matchPackageNames": [
-        "windows",
         "windows-core"
       ],
-      "matchUpdateTypes": [
-        "minor",
-        "major"
-      ],
-      "enabled": false
+      "allowedVersions": "<0.100.0"
     },
     {
       "description": "Keep GTK aligned with Tauri/Wry gtk-rs; defer breaking 0.x minor and major updates until stack-compatible, then require a Linux native build and graphical notification/tray/browser/lifecycle smoke tests",
