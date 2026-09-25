@@ -1,4 +1,4 @@
-name: Desktop checks
+name: CI
 
 on:
   push:
