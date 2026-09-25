@@ -14,18 +14,22 @@ pub enum ShortcutAction {
     Categories,
     Search,
     Watching,
+    OpenChannel,
+    Bookmarks,
     Settings,
     Back,
     Forward,
     Refresh,
 }
-pub const ACTIONS: [ShortcutAction; 10] = [
+pub const ACTIONS: [ShortcutAction; 12] = [
     ShortcutAction::Home,
     ShortcutAction::Following,
     ShortcutAction::Live,
     ShortcutAction::Categories,
     ShortcutAction::Search,
     ShortcutAction::Watching,
+    ShortcutAction::OpenChannel,
+    ShortcutAction::Bookmarks,
     ShortcutAction::Settings,
     ShortcutAction::Back,
     ShortcutAction::Forward,
@@ -60,6 +64,8 @@ impl ShortcutBindings {
                 (Categories, "3", true, false),
                 (Search, "k", true, false),
                 (Watching, "4", true, false),
+                (OpenChannel, "5", true, false),
+                (Bookmarks, "6", true, false),
                 (Settings, ",", true, false),
                 (Back, if mac { "[" } else { "ArrowLeft" }, mac, !mac),
                 (Forward, if mac { "]" } else { "ArrowRight" }, mac, !mac),
@@ -100,6 +106,44 @@ impl ShortcutBindings {
             }
         }
         Ok(())
+    }
+
+    pub(super) fn expand_legacy_defaults(&mut self) {
+        use ShortcutAction::*;
+        // Only a complete pre-expansion map is eligible; malformed partial maps still fail validation.
+        if self.0.len() != ACTIONS.len() - 2
+            || ACTIONS.iter().any(|action| {
+                !matches!(action, OpenChannel | Bookmarks) && !self.0.contains_key(action)
+            })
+        {
+            return;
+        }
+        let defaults = Self::default();
+        for action in [OpenChannel, Bookmarks] {
+            let candidate = defaults.0[&action].as_ref().expect("default binding");
+            let occupied = self.0.values().flatten().any(|existing| {
+                existing.key == candidate.key
+                    && [false, true].into_iter().any(|mac| {
+                        let effective = |binding: &ShortcutBinding| {
+                            (
+                                binding.control || binding.primary && !mac,
+                                binding.meta || binding.primary && mac,
+                                binding.alt,
+                                binding.shift,
+                            )
+                        };
+                        effective(existing) == effective(candidate)
+                    })
+            });
+            self.0.insert(
+                action,
+                if occupied {
+                    None
+                } else {
+                    Some(candidate.clone())
+                },
+            );
+        }
     }
 }
 impl ShortcutBinding {

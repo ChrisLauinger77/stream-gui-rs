@@ -1113,6 +1113,20 @@ fn malformed_saved_items_and_duplicate_bindings_are_rejected() {
         use shortcuts::*;
         let defaults = ShortcutBindings::defaults(mac);
         defaults.validate().unwrap();
+        for (action, key) in [
+            (ShortcutAction::OpenChannel, "5"),
+            (ShortcutAction::Bookmarks, "6"),
+        ] {
+            let binding = defaults.0[&action].as_ref().unwrap();
+            assert_eq!(binding.key, key);
+            assert!(binding.primary);
+            assert!(!binding.control && !binding.meta);
+            let mut bindings = defaults.clone();
+            bindings
+                .0
+                .insert(ShortcutAction::Search, Some(binding.clone()));
+            assert!(bindings.validate().is_err());
+        }
         let mut bindings = defaults.clone();
         bindings.0.insert(
             ShortcutAction::Refresh,
@@ -1137,6 +1151,101 @@ fn malformed_saved_items_and_duplicate_bindings_are_rejected() {
             assert!(bindings.validate().is_err());
         }
     }
+}
+
+#[test]
+fn existing_shortcuts_expand_without_losing_custom_bindings() {
+    use shortcuts::*;
+    let dir = tempfile::tempdir().unwrap();
+    let mut old = SettingsDocument::default();
+    let custom = ShortcutBinding {
+        key: "b".into(),
+        primary: true,
+        control: false,
+        alt: false,
+        shift: true,
+        meta: false,
+    };
+    old.settings
+        .shortcuts
+        .0
+        .insert(ShortcutAction::Search, Some(custom.clone()));
+    old.settings
+        .shortcuts
+        .0
+        .remove(&ShortcutAction::OpenChannel);
+    old.settings.shortcuts.0.remove(&ShortcutAction::Bookmarks);
+    let bytes = serde_json::to_string(&old).unwrap();
+    fs::write(dir.path().join("settings.json"), &bytes).unwrap();
+    let store = SettingsStore::open(dir.path()).unwrap();
+    let expanded = store.snapshot().shortcuts;
+    assert_eq!(expanded.0[&ShortcutAction::Search], Some(custom));
+    assert_eq!(
+        expanded.0[&ShortcutAction::OpenChannel]
+            .as_ref()
+            .unwrap()
+            .key,
+        "5"
+    );
+    assert_eq!(
+        expanded.0[&ShortcutAction::Bookmarks].as_ref().unwrap().key,
+        "6"
+    );
+    assert_eq!(fs::read_to_string(store.path()).unwrap(), bytes);
+    store.set_shortcuts(expanded.clone()).unwrap();
+    assert_eq!(
+        SettingsStore::open(dir.path())
+            .unwrap()
+            .snapshot()
+            .shortcuts,
+        expanded
+    );
+
+    let mut version_seven: serde_json::Value = serde_json::from_str(&bytes).unwrap();
+    version_seven["version"] = 7.into();
+    version_seven["settings"]
+        .as_object_mut()
+        .unwrap()
+        .remove("uiLanguage");
+    assert_eq!(
+        SettingsDocument::from_json(&version_seven.to_string())
+            .unwrap()
+            .settings
+            .shortcuts,
+        expanded
+    );
+
+    let mut occupied = old;
+    occupied.settings.shortcuts.0.insert(
+        ShortcutAction::Search,
+        ShortcutBindings::default().0[&ShortcutAction::OpenChannel].clone(),
+    );
+    let loaded = SettingsDocument::from_json(&serde_json::to_string(&occupied).unwrap()).unwrap();
+    assert_eq!(
+        loaded.settings.shortcuts.0[&ShortcutAction::Search]
+            .as_ref()
+            .unwrap()
+            .key,
+        "5"
+    );
+    assert_eq!(
+        loaded.settings.shortcuts.0[&ShortcutAction::OpenChannel],
+        None
+    );
+    assert_eq!(
+        loaded.settings.shortcuts.0[&ShortcutAction::Bookmarks]
+            .as_ref()
+            .unwrap()
+            .key,
+        "6"
+    );
+
+    occupied
+        .settings
+        .shortcuts
+        .0
+        .remove(&ShortcutAction::Refresh);
+    assert!(SettingsDocument::from_json(&serde_json::to_string(&occupied).unwrap()).is_err());
 }
 
 #[test]

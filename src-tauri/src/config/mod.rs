@@ -514,6 +514,7 @@ impl SettingsDocument {
                 ));
             }
         };
+        result.settings.shortcuts.expand_legacy_defaults();
         result.validate()?;
         result
             .channel_overrides

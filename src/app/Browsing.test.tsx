@@ -707,7 +707,27 @@ test("macOS uses Command shortcuts and ignores Control navigation", async () => 
   await keypress("2", { metaKey: true }); expect(api.streams).toHaveBeenCalledOnce();
   await keypress("[", { metaKey: true }); expect(button("Following").getAttribute("aria-current")).toBe("page");
   await keypress("k", { metaKey: true }); expect(document.activeElement).toBe(container.querySelector('input[type="search"]'));
+  await keypress("5", { ctrlKey: true }); expect(button("Open channel").getAttribute("aria-current")).toBeNull();
+  await keypress("5", { metaKey: true }); expect(button("Open channel").getAttribute("aria-current")).toBe("page");
+  await keypress("6", { metaKey: true }); expect(button("Bookmarks").getAttribute("aria-current")).toBe("page");
   await keypress(",", { metaKey: true }); await click("Shortcuts", ".settings-nav"); expect(text()).toContain("⌘K");
+  expect(container.querySelector('[aria-label="Open channel binding: ⌘5"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="Bookmarks binding: ⌘6"]')).not.toBeNull();
+});
+
+test.each(["Linux x86_64", "Win32"])("Control+5 and Control+6 use lookup and bookmark history on %s", async platform => {
+  Object.defineProperty(navigator, "platform", { configurable: true, value: platform });
+  await render(); await click("Live");
+  await keypress("5"); expect(button("Open channel").getAttribute("aria-current")).toBe("page");
+  expect(document.activeElement).toBe(container.querySelector("h1"));
+  expect(api.lookupChannel).not.toHaveBeenCalled();
+  await keypress("6"); expect(button("Bookmarks").getAttribute("aria-current")).toBe("page");
+  await click("Go back"); expect(button("Open channel").getAttribute("aria-current")).toBe("page");
+  await click("Go forward"); expect(button("Bookmarks").getAttribute("aria-current")).toBe("page");
+  expect(api.streams).toHaveBeenCalledOnce();
+  await click("Settings"); await click("Shortcuts", ".settings-nav");
+  expect(container.querySelector('[aria-label="Open channel binding: Ctrl+5"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="Bookmarks binding: Ctrl+6"]')).not.toBeNull();
 });
 
 test("shortcuts ignore typing, editable content, composition, repeats and modal dialogs", async () => {
@@ -2095,6 +2115,41 @@ test("shortcut capture reports conflicts before save, supports cancel and persis
   await keypress(","); await click("Shortcuts", ".settings-nav"); await click("Unassign Focus Search shortcut"); await click("Save shortcuts");
   expect(saved.shortcuts.search).toBeNull();
   await click("Reset shortcuts to defaults"); await click("Save shortcuts"); expect(saved.shortcuts.search?.key).toBe("k");
+});
+
+test("new shortcut actions support conflict feedback, reassignment, unassignment and reset", async () => {
+  let saved = { ...playbackSettings, shortcuts: defaultBindings(false) };
+  vi.mocked(api.playbackSettings).mockImplementation(async () => saved);
+  vi.mocked(api.saveShortcuts).mockImplementation(async shortcuts => { saved = { ...saved, shortcuts }; return saved; });
+  await render(); await click("Settings"); await click("Shortcuts", ".settings-nav");
+  const change = button("Change Open channel shortcut");
+  change.focus(); await click("Change Open channel shortcut");
+  await keypress("6", { ctrlKey: true }, change);
+  expect(text()).toContain("conflicts with"); expect(button("Save shortcuts").disabled).toBe(true);
+  await click("Change Open channel shortcut"); await keypress("5", { ctrlKey: true }, change);
+  await click("Change Bookmarks shortcut"); await keypress("5", { ctrlKey: true }, button("Change Bookmarks shortcut"));
+  expect(text()).toContain("conflicts with"); expect(button("Save shortcuts").disabled).toBe(true);
+  await click("Change Bookmarks shortcut"); await keypress("6", { ctrlKey: true }, button("Change Bookmarks shortcut"));
+  await click("Change Open channel shortcut"); await keypress("o", { ctrlKey: true, shiftKey: true }, change);
+  await click("Save shortcuts"); expect(saved.shortcuts.open_channel?.key).toBe("o");
+  await click("Unassign Bookmarks shortcut"); await click("Save shortcuts"); expect(saved.shortcuts.bookmarks).toBeNull();
+  await click("Close Settings"); await keypress("5"); expect(button("Open channel").getAttribute("aria-current")).toBeNull();
+  await keypress("o", { ctrlKey: true, shiftKey: true }); expect(button("Open channel").getAttribute("aria-current")).toBe("page");
+  await keypress("6"); expect(button("Bookmarks").getAttribute("aria-current")).toBeNull();
+  await click("Settings"); await click("Shortcuts", ".settings-nav");
+  await click("Reset shortcuts to defaults"); await click("Save shortcuts");
+  expect(saved.shortcuts.open_channel?.key).toBe("5"); expect(saved.shortcuts.bookmarks?.key).toBe("6");
+});
+
+test.each([
+  ["en", "Open channel", "Bookmarks"], ["de", "Kanal öffnen", "Lesezeichen"],
+  ["es", "Abrir canal", "Marcadores"], ["fr", "Ouvrir une chaîne", "Favoris"],
+] as const)("shortcut editor uses the existing %s navigation labels", async (language, openChannel, bookmarks) => {
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, uiLanguage: language });
+  await render(); await click(language === "en" ? "Settings" : { de: "Einstellungen", es: "Ajustes", fr: "Paramètres" }[language]);
+  await click({ en: "Shortcuts", de: "Tastenkürzel", es: "Atajos", fr: "Raccourcis" }[language], ".settings-nav");
+  const labels = [...container.querySelectorAll(".shortcut-row > span")].map(span => span.textContent);
+  expect(labels).toContain(openChannel); expect(labels).toContain(bookmarks);
 });
 
 test("shortcut capture rejects unsupported keys, exits with Tab and uses macOS labels", async () => {

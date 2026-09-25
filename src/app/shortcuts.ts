@@ -3,12 +3,12 @@ import type { ShortcutAction, ShortcutBinding, ShortcutBindings } from "../lib/g
 import { currentLocale, translate, type MessageKey } from "../i18n";
 export type { ShortcutAction } from "../lib/generated";
 export const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform);
-export const shortcutActions: ShortcutAction[] = ["home", "following", "live", "categories", "search", "watching", "settings", "back", "forward", "refresh"];
-const actionKeys: Record<ShortcutAction, MessageKey> = { home: "shortcuts.home", following: "shortcuts.following", live: "shortcuts.live", categories: "shortcuts.categories", search: "shortcuts.search", watching: "shortcuts.watching", settings: "shortcuts.settings", back: "shortcuts.back", forward: "shortcuts.forward", refresh: "shortcuts.refresh" };
+export const shortcutActions: ShortcutAction[] = ["home", "following", "live", "categories", "search", "watching", "open_channel", "bookmarks", "settings", "back", "forward", "refresh"];
+const actionKeys: Record<ShortcutAction, MessageKey> = { home: "shortcuts.home", following: "shortcuts.following", live: "shortcuts.live", categories: "shortcuts.categories", search: "shortcuts.search", watching: "shortcuts.watching", open_channel: "browse.openChannel", bookmarks: "browse.bookmarks", settings: "shortcuts.settings", back: "shortcuts.back", forward: "shortcuts.forward", refresh: "shortcuts.refresh" };
 export const actionLabel = (action: ShortcutAction) => translate(currentLocale(), actionKeys[action]);
 export function defaultBindings(mac = isMac()): ShortcutBindings {
   const make = (key: string, primary = true, alt = false): ShortcutBinding => ({ key, primary, alt, control: false, meta: false, shift: false });
-  return { home: make("Home", false, true), following: make("1"), live: make("2"), categories: make("3"), search: make("k"), watching: make("4"), settings: make(","), back: make(mac ? "[" : "ArrowLeft", mac, !mac), forward: make(mac ? "]" : "ArrowRight", mac, !mac), refresh: make("r") };
+  return { home: make("Home", false, true), following: make("1"), live: make("2"), categories: make("3"), search: make("k"), watching: make("4"), open_channel: make("5"), bookmarks: make("6"), settings: make(","), back: make(mac ? "[" : "ArrowLeft", mac, !mac), forward: make(mac ? "]" : "ArrowRight", mac, !mac), refresh: make("r") };
 }
 export function bindingLabel(binding: ShortcutBinding | null | undefined, mac = isMac()) {
   if (!binding) return translate(currentLocale(), "shortcuts.unassigned");
