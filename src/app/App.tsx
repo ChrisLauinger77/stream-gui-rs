@@ -114,12 +114,13 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   useEffect(() => { if (notificationTest) testHeading.current?.focus(); }, [notificationTest]);
   useEffect(() => { if (settings) settingsHeading.current?.focus(); }, [settings]);
   useEffect(() => { if (watching) watchingPanel.current?.querySelector<HTMLElement>("h2")?.focus(); }, [watching]);
-  const navigate = (section: "search" | "following" | "live" | "categories") => {
+  const navigate = (section: "search" | "following" | "live" | "categories" | "lookup" | "bookmarks") => {
     setSettings(false); setWatching(false); workspace.current?.navigate(section);
   };
   useShortcuts({
     home: () => navigate("following"), forward: () => { setSettings(false); setWatching(false); workspace.current?.forward(); },
     search: () => navigate("search"), following: () => navigate("following"), live: () => navigate("live"), categories: () => navigate("categories"),
+    open_channel: () => navigate("lookup"), bookmarks: () => navigate("bookmarks"),
     watching: () => { if (!watching) capture("watching"); setWatching(true); setSettings(false); }, settings: () => { if (!settings) capture("settings"); setSettings(true); setWatching(false); },
     back: () => { if (settings) closeSettings(); else if (watching) closeWatching(); else if (notificationTest) setNotificationTest(false); else workspace.current?.back(); },
     refresh: () => { if (!settings) workspace.current?.refresh(); },
