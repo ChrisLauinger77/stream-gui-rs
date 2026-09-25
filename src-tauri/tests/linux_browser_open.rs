@@ -127,12 +127,11 @@ fn isolated_browser_dispatch() {
     };
     browser::open(&std::env::var("STREAM_GUI_BROWSER_TEST_DESTINATION").unwrap()).unwrap();
     for _ in 0..150 {
-        if let Ok(bytes) = fs::read(&marker) {
-            if let Ok((pid, _)) = serde_json::from_slice::<(u32, String)>(&bytes) {
-                if !Path::new(&format!("/proc/{pid}")).exists() {
-                    return;
-                }
-            }
+        if let Ok(bytes) = fs::read(&marker)
+            && let Ok((pid, _)) = serde_json::from_slice::<(u32, String)>(&bytes)
+            && !Path::new(&format!("/proc/{pid}")).exists()
+        {
+            return;
         }
         std::thread::sleep(Duration::from_millis(20));
     }

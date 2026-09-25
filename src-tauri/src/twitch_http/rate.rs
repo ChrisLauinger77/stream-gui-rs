@@ -133,34 +133,31 @@ impl RateLimiter {
             parse("ratelimit-limit"),
             parse("ratelimit-remaining"),
             parse("ratelimit-reset"),
-        ) {
-            if limit > 0
-                && limit <= 100_000
-                && remaining <= limit
-                && reset <= now.saturating_add(86400)
-            {
-                let newer = budget
-                    .snapshot
-                    .reset_at
-                    .is_none_or(|previous| reset > previous);
-                let same = budget.snapshot.reset_at == Some(reset);
-                if newer || same {
-                    let observed = (remaining as u32)
-                        .saturating_sub(budget.snapshot.in_flight.saturating_sub(1));
-                    budget.snapshot.remaining = Some(if newer {
-                        observed
-                    } else {
-                        budget
-                            .snapshot
-                            .remaining
-                            .map_or(observed, |local| local.min(observed))
-                    });
-                    budget.snapshot.limit = Some(limit as u32);
-                    budget.snapshot.reset_at = Some(reset);
-                    budget.reset = Some(
-                        self.clock.now() + Duration::from_secs(reset.saturating_sub(now).max(1)),
-                    );
-                }
+        ) && limit > 0
+            && limit <= 100_000
+            && remaining <= limit
+            && reset <= now.saturating_add(86400)
+        {
+            let newer = budget
+                .snapshot
+                .reset_at
+                .is_none_or(|previous| reset > previous);
+            let same = budget.snapshot.reset_at == Some(reset);
+            if newer || same {
+                let observed =
+                    (remaining as u32).saturating_sub(budget.snapshot.in_flight.saturating_sub(1));
+                budget.snapshot.remaining = Some(if newer {
+                    observed
+                } else {
+                    budget
+                        .snapshot
+                        .remaining
+                        .map_or(observed, |local| local.min(observed))
+                });
+                budget.snapshot.limit = Some(limit as u32);
+                budget.snapshot.reset_at = Some(reset);
+                budget.reset =
+                    Some(self.clock.now() + Duration::from_secs(reset.saturating_sub(now).max(1)));
             }
         }
         if limited {
