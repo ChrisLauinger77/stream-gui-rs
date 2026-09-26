@@ -19,6 +19,7 @@ import { useDesktop } from "./useDesktop";
 import { isNotificationTest, NotificationAcceptance } from "./NotificationAcceptance";
 import { usePanelFocus } from "./usePanelFocus";
 import { useAppearance } from "./useAppearance";
+import { useCustomTheme } from "./useCustomTheme";
 import { useShortcuts, shortcutLabels } from "./shortcuts";
 
 export function App() {
@@ -45,7 +46,8 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const [navigationFocus, setNavigationFocus] = useState<{ id: string; target: "channel" | "watching" | "test" } | null>(null);
   const playback = usePlayback();
   const { run } = playback;
-  useAppearance(playback.settings?.theme ?? "system", playback.settings?.textScale ?? "100");
+  const customTheme = useCustomTheme(settings || playback.settings?.themePalette === "custom");
+  useAppearance(playback.settings?.theme ?? "system", playback.settings?.themePalette ?? "default", customTheme, playback.settings?.textScale ?? "100");
   const workspace = useRef<BrowserActions>(null);
   const { capture, restore } = usePanelFocus();
   const settingsButton = useRef<HTMLButtonElement>(null);
@@ -142,7 +144,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
     <header className="app-bar"><div className="brand"><span aria-hidden="true">▶</span> Stream GUI RS</div>{controls}</header>
     {settings && <section ref={settingsPanel} className="settings-panel" aria-label={t("app.settings")}>
       <div className="settings-header"><h2 tabIndex={-1} ref={settingsHeading}>{t("app.settings")}</h2><button className="quiet" onClick={closeSettings}>{t("app.closeSettings")}</button><button className="quiet" onClick={() => setSupport(true)}>{t("app.prepareSupportReport")}</button><button className="quiet" onClick={developer}>{t("app.developerTools")}</button><button className="quiet" disabled={desktop.busy} onClick={() => { void desktop.run(api.quit); }}>{activeCount ? count("app.quitStops", activeCount) : t("app.quit")}</button></div>
-      <PlaybackSettings desktop={desktop} saved={playback.settings} saving={playback.savingSettings} commit={playback.commitSettings} />
+      <PlaybackSettings desktop={desktop} saved={playback.settings} saving={playback.savingSettings} commit={playback.commitSettings} customThemeAvailable={customTheme !== null} />
       {auth.status?.phase === "not_configured" && <p>{t("auth.clientIdMissing")}</p>}
     </section>}
     <div className={playback.error ? "error playback-feedback" : playback.message ? "notice playback-feedback" : "playback-feedback empty-feedback"} role={playback.error ? "alert" : "status"} aria-atomic="true">{playback.error ?? playback.message}{(playback.error || playback.message) && <button className="quiet" onClick={playback.dismiss}>{t("app.dismiss")}</button>}</div>

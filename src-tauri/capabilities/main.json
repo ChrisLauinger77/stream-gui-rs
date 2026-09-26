@@ -17,6 +17,7 @@
     "allow-streamlink-sessions",
     "allow-streamlink-restart",
     "allow-playback-settings",
+    "allow-custom-theme",
     "allow-channel-settings",
     "allow-open-channel-chat",
     "allow-save-channel-settings",

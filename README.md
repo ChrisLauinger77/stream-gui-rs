@@ -29,7 +29,7 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Twitch chat in the system browser or independently authenticated Chatterino
 - Up to 16 reusable named player profiles, with optional quality and low-latency preferences
 - Manual stable-release awareness from the official GitHub repository (no automatic updater)
-- System, Light, and Dark themes, 100/125/150% text size, and focused application shortcuts
+- Default and eight bundled color themes, conditional Custom Theme, System/Light/Dark modes, 100/125/150% text size, and focused application shortcuts
 - English, German, Spanish, and French interface languages, with a System setting and English fallback
 - Opt-in followed-stream monitoring, desktop notifications, and per-channel notification preferences
 - Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
@@ -116,6 +116,10 @@ The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectiv
 **Settings → Appearance → Language** offers System, English, Deutsch, Español, and Français. System follows the operating system language for the supported languages and uses English otherwise; an OS language change is picked up on the next app launch. The selection saves immediately and persists across restarts. The separate **Stream language** filter controls Twitch discovery results, not interface text. UI translations ship in the app and require no download.
 
 **Settings → Appearance → Text size** supports 100%, 125%, and 150%. Save applies the Rust-persisted value; it combines with desktop/webview scaling. Closing Settings or Watching returns focus to its opener when still appropriate. Playback announcements describe the Streamlink process, not verified video rendering.
+
+**Settings → Appearance → Theme** offers Default, Catppuccin, Dracula, Everforest, Gruvbox, Nord, Rosé Pine, Solarized, and Tokyo Night. Default keeps the existing Stream GUI RS colors. **Color mode** retains System, Light, and Dark; System follows the desktop color preference. Dracula uses Dark only while selected and restores the previous mode when another theme is chosen. Save applies the choice and preserves it across restarts.
+
+To add **Custom Theme**, copy [the example palette](docs/custom-theme.json) to `custom-theme.json` beside the app's `settings.json` in its configuration directory. A complete `dark` object with the example's twelve color keys is required, each using a six-digit hex value; an optional complete `light` object supplies separate light colors. Without `light`, the dark colors serve both modes. The option appears only while the file is valid. Changes to a selected custom palette apply within about a second, including while Settings is open. If the file becomes unavailable or invalid, Default is shown while the saved Custom selection remains; restoring a valid file restores Custom automatically. Use **Use Default** in Appearance to replace an unavailable Custom selection. The file supplies colors only, never CSS or executable content. Custom colors are accepted without automatic contrast correction; the app adjusts its generated live color to fit the supplied surfaces. Check text and focus visibility on the chosen backgrounds.
 
 **About Stream GUI RS** is available from the tray/status menu and the main interface. macOS keeps its native AppKit panel; Linux and Windows use one small main-window dialog. About restores a hidden main window, shows the icon, compiled version/commit, and a fixed GitHub repository link. Close/Escape closes the dialog; explicit application Quit still cleans up playback and monitoring.
 
@@ -234,5 +238,7 @@ Release maintainers should use the [release process](docs/releasing.md) and [tes
 ## License and acknowledgements
 
 Stream GUI RS is licensed under [GNU GPL version 3 only](LICENSE). It relies on open-source Rust and npm dependencies under their respective licenses. Playback is provided by the separately installed [Streamlink](https://streamlink.github.io/) project. No assets from Streamlink Twitch GUI are distributed here.
+
+The bundled theme palette data and custom-theme example are adapted from [Sidra](https://github.com/wimpysworld/sidra) under the [Blue Oak Model License 1.0.0](https://blueoakcouncil.org/license/1.0.0). The palette colors trace to their upstream theme projects as noted in `src/styles/palettes.ts`.
 
 Released milestones and deferred ideas are summarized in the [road to 1.0](docs/road-to-1.0.md).

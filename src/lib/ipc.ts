@@ -4,7 +4,7 @@ import type {
   ChatRequest, ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
   LookupChannelRequest, ChannelIdentity, StreamLanguage, UiLanguage, StreamBrowseRequest, CategoryStreamsRequest, BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
   Account, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
-  ProbeResult, SessionSnapshot, StopRequest, SupportReport, AppInfo,
+  ProbeResult, SessionSnapshot, StopRequest, SupportReport, AppInfo, CustomTheme,
 } from "./generated";
 
 // Only these named operations are available. DTOs are generated from Rust.
@@ -49,6 +49,7 @@ type Commands = {
   streamlink_launch: [PlaybackRequest, SessionSnapshot];
   streamlink_restart: [RestartRequest, SessionSnapshot];
   playback_settings: [undefined, Settings];
+  custom_theme: [undefined, CustomTheme | null];
   open_channel_chat: [ChatRequest, null];
   channel_settings: [ChannelSettingsRequest, ChannelSettings];
   save_channel_settings: [SaveChannelSettingsRequest, ChannelSettings];
@@ -114,6 +115,7 @@ export const api = {
   launch: (request: PlaybackRequest) => call("streamlink_launch", request),
   restart: (request: RestartRequest) => call("streamlink_restart", request),
   playbackSettings: () => call("playback_settings"),
+  customTheme: () => call("custom_theme"),
   openChat: (request: ChatRequest) => call("open_channel_chat", request),
   channelSettings: (broadcasterId: string) => call("channel_settings", { broadcasterId }),
   saveChannelSettings: (request: SaveChannelSettingsRequest) => call("save_channel_settings", request),

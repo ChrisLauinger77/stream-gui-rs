@@ -129,6 +129,7 @@ fn main() {
             "streamlink_sessions",
             "streamlink_restart",
             "playback_settings",
+            "custom_theme",
             "channel_settings",
             "open_channel_chat",
             "save_channel_settings",

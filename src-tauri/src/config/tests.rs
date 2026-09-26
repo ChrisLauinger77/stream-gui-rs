@@ -19,12 +19,13 @@ fn settings_version_and_round_trip() {
         SettingsDocument::from_json(&serde_json::to_string(&value).unwrap()).unwrap(),
         value
     );
-    assert_eq!(value.version, 8);
+    assert_eq!(value.version, 9);
     assert_eq!(value.settings.theme, Theme::System);
+    assert_eq!(value.settings.theme_palette, ThemePalette::Default);
     assert_eq!(value.settings.ui_language, UiLanguage::System);
     assert!(!value.settings.automatic_chat);
     assert_eq!(value.settings.default_quality, QualityPolicy::Source);
-    for text in ["{}", r#"{"version":9}"#, r#"{"version":0}"#] {
+    for text in ["{}", r#"{"version":10}"#, r#"{"version":0}"#] {
         assert_eq!(
             SettingsDocument::from_json(text).unwrap_err().code,
             ErrorCode::SettingsVersion
@@ -34,6 +35,44 @@ fn settings_version_and_round_trip() {
         SettingsDocument::from_json("broken").unwrap_err().code,
         ErrorCode::Settings
     );
+}
+
+#[test]
+fn version_eight_theme_migration_preserves_mode_and_other_settings_until_save() {
+    let root = tempfile::tempdir().unwrap();
+    let mut old = serde_json::to_value(SettingsDocument::default()).unwrap();
+    old["version"] = 8.into();
+    old["settings"]["theme"] = "light".into();
+    old["settings"]
+        .as_object_mut()
+        .unwrap()
+        .remove("themePalette");
+    let bytes = old.to_string();
+    fs::write(root.path().join("settings.json"), &bytes).unwrap();
+    let store = SettingsStore::open(root.path()).unwrap();
+    assert_eq!(store.snapshot().theme, Theme::Light);
+    assert_eq!(store.snapshot().theme_palette, ThemePalette::Default);
+    assert_eq!(fs::read_to_string(store.path()).unwrap(), bytes);
+    let mut selected = store.snapshot();
+    selected.theme_palette = ThemePalette::Custom;
+    store.update(selected).unwrap();
+    let saved: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
+    assert_eq!(saved["version"], 9);
+    assert_eq!(saved["settings"]["theme"], "light");
+    assert_eq!(saved["settings"]["themePalette"], "custom");
+    assert_eq!(
+        SettingsStore::open(root.path())
+            .unwrap()
+            .snapshot()
+            .theme_palette,
+        ThemePalette::Custom
+    );
+    old["settings"]["themePalette"] = "custom".into();
+    assert!(SettingsDocument::from_json(&old.to_string()).is_err());
+    let mut invalid = saved;
+    invalid["settings"]["themePalette"] = "unknown".into();
+    assert!(SettingsDocument::from_json(&invalid.to_string()).is_err());
 }
 
 #[test]
@@ -108,7 +147,7 @@ fn version_two_migration_preserves_every_playback_preference_without_rewriting()
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 8);
+    assert_eq!(persisted["version"], 9);
     assert_eq!(persisted["channelOverrides"], serde_json::json!({}));
 }
 
@@ -371,7 +410,7 @@ fn phase_five_migration_is_strict_preserves_channel_preferences_and_defaults_off
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 8);
+    assert_eq!(persisted["version"], 9);
     let reopened = SettingsStore::open(root.path()).unwrap();
     assert_eq!(reopened.snapshot(), expected);
     for id in ["123", "456"] {
@@ -509,7 +548,7 @@ fn version_four_migration_preserves_released_preferences_and_defaults_phase_six(
     check_channels(&reopened);
     let saved: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(saved["version"], 8);
+    assert_eq!(saved["version"], 9);
     assert!(saved["settings"]["discoveryLanguage"].is_null());
     assert_eq!(saved["settings"]["lowLatency"], false);
     assert_eq!(saved["settings"]["textScale"], "100");
@@ -707,7 +746,7 @@ fn released_schema_five_migration_preserves_all_values_and_starts_without_profil
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
     assert_eq!(persisted["channelOverrides"], old["channelOverrides"]);
-    assert_eq!(persisted["version"], 8);
+    assert_eq!(persisted["version"], 9);
     let mut hostile = old;
     hostile["settings"]["profiles"] = serde_json::json!([]);
     assert!(SettingsDocument::from_json(&hostile.to_string()).is_err());
@@ -922,6 +961,7 @@ fn version_six_migrates_in_memory_and_rejects_smuggled_phase_eight_fields() {
     settings.remove("discovery");
     settings.remove("shortcuts");
     settings.remove("uiLanguage");
+    settings.remove("themePalette");
     let original = serde_json::to_string(&old).unwrap();
     fs::write(dir.path().join("settings.json"), &original).unwrap();
     let store = SettingsStore::open(dir.path()).unwrap();
@@ -941,7 +981,7 @@ fn version_six_migrates_in_memory_and_rejects_smuggled_phase_eight_fields() {
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&fs::read_to_string(store.path()).unwrap())
             .unwrap()["version"],
-        8
+        9
     );
 }
 
@@ -967,6 +1007,10 @@ fn version_seven_migrates_language_without_changing_existing_settings() {
         .as_object_mut()
         .unwrap()
         .remove("uiLanguage");
+    old["settings"]
+        .as_object_mut()
+        .unwrap()
+        .remove("themePalette");
     let bytes = old.to_string();
     fs::write(dir.path().join("settings.json"), &bytes).unwrap();
     let store = SettingsStore::open(dir.path()).unwrap();
@@ -982,7 +1026,7 @@ fn version_seven_migrates_language_without_changing_existing_settings() {
     store.update(stale).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 8);
+    assert_eq!(persisted["version"], 9);
     assert_eq!(persisted["settings"]["uiLanguage"], "fr");
     assert_eq!(
         SettingsStore::open(dir.path())
@@ -1207,6 +1251,10 @@ fn existing_shortcuts_expand_without_losing_custom_bindings() {
         .as_object_mut()
         .unwrap()
         .remove("uiLanguage");
+    version_seven["settings"]
+        .as_object_mut()
+        .unwrap()
+        .remove("themePalette");
     assert_eq!(
         SettingsDocument::from_json(&version_seven.to_string())
             .unwrap()

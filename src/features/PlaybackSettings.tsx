@@ -1,7 +1,8 @@
 import { useI18n, type MessageKey } from "../i18n";
 import { useRef, useState } from "react";
 import { api } from "../lib/ipc";
-import type { ChatProvider, ErrorCode, PlayerDiscovery, ProbeResult, Settings, TextScale, Theme, UiLanguage } from "../lib/generated";
+import type { ChatProvider, ErrorCode, PlayerDiscovery, ProbeResult, Settings, TextScale, Theme, ThemePalette, UiLanguage } from "../lib/generated";
+import { BUNDLED_THEMES } from "../styles/palettes";
 import { QualitySelect } from "../playback/QualitySelect";
 import { playbackError } from "../playback/usePlayback";
 import { errorCode } from "../browse/errors";
@@ -18,7 +19,7 @@ import { useSettings } from "../settings/useSettings";
 const sections = ["Playback", "Streamlink", "Player", "Appearance", "Background", "Updates", "Shortcuts", "Hidden items"] as const;
 type Section = typeof sections[number];
 const sectionKeys = { Playback: "settings.sectionPlayback", Streamlink: "settings.sectionStreamlink", Player: "settings.sectionPlayer", Appearance: "settings.sectionAppearance", Background: "settings.sectionBackground", Updates: "settings.sectionUpdates", Shortcuts: "settings.sectionShortcuts", "Hidden items": "settings.sectionHidden" } as const;
-type SettingsProps = { desktop: ReturnType<typeof useDesktop>; saved: Settings | null; saving: boolean; commit: (action: () => Promise<Settings>) => Promise<Settings> };
+type SettingsProps = { desktop: ReturnType<typeof useDesktop>; saved: Settings | null; saving: boolean; commit: (action: () => Promise<Settings>) => Promise<Settings>; customThemeAvailable: boolean };
 type DraftEdits = Omit<Partial<Settings>, "player" | "background" | "profiles" | "selectedProfileId"> & {
   player?: Partial<Settings["player"]>;
   background?: Partial<Settings["background"]>;
@@ -28,7 +29,7 @@ export function PlaybackSettings(props: SettingsProps) {
   if (!props.saved) return <p role="status">{t("playbackSettings.loadingSettings")}</p>;
   return <SettingsForm {...props} saved={props.saved} />;
 }
-function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { saved: Settings }) {
+function SettingsForm({ saved, desktop, saving, commit, customThemeAvailable }: SettingsProps & { saved: Settings }) {
   const { t, locale } = useI18n();
   const { saveUiLanguage } = useSettings();
   const [languageDraft, setLanguageDraft] = useState<UiLanguage | null>(null);
@@ -111,7 +112,10 @@ function SettingsForm({ saved, desktop, saving, commit }: SettingsProps & { save
           }}><option value="system">{t("settings.languageSystem")}</option><option value="en">English</option><option value="de">Deutsch</option><option value="es">Español</option><option value="fr">Français</option></select></label>
           <p className="muted">{t("settings.languageHint")}</p>
           <label>{t("playbackSettings.textSize")}<select value={draft.textScale} onChange={event => edit({ textScale: event.target.value as TextScale })}><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option></select></label>
-          <label>{t("playbackSettings.appearance")}<select value={draft.theme} onChange={event => edit({ theme: event.target.value as Theme })}><option value="system">{t("playbackSettings.system")}</option><option value="light">{t("playbackSettings.light")}</option><option value="dark">{t("playbackSettings.dark")}</option></select></label>
+          <label>{t("settings.themeStyle")}<select value={draft.themePalette === "custom" && !customThemeAvailable ? "default" : draft.themePalette} onChange={event => edit({ themePalette: event.target.value as ThemePalette })}><option value="default">{t("settings.themeDefault")}</option>{BUNDLED_THEMES.map(theme => <option value={theme.name} key={theme.name}>{theme.label}</option>)}{customThemeAvailable && <option value="custom">{t("settings.themeCustom")}</option>}</select></label>
+          {draft.themePalette === "custom" && !customThemeAvailable && <><p className="muted" role="status">{t("settings.themeUnavailable")}</p><button type="button" onClick={() => edit({ themePalette: "default" })}>{t("settings.themeUseDefault")}</button></>}
+          <label>{t("settings.colorMode")}<select value={draft.themePalette === "dracula" ? "dark" : draft.theme} disabled={draft.themePalette === "dracula"} aria-describedby={draft.themePalette === "dracula" ? "dracula-mode-note" : undefined} onChange={event => edit({ theme: event.target.value as Theme })}><option value="system">{t("playbackSettings.system")}</option><option value="light">{t("playbackSettings.light")}</option><option value="dark">{t("playbackSettings.dark")}</option></select></label>
+          {draft.themePalette === "dracula" && <p className="muted" id="dracula-mode-note">{t("settings.draculaDarkOnly")}</p>}
           <p className="muted">{t("settings.themeHelp")}</p>
         </div>
         <div hidden={section !== "Background"} className="setting-group">

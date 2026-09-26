@@ -77,7 +77,7 @@ pub(super) async fn check(app: &tauri::AppHandle) {
     window.set_size(tauri::LogicalSize::new(620, 600)).unwrap();
     for (scale, theme) in [("100", "system"), ("125", "light"), ("150", "dark")] {
         click(app, "Appearance").await;
-        evaluate(app,&format!("(() => {{ for (const [label,value] of [['Text size','{scale}'],['Appearance','{theme}']]) {{ const s=[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith(label)).querySelector('select'); s.value=value; s.dispatchEvent(new Event('change',{{bubbles:true}})); }} return true; }})()")).await;
+        evaluate(app,&format!("(() => {{ for (const [label,value] of [['Text size','{scale}'],['Color mode','{theme}']]) {{ const s=[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith(label)).querySelector('select'); s.value=value; s.dispatchEvent(new Event('change',{{bubbles:true}})); }} return true; }})()")).await;
         click(app, "Save settings").await;
         until(app,&format!("document.documentElement.dataset.textScale === '{scale}' && !document.querySelector('.playback-settings fieldset').disabled")).await;
         click(app, "Shortcuts").await;

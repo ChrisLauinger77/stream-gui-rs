@@ -162,9 +162,9 @@ user.
 
 ## Settings and launch configuration
 
-- `SettingsStore` owns strict version 8 settings: global Streamlink/player/quality/low-latency/chat/theme/background/discovery-language/UI-language/text-scale preferences
+- `SettingsStore` owns strict version 9 settings: global Streamlink/player/quality/low-latency/chat/theme/color-mode/background/discovery-language/UI-language/text-scale preferences
   and sparse channel overrides, under Tauri's app config directory. Preserve atomic replacement, in-memory
-  migrations from this app's versions 1, 2, 3, 4, 5, 6 and 7, and rejection of malformed/unknown schemas without overwrite.
+  migrations from this app's versions 1, 2, 3, 4, 5, 6, 7 and 8, and rejection of malformed/unknown schemas without overwrite.
   Files are bounded to 256 KiB and channel overrides to 1,000 records.
 - Precedence is global defaults → selected player profile → optional channel overrides → optional request quality → immutable
   effective snapshot in `LaunchSpec` and the session. `quality: null` inherits; resolve only in Rust.
@@ -199,7 +199,9 @@ user.
   dimensions/placeholders and retry failed images after accepted refreshes without resetting already-loaded
   images on ordinary rerenders.
 - Keep the UI compact, fast, desktop-oriented and informative without clutter. Preserve System/Light/Dark
-  themes, CSS tokens, readable contrast and visible focus. Avoid mobile-sized cards, excessive whitespace,
+  color modes, Default/bundled/custom themes, CSS tokens, readable contrast and visible focus. Dracula resolves Dark
+  without erasing the saved color mode. A missing or invalid custom palette falls back to Default without erasing its selection.
+  Avoid mobile-sized cards, excessive whitespace,
   gratuitous animation, decorative glass/gradients, unnecessary containers and imitation of the Twitch
   website.
 - No preference authority lives in localStorage. Theme follows the Rust snapshot and native
