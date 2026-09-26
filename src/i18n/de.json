@@ -445,6 +445,7 @@
   "settings.themeHelp": "System übernimmt die Farbeinstellung deines Desktops. Speichere, um die Auswahl anzuwenden.",
   "settings.themeStyle": "Design",
   "settings.themeUnavailable": "Das benutzerdefinierte Design ist nicht verfügbar. Standard wird angezeigt, bis custom-theme.json wieder gültig ist.",
+  "settings.themeUseDefault": "Standard verwenden",
   "settings.unsaved": "Ungespeicherte Änderungen",
   "settings.working": "Wird verarbeitet…",
   "shortcutEditor.cancelCapture": "Aufnahme abbrechen",

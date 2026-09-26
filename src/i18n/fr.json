@@ -445,6 +445,7 @@
   "settings.themeHelp": "Système suit la préférence de couleur du bureau. Enregistrez pour appliquer votre choix.",
   "settings.themeStyle": "Thème",
   "settings.themeUnavailable": "Le thème personnalisé est indisponible. Le thème par défaut s'affiche jusqu'à ce que custom-theme.json soit de nouveau valide.",
+  "settings.themeUseDefault": "Utiliser le thème par défaut",
   "settings.unsaved": "Modifications non enregistrées",
   "settings.working": "Traitement en cours…",
   "shortcutEditor.cancelCapture": "Annuler la saisie",

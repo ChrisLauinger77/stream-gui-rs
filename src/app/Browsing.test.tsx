@@ -833,6 +833,20 @@ test("Custom Theme appears only for valid colors, falls back, and recovers witho
   expect(document.documentElement.style.getPropertyValue("--bg")).toBe("");
 });
 
+test("unavailable Custom can be deliberately replaced with Default", async () => {
+  let settings: Settings = { ...playbackSettings, themePalette: "custom" };
+  vi.mocked(api.playbackSettings).mockImplementation(async () => settings);
+  vi.mocked(api.savePlaybackSettings).mockImplementation(async value => { settings = value; return value; });
+  await render(); await click("Settings"); await click("Appearance", ".settings-nav");
+  const selector = [...container.querySelectorAll<HTMLSelectElement>("select")].find(select => select.labels?.[0]?.textContent?.startsWith("Theme"))!;
+  expect(selector.value).toBe("default");
+  expect([...selector.options].some(option => option.value === "custom")).toBe(false);
+  await click("Use Default");
+  expect(text()).toContain("Unsaved changes");
+  await click("Save settings");
+  expect(settings.themePalette).toBe("default");
+});
+
 async function toggleControl(label: string) {
   const input = [...container.querySelectorAll("label")].find(node => node.textContent?.startsWith(label))!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
   await act(async () => input.click());

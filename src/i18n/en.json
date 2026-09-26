@@ -445,6 +445,7 @@
   "settings.themeHelp": "System follows your desktop color preference. Save to apply your selection.",
   "settings.themeStyle": "Theme",
   "settings.themeUnavailable": "Custom Theme is unavailable. Showing Default until custom-theme.json is valid again.",
+  "settings.themeUseDefault": "Use Default",
   "settings.unsaved": "Unsaved changes",
   "settings.working": "Working…",
   "shortcutEditor.cancelCapture": "Cancel capture",

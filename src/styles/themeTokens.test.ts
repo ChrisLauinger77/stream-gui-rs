@@ -30,3 +30,10 @@ test("bundled palettes keep readable semantic text, accents and focus in both mo
     }
   }
 });
+
+test("dark-only custom colors keep error text readable when Light is selected", () => {
+  const source = BUNDLED_THEMES[0].dark;
+  const tokens = themeTokens(source, "light", false);
+  expect([source.base, source.surface0, source.surface1]).toContain(tokens["--danger-bg"]);
+  expect(contrast(tokens["--text"], tokens["--danger-bg"])).toBeGreaterThanOrEqual(4.5);
+});

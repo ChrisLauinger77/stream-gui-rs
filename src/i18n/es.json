@@ -445,6 +445,7 @@
   "settings.themeHelp": "Sistema sigue la preferencia de color del escritorio. Guarda para aplicar tu elección.",
   "settings.themeStyle": "Tema",
   "settings.themeUnavailable": "El tema personalizado no está disponible. Se muestra el predeterminado hasta que custom-theme.json vuelva a ser válido.",
+  "settings.themeUseDefault": "Usar predeterminado",
   "settings.unsaved": "Cambios sin guardar",
   "settings.working": "Procesando…",
   "shortcutEditor.cancelCapture": "Cancelar captura",

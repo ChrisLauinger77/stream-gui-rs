@@ -41,7 +41,8 @@ function readable(color: string, backgrounds: string[], floor: number, dark: boo
 /** Map Sidra's colour ladder to this app's semantic tokens; only bundled palettes receive contrast repair. */
 export function themeTokens(colors: SchemeColours, mode: "dark" | "light", bundled: boolean): Record<ThemeToken, string> {
   const dark = mode === "dark";
-  const danger = dark ? "#302126" : "#fff0f0";
+  const danger = bundled ? (dark ? "#302126" : "#fff0f0")
+    : [colors.base, colors.surface0, colors.surface1].reduce((best, candidate) => contrast(colors.text, candidate) > contrast(colors.text, best) ? candidate : best);
   const backgrounds = [colors.base, colors.surface0, colors.surface1, danger];
   const text = bundled ? readable(colors.text, backgrounds, 4.5, dark) : colors.text;
   const muted = bundled ? readable(colors.subtext0, backgrounds, 4.5, dark) : colors.subtext0;
