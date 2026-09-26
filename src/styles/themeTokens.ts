@@ -37,8 +37,11 @@ function readable(color: string, backgrounds: string[], floor: number, dark: boo
   }
   return target;
 }
+function minimumContrast(color: string, backgrounds: string[]): number {
+  return Math.min(...backgrounds.map(background => contrast(color, background)));
+}
 
-/** Map Sidra's colour ladder to this app's semantic tokens; only bundled palettes receive contrast repair. */
+/** Map Sidra's colour ladder to this app's semantic tokens; custom source colors remain unchanged. */
 export function themeTokens(colors: SchemeColours, mode: "dark" | "light", bundled: boolean): Record<ThemeToken, string> {
   const dark = mode === "dark";
   const danger = bundled ? (dark ? "#302126" : "#fff0f0")
@@ -47,7 +50,8 @@ export function themeTokens(colors: SchemeColours, mode: "dark" | "light", bundl
   const text = bundled ? readable(colors.text, backgrounds, 4.5, dark) : colors.text;
   const muted = bundled ? readable(colors.subtext0, backgrounds, 4.5, dark) : colors.subtext0;
   const accent = bundled ? readable(colors.accent, backgrounds, 4.5, dark) : colors.accent;
-  const live = bundled ? readable(dark ? "#ff8e91" : "#b7293b", backgrounds, 4.5, dark) : (dark ? "#ff8e91" : "#b7293b");
+  const liveOnDark = bundled ? dark : minimumContrast("#ffffff", backgrounds) >= minimumContrast("#000000", backgrounds);
+  const live = readable(liveOnDark ? "#ff8e91" : "#b7293b", backgrounds, 4.5, liveOnDark);
   const focus = bundled ? readable(colors.accent, backgrounds, 3, dark) : colors.accent;
   const line = bundled ? readable(colors.surface2, [colors.base, colors.surface0, colors.surface1], 3, dark) : colors.surface2;
   const accentText = contrast(accent, "#ffffff") >= contrast(accent, "#000000") ? "#ffffff" : "#000000";
