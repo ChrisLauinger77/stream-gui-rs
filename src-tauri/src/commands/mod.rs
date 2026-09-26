@@ -20,6 +20,16 @@ pub fn playback_settings(services: State<'_, Arc<Services>>) -> Settings {
 }
 
 #[tauri::command]
+pub async fn custom_theme(
+    services: State<'_, Arc<Services>>,
+) -> Result<Option<crate::config::CustomTheme>> {
+    let settings = services.settings.clone();
+    tokio::task::spawn_blocking(move || settings.custom_theme())
+        .await
+        .map_err(|_| AppError::new(ErrorCode::Settings, "Could not read the custom theme."))
+}
+
+#[tauri::command]
 pub async fn save_playback_settings(
     services: State<'_, Arc<Services>>,
     request: Settings,

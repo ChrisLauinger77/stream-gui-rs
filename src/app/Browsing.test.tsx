@@ -6,6 +6,7 @@ import { App } from "./App";
 import { Media } from "../browse/components";
 import { defaultBindings } from "./shortcuts";
 import { api } from "../lib/ipc";
+import { BUNDLED_THEMES } from "../styles/palettes";
 import type { AuthStatus, CategorySummary, ChannelDetails, ChannelSummary, PagedResult, Settings, StreamSummary, UiLanguage } from "../lib/generated";
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: vi.fn() }));
 vi.mock("../lib/ipc", async importOriginal => {
@@ -50,9 +51,10 @@ beforeEach(() => {
   Object.defineProperty(navigator, "platform", { configurable: true, value: "Linux x86_64" });
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
   vi.mocked(api.sessions).mockResolvedValue([]);
+  vi.mocked(api.customTheme).mockResolvedValue(null);
   vi.mocked(api.systemUiLanguage).mockResolvedValue("en");
   vi.mocked(api.acknowledgeDesktopAction).mockResolvedValue(null);
-  vi.mocked(api.playbackSettings).mockResolvedValue({ chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
+  vi.mocked(api.playbackSettings).mockResolvedValue({ chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", themePalette: "default", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
   vi.mocked(api.channelSettings).mockImplementation(async broadcasterId => ({ broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: "source", defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false, effective: { profileId: null, chatProvider: "browser" as const, chatterinoPath: null, lowLatency: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, quality: "source", automaticChat: false } }));
   vi.mocked(api.authStatus).mockResolvedValue(signedIn);
   vi.mocked(api.account).mockResolvedValue({ id: "viewer", login: "viewer", displayName: "Viewer", profileImageUrl: null });
@@ -380,7 +382,7 @@ test("repeated image failures wait for another successful refresh", async () => 
   await fail(); vi.mocked(api.streams).mockRejectedValueOnce({ code: "network" }); await click("Refresh"); expect(container.querySelector(".media img")).toBeNull();
   await click("Retry"); expect(container.querySelectorAll(".media img")).toHaveLength(1); await fail();
   await click("Settings"); await click("Appearance", ".settings-nav");
-  await editControl("Appearance", "light", "select");
+  await editControl("Color mode", "light", "select");
   vi.mocked(api.savePlaybackSettings).mockResolvedValue({ ...playbackSettings, theme: "light" });
   await click("Save settings");
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
@@ -414,7 +416,7 @@ const playing = (id = "play-one", broadcasterId = "channel-one"): import("../lib
   url: "https://www.twitch.tv/example", quality: "best", exitCode: null, stopRequested: false,
   logs: [{ sequence: 1, source: "stderr", text: "Synthetic diagnostic warning" }], droppedLogEntries: 5,
 });
-const playbackSettings: import("../lib/generated").Settings = { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
+const playbackSettings: import("../lib/generated").Settings = { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", themePalette: "default", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
 async function editControl(label: string, value: string, kind: "input" | "select" = "input") {
   const control = [...container.querySelectorAll<HTMLInputElement | HTMLSelectElement>(kind)].find(el => el.labels?.[0]?.textContent?.startsWith(label));
   if (!control) throw new Error(`Missing control: ${label}`);
@@ -756,7 +758,7 @@ test("saved theme follows System changes and persists explicit Light and Dark th
   await render(); expect(document.documentElement.dataset.theme).toBe("system"); expect(document.documentElement.dataset.resolvedTheme).toBe("light");
   await act(async () => { dark = true; listeners.forEach(listener => listener()); }); expect(document.documentElement.dataset.resolvedTheme).toBe("dark");
   for (const theme of ["light", "dark"] as const) {
-    await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Appearance", theme, "select");
+    await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Color mode", theme, "select");
     expect(document.documentElement.dataset.theme).toBe(settings.theme);
     await click("Save settings"); expect(document.documentElement.dataset.theme).toBe(theme);
     await act(async () => { dark = !dark; listeners.forEach(listener => listener()); }); expect(document.documentElement.dataset.resolvedTheme).toBe(theme);
@@ -764,9 +766,71 @@ test("saved theme follows System changes and persists explicit Light and Dark th
     expect(document.documentElement.dataset.theme).toBe(theme);
     expect(localStorage.getItem("stream-gui-theme")).toBeNull();
   }
-  await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Appearance", "system", "select"); await click("Save settings");
+  await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Color mode", "system", "select"); await click("Save settings");
   expect(document.documentElement.dataset.theme).toBe("system");
   vi.unstubAllGlobals();
+});
+
+test("bundled themes follow System while Dracula forces Dark without erasing the saved mode", async () => {
+  let dark = false;
+  const listeners = new Set<() => void>();
+  vi.stubGlobal("matchMedia", vi.fn(() => ({ get matches() { return dark; }, addEventListener: (_: string, listener: () => void) => listeners.add(listener), removeEventListener: (_: string, listener: () => void) => listeners.delete(listener) })));
+  let settings = { ...playbackSettings };
+  vi.mocked(api.playbackSettings).mockImplementation(async () => settings);
+  vi.mocked(api.savePlaybackSettings).mockImplementation(async value => { settings = value; return value; });
+  await render(); await click("Settings"); await click("Appearance", ".settings-nav");
+  const selector = [...container.querySelectorAll<HTMLSelectElement>("select")].find(select => select.labels?.[0]?.textContent?.startsWith("Theme"))!;
+  expect([...selector.options].map(option => option.value)).toEqual(["default", ...BUNDLED_THEMES.map(theme => theme.name)]);
+  await editControl("Theme", "catppuccin", "select");
+  expect(document.documentElement.dataset.resolvedPalette).toBe("default");
+  await click("Save settings");
+  expect(document.documentElement.dataset.resolvedPalette).toBe("catppuccin");
+  expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#eff1f5");
+  dark = true; await act(async () => { listeners.forEach(listener => listener()); });
+  expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#1e1e2e");
+  await editControl("Theme", "dracula", "select"); await click("Save settings");
+  expect(document.documentElement.dataset.resolvedTheme).toBe("dark");
+  expect(document.documentElement.dataset.theme).toBe("system");
+  const colorMode = [...container.querySelectorAll<HTMLSelectElement>("select")].find(select => select.labels?.[0]?.textContent?.startsWith("Color mode"))!;
+  expect(colorMode.disabled).toBe(true); expect(colorMode.value).toBe("dark");
+  dark = false; await act(async () => { listeners.forEach(listener => listener()); });
+  expect(document.documentElement.dataset.resolvedTheme).toBe("dark");
+  await editControl("Theme", "nord", "select");
+  expect(colorMode.disabled).toBe(false); expect(colorMode.value).toBe("system");
+  await click("Save settings");
+  expect(document.documentElement.dataset.resolvedTheme).toBe("light");
+  expect(settings.theme).toBe("system");
+});
+
+test("Custom Theme appears only for valid colors, falls back, and recovers without losing its selection", async () => {
+  let file: import("../lib/generated").CustomTheme | null = null;
+  vi.mocked(api.customTheme).mockImplementation(async () => file);
+  let settings: Settings = { ...playbackSettings, theme: "dark", themePalette: "custom" };
+  vi.mocked(api.playbackSettings).mockImplementation(async () => settings);
+  vi.mocked(api.savePlaybackSettings).mockImplementation(async value => { settings = value; return value; });
+  await render(); await click("Settings"); await click("Appearance", ".settings-nav");
+  const selector = [...container.querySelectorAll<HTMLSelectElement>("select")].find(select => select.labels?.[0]?.textContent?.startsWith("Theme"))!;
+  expect([...selector.options].some(option => option.value === "custom")).toBe(false);
+  expect(selector.value).toBe("default");
+  expect(document.documentElement.dataset.resolvedPalette).toBe("default");
+  await editControl("Text size", "125", "select"); await click("Save settings");
+  expect(settings.themePalette).toBe("custom");
+  file = { dark: BUNDLED_THEMES[0].dark, light: BUNDLED_THEMES[0].light };
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect([...selector.options].some(option => option.value === "custom")).toBe(true);
+  expect(document.documentElement.dataset.resolvedPalette).toBe("custom");
+  expect(document.documentElement.style.getPropertyValue("--bg")).toBe("#1e1e2e");
+  file = null;
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect([...selector.options].some(option => option.value === "custom")).toBe(false);
+  expect(document.documentElement.dataset.resolvedPalette).toBe("default");
+  expect(document.documentElement.style.getPropertyValue("--bg")).toBe("");
+  file = { dark: BUNDLED_THEMES[0].dark, light: BUNDLED_THEMES[0].light };
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(document.documentElement.dataset.resolvedPalette).toBe("custom");
+  await editControl("Theme", "default", "select"); await click("Save settings");
+  expect(settings.themePalette).toBe("default");
+  expect(document.documentElement.style.getPropertyValue("--bg")).toBe("");
 });
 
 async function toggleControl(label: string) {
@@ -2197,7 +2261,7 @@ test("shortcut mutations serialize with global saves and accepted state survives
   vi.mocked(api.playbackSettings).mockImplementation(async () => settings);
   vi.mocked(api.savePlaybackSettings).mockImplementation(async request => { settings = { ...request, shortcuts: settings.shortcuts }; return settings; });
   await render(); await click("Settings"); await click("Shortcuts", ".settings-nav"); await click("Unassign Focus Search shortcut"); await click("Save shortcuts");
-  await click("Close Settings"); await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Appearance", "dark", "select"); await click("Save settings");
+  await click("Close Settings"); await click("Settings"); await click("Appearance", ".settings-nav"); await editControl("Color mode", "dark", "select"); await click("Save settings");
   expect(api.savePlaybackSettings).not.toHaveBeenCalled();
   await act(async () => { settings = { ...settings, shortcuts: { ...settings.shortcuts, search: null } }; pending.resolve(settings); });
   expect(api.savePlaybackSettings).toHaveBeenCalledOnce(); expect(settings.shortcuts.search).toBeNull(); expect(settings.theme).toBe("dark");

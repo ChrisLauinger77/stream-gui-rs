@@ -1,7 +1,9 @@
 pub mod discovery;
 pub mod profiles;
 pub mod shortcuts;
+pub mod theme;
 use profiles::{PlayerProfile, ProfileMutation};
+pub use theme::{CustomTheme, SchemeColours, ThemePalette};
 #[cfg(any(feature = "desktop", test))]
 mod client_id_value;
 #[cfg(any(feature = "desktop", test))]
@@ -21,7 +23,7 @@ use std::{
 };
 use ts_rs::TS;
 
-pub const SETTINGS_VERSION: u32 = 8;
+pub const SETTINGS_VERSION: u32 = 9;
 const MAX_SETTINGS_BYTES: u64 = 256 * 1024;
 const MAX_CHANNEL_OVERRIDES: usize = 1000;
 
@@ -142,6 +144,7 @@ pub struct Settings {
     pub default_quality: QualityPolicy,
     pub automatic_chat: bool,
     pub theme: Theme,
+    pub theme_palette: ThemePalette,
     pub ui_language: UiLanguage,
     pub background: BackgroundSettings,
     pub discovery_language: Option<StreamLanguage>,
@@ -472,6 +475,7 @@ impl SettingsDocument {
                 if fields.contains_key("discovery")
                     || fields.contains_key("shortcuts")
                     || fields.contains_key("uiLanguage")
+                    || fields.contains_key("themePalette")
                 {
                     return Err(settings_error("Invalid version 6 settings."));
                 }
@@ -486,6 +490,7 @@ impl SettingsDocument {
                         .expect("shortcut defaults"),
                 );
                 fields.insert("uiLanguage".into(), serde_json::json!("system"));
+                fields.insert("themePalette".into(), serde_json::json!("default"));
                 value["version"] = SETTINGS_VERSION.into();
                 serde_json::from_value(value)
                     .map_err(|_| settings_error("Invalid version 6 settings."))?
@@ -496,15 +501,30 @@ impl SettingsDocument {
                     .get_mut("settings")
                     .and_then(|s| s.as_object_mut())
                     .ok_or_else(|| settings_error("Invalid version 7 settings."))?;
-                if fields.contains_key("uiLanguage") {
+                if fields.contains_key("uiLanguage") || fields.contains_key("themePalette") {
                     return Err(settings_error("Invalid version 7 settings."));
                 }
                 fields.insert("uiLanguage".into(), serde_json::json!("system"));
+                fields.insert("themePalette".into(), serde_json::json!("default"));
                 value["version"] = SETTINGS_VERSION.into();
                 serde_json::from_value(value)
                     .map_err(|_| settings_error("Invalid version 7 settings."))?
             }
-            Some(8) => serde_json::from_value(value).map_err(|_| {
+            Some(8) => {
+                let mut value = value;
+                let fields = value
+                    .get_mut("settings")
+                    .and_then(|settings| settings.as_object_mut())
+                    .ok_or_else(|| settings_error("Invalid version 8 settings."))?;
+                if fields.contains_key("themePalette") {
+                    return Err(settings_error("Invalid version 8 settings."));
+                }
+                fields.insert("themePalette".into(), serde_json::json!("default"));
+                value["version"] = SETTINGS_VERSION.into();
+                serde_json::from_value(value)
+                    .map_err(|_| settings_error("Invalid version 8 settings."))?
+            }
+            Some(9) => serde_json::from_value(value).map_err(|_| {
                 settings_error("Settings schema is invalid; the file was not changed.")
             })?,
             _ => {
@@ -617,6 +637,9 @@ impl SettingsStore {
     }
     pub fn path(&self) -> &Path {
         &self.path
+    }
+    pub fn custom_theme(&self) -> Option<CustomTheme> {
+        theme::read_custom_theme(self.path.parent()?)
     }
     pub fn channel(&self, id: &str) -> Result<ChannelSettings> {
         validate_broadcaster_id(id)?;

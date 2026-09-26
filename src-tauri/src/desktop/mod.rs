@@ -126,6 +126,7 @@ fn build_app(initial: Option<crate::navigation::NavigationIntent>) -> tauri::Res
             commands::channel_settings,
             commands::save_channel_settings,
             commands::playback_settings,
+            commands::custom_theme,
             commands::save_playback_settings,
             commands::discover_players,
             commands::streamlink_restart,
