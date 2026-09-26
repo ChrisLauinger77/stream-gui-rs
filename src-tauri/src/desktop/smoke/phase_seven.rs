@@ -15,7 +15,7 @@ pub(super) async fn check(app: &tauri::AppHandle) {
     for (scale, theme) in [("100", "system"), ("125", "light"), ("150", "dark")] {
         click(app, "Appearance").await;
         evaluate(app, &format!("(() => {{ const s=[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Text size')).querySelector('select'); s.value='{scale}'; s.dispatchEvent(new Event('change',{{bubbles:true}})); return true; }})()")).await;
-        evaluate(app, &format!("(() => {{ const s=[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Appearance')).querySelector('select'); s.value='{theme}'; s.dispatchEvent(new Event('change',{{bubbles:true}})); return true; }})()")).await;
+        evaluate(app, &format!("(() => {{ const s=[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Color mode')).querySelector('select'); s.value='{theme}'; s.dispatchEvent(new Event('change',{{bubbles:true}})); return true; }})()")).await;
         click(app, "Save settings").await;
         until(app, &format!("document.documentElement.dataset.textScale === '{scale}' && document.documentElement.dataset.theme === '{theme}' && !document.querySelector('.playback-settings fieldset').disabled")).await;
         click(app, "Player").await;

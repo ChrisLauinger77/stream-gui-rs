@@ -47,3 +47,11 @@ test("light custom colors keep the generated live color readable when Dark is se
     expect(contrast(tokens["--live"], tokens[background]), `live on ${background}`).toBeGreaterThanOrEqual(4.5);
   }
 });
+
+test("mixed custom surfaces search both directions for a readable live color", () => {
+  const source = { ...BUNDLED_THEMES[0].dark, base: "#000000", surface0: "#ffffff", surface1: "#000000" };
+  const tokens = themeTokens(source, "light", false);
+  for (const background of ["--bg", "--surface", "--raised", "--danger-bg"] as const) {
+    expect(contrast(tokens["--live"], tokens[background]), `live on ${background}`).toBeGreaterThanOrEqual(4.5);
+  }
+});

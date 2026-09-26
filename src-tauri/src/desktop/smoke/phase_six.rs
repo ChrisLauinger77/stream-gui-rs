@@ -154,7 +154,7 @@ pub(super) async fn check(app: &tauri::AppHandle) {
     }
     for theme in ["light", "dark"] {
         let script = format!(
-            "(() => {{const s=[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Appearance')).querySelector('select'); s.value='{theme}'; s.dispatchEvent(new Event('change',{{bubbles:true}})); return true;}})()"
+            "(() => {{const s=[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Color mode')).querySelector('select'); s.value='{theme}'; s.dispatchEvent(new Event('change',{{bubbles:true}})); return true;}})()"
         );
         evaluate(app, &script).await;
         click(app, "Save settings").await;

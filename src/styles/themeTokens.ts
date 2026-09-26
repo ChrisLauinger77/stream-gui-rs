@@ -29,13 +29,18 @@ function mix(from: string, to: string, factor: number): string {
   return `#${start.map((value, index) => Math.round(value + (end[index] - value) * factor).toString(16).padStart(2, "0")).join("")}`;
 }
 function readable(color: string, backgrounds: string[], floor: number, dark: boolean): string {
-  if (backgrounds.every(background => contrast(color, background) >= floor)) return color;
-  const target = dark ? "#ffffff" : "#000000";
-  for (let step = 1; step <= 100; step++) {
-    const candidate = mix(color, target, step / 100);
-    if (backgrounds.every(background => contrast(candidate, background) >= floor)) return candidate;
+  let best = color;
+  let bestContrast = minimumContrast(color, backgrounds);
+  if (bestContrast >= floor) return color;
+  for (const target of dark ? ["#ffffff", "#000000"] : ["#000000", "#ffffff"]) {
+    for (let step = 1; step <= 255; step++) {
+      const candidate = mix(color, target, step / 255);
+      const candidateContrast = minimumContrast(candidate, backgrounds);
+      if (candidateContrast >= floor) return candidate;
+      if (candidateContrast > bestContrast) { best = candidate; bestContrast = candidateContrast; }
+    }
   }
-  return target;
+  return best;
 }
 function minimumContrast(color: string, backgrounds: string[]): number {
   return Math.min(...backgrounds.map(background => contrast(color, background)));
