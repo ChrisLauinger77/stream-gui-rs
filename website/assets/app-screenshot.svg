@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1472" height="1024" viewBox="0 0 1472 1024" role="img">
+  <title>Stream GUI RS synthetic interface preview</title>
+  <desc>A fictional categories view with abstract artwork and no account or provider data.</desc>
+  <defs>
+    <linearGradient id="card-a" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8da8ff" />
+      <stop offset="1" stop-color="#34436f" />
+    </linearGradient>
+    <linearGradient id="card-b" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#182b36" />
+      <stop offset="1" stop-color="#55d6ff" />
+    </linearGradient>
+    <linearGradient id="card-c" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff7a78" />
+      <stop offset="1" stop-color="#563846" />
+    </linearGradient>
+    <linearGradient id="card-d" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8bd8bd" />
+      <stop offset="1" stop-color="#24453f" />
+    </linearGradient>
+    <linearGradient id="card-e" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c59bff" />
+      <stop offset="1" stop-color="#343048" />
+    </linearGradient>
+    <clipPath id="art-1"><rect x="298" y="326" width="190" height="254" rx="5" /></clipPath>
+    <clipPath id="art-2"><rect x="512" y="326" width="190" height="254" rx="5" /></clipPath>
+    <clipPath id="art-3"><rect x="726" y="326" width="190" height="254" rx="5" /></clipPath>
+    <clipPath id="art-4"><rect x="940" y="326" width="190" height="254" rx="5" /></clipPath>
+    <clipPath id="art-5"><rect x="1154" y="326" width="190" height="254" rx="5" /></clipPath>
+  </defs>
+
+  <rect width="1472" height="1024" fill="#14191e" />
+
+  <g font-family="Inter, Segoe UI, system-ui, sans-serif">
+    <rect width="1472" height="79" fill="#1b2229" />
+    <path d="M29 30 52 42 29 54Z" fill="#8bd8bd" />
+    <text x="68" y="50" fill="#edf3f1" font-size="23" font-weight="700">Stream GUI RS</text>
+    <rect x="1191" y="20" width="112" height="40" rx="5" fill="#222c34" stroke="#344149" />
+    <text x="1214" y="46" fill="#a2b1b8" font-size="15" font-weight="650">Preview mode</text>
+    <rect x="1316" y="20" width="126" height="40" rx="5" fill="#1b2229" stroke="#344149" />
+    <text x="1348" y="46" fill="#e4ebe9" font-size="16" font-weight="650">Settings</text>
+
+    <rect y="79" width="228" height="906" fill="#1b2229" />
+    <path d="M228 79V985" stroke="#344149" />
+    <text x="29" y="137" fill="#a2b1b8" font-size="14" font-weight="700" letter-spacing="2">BROWSE</text>
+
+    <g font-size="18" fill="#d8e0de">
+      <path d="M34 187c7-9 21-4 17 8-3 8-9 11-17 17-8-6-14-9-17-17-4-12 10-17 17-8Z" fill="none" stroke="#93a2a9" stroke-width="2" />
+      <text x="66" y="205">Following</text>
+      <circle cx="34" cy="258" r="9" fill="none" stroke="#93a2a9" stroke-width="2" />
+      <text x="66" y="264">Live</text>
+      <rect x="12" y="296" width="202" height="54" rx="4" fill="#222c34" />
+      <rect x="12" y="296" width="4" height="54" rx="2" fill="#8bd8bd" />
+      <path d="M27 316h14v14H27zM30 319h2v2h-2zm6 0h2v2h-2zm-6 6h2v2h-2zm6 0h2v2h-2z" fill="#8bd8bd" />
+      <text x="66" y="330" fill="#8bd8bd" font-weight="700">Categories</text>
+      <circle cx="34" cy="389" r="7" fill="none" stroke="#93a2a9" stroke-width="2" />
+      <path d="m39 394 6 6" stroke="#93a2a9" stroke-width="2" />
+      <text x="66" y="397">Search</text>
+      <path d="m27 451 7-7 7 7 7-7" fill="none" stroke="#93a2a9" stroke-width="2" />
+      <text x="66" y="456">Open channel</text>
+      <path d="m34 508 4 9 10 1-8 7 3 10-9-5-9 5 3-10-8-7 10-1Z" fill="none" stroke="#93a2a9" stroke-width="2" />
+      <text x="66" y="527">Bookmarks</text>
+    </g>
+
+    <g transform="translate(262 110)">
+      <rect width="95" height="42" rx="5" fill="#14191e" stroke="#344149" />
+      <path d="m20 21 7-7m-7 7 7 7m-7-7h15" fill="none" stroke="#dce4e2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+      <text x="43" y="27" fill="#e4ebe9" font-size="15" font-weight="650">Back</text>
+      <rect x="107" width="105" height="42" rx="5" fill="#14191e" stroke="#344149" />
+      <text x="129" y="27" fill="#76868e" font-size="15" font-weight="650">Forward</text>
+      <rect x="224" width="91" height="42" rx="5" fill="#14191e" stroke="#344149" />
+      <text x="246" y="27" fill="#e4ebe9" font-size="15" font-weight="650">Home</text>
+      <text x="333" y="27" fill="#a2b1b8" font-size="15" font-weight="650">Explore Twitch</text>
+    </g>
+
+    <text x="262" y="209" fill="#edf3f1" font-size="39" font-weight="720">Categories</text>
+    <text x="262" y="253" fill="#a2b1b8" font-size="18">Browse games and communities.</text>
+    <text x="262" y="301" fill="#a2b1b8" font-size="14">Synthetic interface preview</text>
+    <rect x="1321" y="265" width="112" height="42" rx="5" fill="#1b2229" stroke="#344149" />
+    <text x="1345" y="291" fill="#e4ebe9" font-size="15" font-weight="650">Refresh</text>
+
+    <g clip-path="url(#art-1)">
+      <rect x="298" y="326" width="190" height="254" fill="url(#card-a)" />
+      <circle cx="402" cy="420" r="88" fill="#a8bfff" opacity=".22" />
+      <path d="M276 552 382 385l126 167Z" fill="#222d55" opacity=".72" />
+      <path d="m372 552 62-100 74 100Z" fill="#8bd8bd" opacity=".74" />
+      <circle cx="350" cy="377" r="23" fill="#ffcf78" />
+    </g>
+    <g clip-path="url(#art-2)">
+      <rect x="512" y="326" width="190" height="254" fill="url(#card-b)" />
+      <path d="M525 535 689 344M556 580 702 408" stroke="#dff9ff" stroke-width="9" opacity=".3" />
+      <path d="M548 525c52-102 88-102 122 0" fill="none" stroke="#8bd8bd" stroke-width="24" stroke-linecap="round" />
+      <circle cx="607" cy="451" r="36" fill="#142431" stroke="#dff9ff" stroke-width="6" />
+    </g>
+    <g clip-path="url(#art-3)">
+      <rect x="726" y="326" width="190" height="254" fill="url(#card-c)" />
+      <rect x="758" y="370" width="126" height="162" rx="18" fill="#2a2431" opacity=".72" />
+      <circle cx="821" cy="420" r="34" fill="#ffd0a4" />
+      <path d="M776 512c12-55 78-55 90 0" fill="#8da8ff" />
+      <path d="M768 354h106M768 548h106" stroke="#fff" stroke-width="4" opacity=".35" />
+    </g>
+    <g clip-path="url(#art-4)">
+      <rect x="940" y="326" width="190" height="254" fill="url(#card-d)" />
+      <path d="M958 541 1010 365l42 176 37-139 27 139Z" fill="#142f2b" opacity=".8" />
+      <path d="M967 475h149M952 511h164" stroke="#b9f4df" stroke-width="6" opacity=".4" />
+      <circle cx="1038" cy="408" r="32" fill="#f9d56e" opacity=".86" />
+    </g>
+    <g clip-path="url(#art-5)">
+      <rect x="1154" y="326" width="190" height="254" fill="url(#card-e)" />
+      <g fill="#171c2a" opacity=".78">
+        <rect x="1181" y="358" width="55" height="55" rx="7" />
+        <rect x="1251" y="358" width="65" height="55" rx="7" />
+        <rect x="1181" y="428" width="91" height="91" rx="7" />
+        <rect x="1287" y="428" width="29" height="91" rx="7" />
+      </g>
+      <path d="m1262 459 31 18-31 18Z" fill="#ff7a78" />
+    </g>
+
+    <g fill="#edf3f1" font-size="17" font-weight="700">
+      <text x="298" y="611">Adventure Atlas</text>
+      <text x="512" y="611">Night Circuit</text>
+      <text x="726" y="611">Creative Studio</text>
+      <text x="940" y="611">Tactics Lab</text>
+      <text x="1154" y="611">Retro Arcade</text>
+    </g>
+    <g fill="#a2b1b8" font-size="13">
+      <text x="298" y="636">Fictional category</text>
+      <text x="512" y="636">Fictional category</text>
+      <text x="726" y="636">Fictional category</text>
+      <text x="940" y="636">Fictional category</text>
+      <text x="1154" y="636">Fictional category</text>
+    </g>
+
+    <g opacity=".72">
+      <rect x="298" y="685" width="190" height="254" rx="5" fill="#2c3941" />
+      <circle cx="390" cy="776" r="58" fill="#8bd8bd" opacity=".5" />
+      <rect x="512" y="685" width="190" height="254" rx="5" fill="#28334c" />
+      <path d="m607 722 61 116H546Z" fill="#8da8ff" />
+      <rect x="726" y="685" width="190" height="254" rx="5" fill="#3e2f37" />
+      <circle cx="820" cy="782" r="64" fill="none" stroke="#ff7a78" stroke-width="22" />
+      <rect x="940" y="685" width="190" height="254" rx="5" fill="#203c39" />
+      <path d="M962 845c66-118 95-118 146 0" fill="#55d6ff" opacity=".48" />
+      <rect x="1154" y="685" width="190" height="254" rx="5" fill="#302e45" />
+      <path d="M1185 733h127v112h-127z" fill="none" stroke="#c59bff" stroke-width="10" />
+    </g>
+    <g fill="#edf3f1" font-size="17" font-weight="700">
+      <text x="298" y="970">Cozy Worlds</text>
+      <text x="512" y="970">Spacecraft</text>
+      <text x="726" y="970">Puzzle Room</text>
+      <text x="940" y="970">Indie Spotlight</text>
+      <text x="1154" y="970">Music &amp; Makers</text>
+    </g>
+
+    <rect y="985" width="1472" height="39" fill="#14191e" />
+    <path d="M0 985h1472" stroke="#344149" />
+    <text x="24" y="1010" fill="#a2b1b8" font-size="13">Synthetic preview · Streamlink desktop playback</text>
+    <text x="1263" y="1010" fill="#a2b1b8" font-size="13">No account connected</text>
+  </g>
+</svg>
