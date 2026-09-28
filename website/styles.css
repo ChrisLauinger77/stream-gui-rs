@@ -378,41 +378,6 @@ h1 em,
   height: auto;
 }
 
-.window-bar {
-  display: flex;
-  align-items: center;
-  height: 31px;
-  padding: 0 11px;
-  gap: 6px;
-  background: #1a2128;
-  border-bottom: 1px solid #2e3942;
-}
-
-.window-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-}
-
-.window-dot-red {
-  background: #ff7a78;
-}
-
-.window-dot-yellow {
-  background: #ffc857;
-}
-
-.window-dot-green {
-  background: #79cf81;
-}
-
-.window-title {
-  margin-left: 5px;
-  color: #839099;
-  font-size: 0.6rem;
-  font-weight: 700;
-}
-
 .signal-card {
   position: absolute;
   z-index: 5;
