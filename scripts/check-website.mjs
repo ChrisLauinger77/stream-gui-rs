@@ -10,7 +10,7 @@ const requiredFiles = [
   "robots.txt",
   "sitemap.xml",
   "assets/app-icon.svg",
-  "assets/app-screenshot.svg",
+  "assets/app-screenshot.png",
 ];
 
 export function metadataUrlErrors({ html, robots, sitemap }) {
