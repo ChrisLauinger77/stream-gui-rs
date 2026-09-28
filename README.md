@@ -10,6 +10,8 @@
 
 Stream GUI RS is a native desktop application for browsing Twitch and watching live streams through [Streamlink](https://streamlink.github.io/). It uses a compact Tauri interface and launches video in a separately installed player. Twitch is currently the only supported streaming service.
 
+[Project website](https://chrislauinger77.github.io/stream-gui-rs/) · [Latest release](https://github.com/ChrisLauinger77/stream-gui-rs/releases/latest)
+
 This is an independent rewrite inspired by [Streamlink Twitch GUI](https://github.com/streamlink/streamlink-twitch-gui). It is not affiliated with Twitch or the original project.
 
 ![image](screenshot.png)

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://chrislauinger77.github.io/stream-gui-rs/sitemap.xml

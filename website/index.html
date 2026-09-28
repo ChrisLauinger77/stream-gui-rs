@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Stream GUI RS is a native desktop app for browsing Twitch and watching streams through Streamlink and your preferred player."
+    />
+    <meta name="theme-color" content="#11161c" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Stream GUI RS" />
+    <meta
+      property="og:description"
+      content="Browse Twitch in a focused desktop app. Watch through Streamlink and the player you already trust."
+    />
+    <meta property="og:url" content="https://chrislauinger77.github.io/stream-gui-rs/" />
+    <link rel="canonical" href="https://chrislauinger77.github.io/stream-gui-rs/" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23252d3a'/%3E%3Cpath d='M11 23c8-10 23-10 34-3M10 32c8 10 23 2 33 7M12 43c9 7 22-2 31 2' fill='none' stroke-linecap='round' stroke-width='7' stroke='%2355d6ff'/%3E%3Cpath d='M34 17v30l20-15z' fill='%238da8ff'/%3E%3Cpath d='M40 26v12l8-6z' fill='white'/%3E%3C/svg%3E"
+    />
+    <title>Stream GUI RS — Twitch, through your player</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="shell header-inner">
+        <a class="brand" href="#top" aria-label="Stream GUI RS home">
+          <img src="assets/app-icon.svg" alt="" width="40" height="40" />
+          <span>Stream GUI RS</span>
+        </a>
+        <nav aria-label="Primary navigation">
+          <a href="#features">Features</a>
+          <a href="#download">Install</a>
+          <a href="https://github.com/ChrisLauinger77/stream-gui-rs">GitHub</a>
+        </nav>
+        <a class="button button-small" href="https://github.com/ChrisLauinger77/stream-gui-rs/releases/latest">
+          Download
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M10 3v9m0 0 4-4m-4 4L6 8M4 16h12" />
+          </svg>
+        </a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <div class="shell hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow"><span></span> Native Twitch browsing</p>
+            <h1>Browse live.<br /><em>Watch your way.</em></h1>
+            <p class="hero-lede">
+              A focused desktop app for finding Twitch streams, then handing playback to Streamlink and the
+              player you already trust.
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="https://github.com/ChrisLauinger77/stream-gui-rs/releases/latest">
+                Get the latest release
+                <svg viewBox="0 0 20 20" aria-hidden="true">
+                  <path d="M10 3v9m0 0 4-4m-4 4L6 8M4 16h12" />
+                </svg>
+              </a>
+              <a class="button button-quiet" href="https://github.com/ChrisLauinger77/stream-gui-rs">
+                View the source
+              </a>
+            </div>
+            <ul class="platform-list" aria-label="Supported platforms">
+              <li>Windows 11</li>
+              <li>macOS 11+</li>
+              <li>Linux x86_64</li>
+            </ul>
+          </div>
+
+          <div class="product-stage">
+            <div class="route-strip" aria-label="Playback path">
+              <span>Twitch</span><i aria-hidden="true"></i><span>Stream GUI RS</span><i aria-hidden="true"></i
+              ><span>Your player</span>
+            </div>
+            <figure class="app-window">
+              <div class="window-bar" aria-hidden="true">
+                <span class="window-dot window-dot-red"></span>
+                <span class="window-dot window-dot-yellow"></span>
+                <span class="window-dot window-dot-green"></span>
+                <span class="window-title">Stream GUI RS</span>
+              </div>
+              <img
+                src="assets/app-screenshot.png"
+                alt="Stream GUI RS showing the Twitch categories browser in its compact dark interface"
+                width="1472"
+                height="1024"
+              />
+            </figure>
+            <div class="signal-card signal-card-player" aria-hidden="true">
+              <span class="signal-icon">▶</span>
+              <span><small>Playback</small>External player</span>
+            </div>
+            <div class="signal-card signal-card-secure" aria-hidden="true">
+              <span class="signal-icon">◆</span>
+              <span><small>Credentials</small>OS secure storage</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="workflow-band" aria-label="How Stream GUI RS works">
+        <div class="shell workflow-grid">
+          <div class="workflow-intro">
+            <p class="eyebrow">A cleaner route to the stream</p>
+            <h2>Discovery in one window.<br />Playback where it belongs.</h2>
+          </div>
+          <ol class="workflow-steps">
+            <li>
+              <span>01</span>
+              <div><strong>Find it</strong><small>Following, live, categories, search and teams.</small></div>
+            </li>
+            <li>
+              <span>02</span>
+              <div><strong>Choose it</strong><small>Pick a quality and use global or channel preferences.</small></div>
+            </li>
+            <li>
+              <span>03</span>
+              <div><strong>Watch it</strong><small>Streamlink launches mpv, VLC or your custom player.</small></div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section features" id="features">
+        <div class="shell">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Built for the desktop</p>
+              <h2>Everything around the video,<br />without getting in its way.</h2>
+            </div>
+            <p>
+              Stream GUI RS keeps Twitch discovery compact and gives native process control to the backend—while
+              video stays in a dedicated media player.
+            </p>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature-card feature-card-wide">
+              <div class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7" /></svg>
+              </div>
+              <div>
+                <h3>Fast Twitch discovery</h3>
+                <p>
+                  Browse followed channels, live streams and categories. Search, open exact channel names, visit
+                  teams, and keep local bookmarks without turning the interface into a website clone.
+                </p>
+              </div>
+              <div class="mini-nav" aria-hidden="true">
+                <span class="active">Following</span><span>Live</span><span>Categories</span><span>Search</span>
+              </div>
+            </article>
+
+            <article class="feature-card feature-card-accent">
+              <div class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="m9 7 7 5-7 5V7Z" /><circle cx="12" cy="12" r="9" /></svg>
+              </div>
+              <h3>Your player, your setup</h3>
+              <p>Use Streamlink’s default, mpv, VLC or a custom executable, with reusable player profiles.</p>
+              <div class="quality-row" aria-label="Available quality preferences">
+                <span>Source</span><span>High</span><span>Medium</span><span>Low</span><span>Audio</span>
+              </div>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 2.9 8.1 7 10 4.1-1.9 7-5.5 7-10V6l-7-3Z" /><path d="m9 12 2 2 4-4" /></svg>
+              </div>
+              <h3>Credentials stay native</h3>
+              <p>
+                Twitch tokens remain in Rust and the operating system’s secure store—not in the web interface,
+                logs, settings or player arguments.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M5 6h14v12H5z" /><path d="m8 10 2 2-2 2m4 0h4" /></svg>
+              </div>
+              <h3>Sessions you control</h3>
+              <p>
+                Run multiple streams, then stop or restart them individually. Optional tray controls and followed-live
+                notifications keep the app useful in the background.
+              </p>
+            </article>
+
+            <article class="feature-card feature-card-wide feature-card-themes">
+              <div>
+                <div class="feature-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h1.5a2 2 0 0 0 0-4H12a2 2 0 0 1 0-4h4a5 5 0 0 0 0-10h-4Z" /><circle cx="7.5" cy="10" r="1" /><circle cx="9" cy="6.5" r="1" /></svg>
+                </div>
+                <h3>Looks like your desktop</h3>
+                <p>
+                  System, light and dark color modes, nine bundled themes, custom palettes, three text sizes, and
+                  English, German, Spanish and French interfaces.
+                </p>
+              </div>
+              <div class="theme-swatches" aria-label="A sample of bundled theme colors">
+                <span style="--swatch: #8bd8bd">Default</span>
+                <span style="--swatch: #cba6f7">Catppuccin</span>
+                <span style="--swatch: #bd93f9">Dracula</span>
+                <span style="--swatch: #a7c080">Everforest</span>
+                <span style="--swatch: #88c0d0">Nord</span>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section install" id="download">
+        <div class="shell install-panel">
+          <div class="install-copy">
+            <p class="eyebrow"><span></span> Free and open source</p>
+            <h2>Bring your player.<br /><em>We’ll handle the rest.</em></h2>
+            <p>
+              Download the package for your desktop, install Streamlink 8.0 or newer, and choose a supported media
+              player. Stream GUI RS does not bundle either dependency.
+            </p>
+            <a class="button button-primary" href="https://github.com/ChrisLauinger77/stream-gui-rs/releases/latest">
+              Open downloads
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M10 3v9m0 0 4-4m-4 4L6 8M4 16h12" />
+              </svg>
+            </a>
+            <a class="text-link" href="https://github.com/ChrisLauinger77/stream-gui-rs#install-and-connect">
+              Read the install guide <span aria-hidden="true">→</span>
+            </a>
+          </div>
+
+          <div class="platform-cards">
+            <a href="https://github.com/ChrisLauinger77/stream-gui-rs/releases/latest" class="platform-card">
+              <span class="platform-mark">WIN</span>
+              <span><strong>Windows 11</strong><small>Installer or portable ZIP · x86_64</small></span>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 6 6-6 6" /></svg>
+            </a>
+            <a href="https://github.com/ChrisLauinger77/stream-gui-rs/releases/latest" class="platform-card">
+              <span class="platform-mark">MAC</span>
+              <span><strong>macOS 11+</strong><small>Universal DMG · Apple silicon + Intel</small></span>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 6 6-6 6" /></svg>
+            </a>
+            <a href="https://github.com/ChrisLauinger77/stream-gui-rs/releases/latest" class="platform-card">
+              <span class="platform-mark">LNX</span>
+              <span><strong>Linux</strong><small>AppImage, Debian or RPM · x86_64</small></span>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 6 6-6 6" /></svg>
+            </a>
+            <div class="requirements">
+              <span>Requires</span>
+              <strong>Streamlink 8.0+</strong>
+              <span class="separator">·</span>
+              <strong>A supported player</strong>
+              <span class="separator">·</span>
+              <strong>A Twitch account</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section open-source">
+        <div class="shell open-source-grid">
+          <div class="source-mark" aria-hidden="true">{ RS }</div>
+          <div>
+            <p class="eyebrow">Open by design</p>
+            <h2>Inspect it. Build it. Make it better.</h2>
+            <p>
+              Stream GUI RS is licensed under GPL-3.0-only and built in public with Rust, Tauri, React and TypeScript.
+              It is an independent project and is not affiliated with Twitch or Streamlink.
+            </p>
+          </div>
+          <div class="source-links">
+            <a href="https://github.com/ChrisLauinger77/stream-gui-rs">
+              Source repository <span aria-hidden="true">↗</span>
+            </a>
+            <a href="https://github.com/ChrisLauinger77/stream-gui-rs/issues">
+              Report an issue <span aria-hidden="true">↗</span>
+            </a>
+            <a href="https://github.com/ChrisLauinger77/stream-gui-rs/blob/main/LICENSE">
+              GPL-3.0 license <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-inner">
+        <div class="brand footer-brand">
+          <img src="assets/app-icon.svg" alt="" width="32" height="32" />
+          <span>Stream GUI RS</span>
+        </div>
+        <p>Browse Twitch. Watch through Streamlink.</p>
+        <div class="footer-links">
+          <a href="https://github.com/ChrisLauinger77/stream-gui-rs/releases">Releases</a>
+          <a href="https://github.com/ChrisLauinger77/stream-gui-rs#runtime-requirements">Requirements</a>
+          <a href="https://github.com/ChrisLauinger77/stream-gui-rs">GitHub</a>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
