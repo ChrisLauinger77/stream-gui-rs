@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Stream GUI RS",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "identifier": "io.github.stream-gui-rs",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -29,13 +29,23 @@
     }
   },
   "plugins": {
-    "deep-link": { "desktop": { "schemes": ["stream-gui-rs"] } }
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "stream-gui-rs"
+        ]
+      }
+    }
   },
   "bundle": {
     "active": false,
     "linux": {
-      "deb": { "desktopTemplate": "packaging/linux.desktop" },
-      "rpm": { "desktopTemplate": "packaging/linux.desktop" }
+      "deb": {
+        "desktopTemplate": "packaging/linux.desktop"
+      },
+      "rpm": {
+        "desktopTemplate": "packaging/linux.desktop"
+      }
     },
     "macOS": {
       "minimumSystemVersion": "11.0",

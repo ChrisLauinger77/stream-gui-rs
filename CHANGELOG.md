@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 1.1.0 - 2026-10-01
+
+### Added
+
+- Eight bundled color themes and a validated custom color palette, alongside the existing System/Light/Dark modes.
+- A GitHub Pages homepage with installation and project information.
+
+### Improved
+
+- Settings schema 9 preserves existing preferences while adding theme palette selection.
+- Updated native credential-store backends, Windows bindings, Tauri and single-instance integration.
+
+### Fixed
+
+- Corrected the German following hint.
+
 ## 1.0.0 - 2026-09-25
 
 ### Added
