@@ -8,7 +8,7 @@
 
 <img src="src/assets/app-icon.svg" alt="Stream GUI RS application icon" width="128">
 
-Stream GUI RS is a native desktop application for browsing Twitch and watching live streams through [Streamlink](https://streamlink.github.io/). It uses a compact Tauri interface and launches video in a separately installed player. Twitch is currently the only supported streaming service.
+Stream GUI RS is a native desktop application for browsing Twitch and watching Twitch or exact Kick live channels through [Streamlink](https://streamlink.github.io/). It uses a compact Tauri interface and launches video in a separately installed player. Kick support is playback-only.
 
 [Project website](https://chrislauinger77.github.io/stream-gui-rs/) · [Latest release](https://github.com/ChrisLauinger77/stream-gui-rs/releases/latest)
 
@@ -24,6 +24,7 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Home, Back/Forward restoration, configurable local shortcuts, and safe navigation links
 - Server-side language filtering for Live/category streams and exact Twitch-login lookup
 - Streamlink 8.0+ discovery and external playback
+- Exact Kick channel playback and explicit browser chat, including while signed out of Twitch; no Kick developer credentials required
 - Streamlink default player, mpv, VLC, and custom executable modes
 - Source, High, Medium, Low, and Audio quality policies
 - Multiple simultaneous streams with Stop, Restart, Watching, and bounded diagnostics
@@ -61,7 +62,8 @@ All platforms need:
 
 - [Streamlink 8.0 or newer](https://streamlink.github.io/install.html), either on the desktop application's `PATH` or selected by absolute path in Settings
 - a player supported by Streamlink; mpv and VLC have built-in discovery, or you can select another executable
-- network access to Twitch and a Twitch account for browsing and playback launch
+- network access to the selected service; a Twitch account for Twitch browsing and new Twitch playback launches
+- for Kick browser challenges, a Chromium-compatible browser discoverable by Streamlink (separate from the app's webview)
 
 Platform requirements:
 
@@ -69,7 +71,7 @@ Platform requirements:
 - **macOS:** macOS 11.0 or newer on Apple Silicon or Intel, with the system WebKit view and Keychain available. GUI applications can have a smaller `PATH` than Terminal, so select Streamlink/player paths in Settings when discovery does not find them.
 - **Linux:** an x86_64 desktop, a user D-Bus session, and an unlocked Secret Service provider such as GNOME Keyring or KWallet. The Debian and RPM packages declare their native WebKitGTK and GTK dependencies. The AppImage bundles its application-side GTK/WebKit libraries but intentionally uses the host GLib, Wayland/Mesa, D-Bus, and Secret Service integration.
 
-Secure credential storage is mandatory. There is no plaintext fallback. A locked or unavailable native credential store produces an explicit error.
+Secure credential storage is mandatory for Twitch authentication. There is no plaintext fallback. A locked or unavailable native credential store produces an explicit error. Kick playback does not use this store or require Twitch sign-in.
 
 ## Install and connect
 
@@ -105,15 +107,29 @@ Rust owns Twitch credentials, settings, native processes, and session state. OAu
 
 Navigation, interface reload, and Twitch logout leave existing streams running so they remain controllable from **Watching**. By default, closing the main window stops owned Streamlink/player process trees. With background close enabled, closing keeps monitoring and playback running; explicit Quit always cleans up owned processes. A custom player that deliberately detaches itself is outside that cleanup boundary.
 
-The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectively, with source fallback when Twitch does not offer a matching rendition. They are preferences rather than guaranteed resolution caps.
+The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectively, with source fallback when the service does not offer a matching rendition. They are preferences rather than guaranteed resolution caps. Audio requests only `audio,audio_only`: if unavailable, playback fails without falling back to video.
+
+### Kick playback
+
+Choose **Open channel → Service → Kick**, enter the channel name and select **Play Kick channel**. Open channel is also available beside Watching while signed out of Twitch. Names accept 1–100 ASCII letters, digits, underscores or hyphens and are normalized to lowercase; enter a name, not a URL. This is a playback locator, not a verified account identity: the app does not check live status or retrieve viewer counts, titles or categories.
+
+Kick uses the existing global settings, selected player profile, quality policy and low-latency preference. Twitch channel overrides do not apply. Watching labels each service; Twitch and Kick sessions share the eight-session limit and have independent Stop/Restart controls. Restart keeps the locator and applies current global/profile settings; saving preferences never changes a running process.
+
+**Open Kick browser chat** opens the fixed Kick popout in the default browser, independently of playback. The browser uses its own login. Automatic chat is disabled for Kick, including when Twitch chat is set to Chatterino. No Kick OAuth, client ID, client secret, callback server or hosted backend is used.
+
+Streamlink may open a temporary Chromium browser for a Kick challenge and may reuse its own cached challenge state on subsequent launches. The app uses Streamlink's default browser discovery; it does not read/import browser profiles, cookies or challenge state. A missing compatible browser or failed challenge can prevent playback. Failure does not prove that a channel is offline. Kick child stdout/stderr are drained but omitted from local diagnostics to protect challenge data; fixed supervisor messages and process status remain available. The support report contains only the service enum in anonymous process summaries, never the channel locator or URL.
+
+Kick low latency uses `--kick-low-latency`. Availability and stability depend on the broadcaster, network, player and Streamlink; no measured latency improvement is promised. Native playback and browser-descendant cleanup require platform acceptance as described in [testing](docs/testing.md); a running process alone is not proof of video/audio.
+
+Kick login, Following, browsing/categories/search, monitoring/notifications, persistent Kick channel overrides, bookmarks/hides, Chatterino integration, public deep links and VOD/clip UI are not supported.
 
 ## Discovery, appearance, and support
 
 **Live** and category streams offer **Stream language**: Any language, a curated language list, or Other. Twitch applies the filter on the server. Changing it starts that view from its first page and saves the default for later discovery visits. Back restores the language used by that earlier visit. Following, Search, and the background monitor keep their existing scope.
 
-**Open channel** accepts an exact Twitch login (letters, numbers, underscores, up to 25 characters; case-insensitive). It opens the existing channel details, including offline channels. Enter a login, not a URL; lookup never starts playback. Search remains the discovery tool for partial names and categories.
+**Open channel → Twitch** accepts an exact Twitch login (letters, numbers, underscores, up to 25 characters; case-insensitive). It opens the existing channel details, including offline channels. Enter a login, not a URL; Twitch lookup never starts playback. Search remains the Twitch discovery tool for partial names and categories. Kick uses the separate playback action described above.
 
-**Settings → Playback → Prefer low latency** defaults off. Channel preferences can inherit, enable, or disable it. This adds Streamlink's `--twitch-low-latency` flag; actual delay depends on the stream, connection, buffering and player. Saving leaves current processes unchanged. Restart applies current preferences to that session.
+**Settings → Playback → Prefer low latency** defaults off. Twitch channel preferences can inherit, enable, or disable it; Kick uses global/profile preferences only. This adds exactly one service-specific Streamlink flag: `--twitch-low-latency` or `--kick-low-latency`. Actual delay depends on the stream, connection, buffering and player. Saving leaves current processes unchanged. Restart applies current preferences to that session.
 
 **Settings → Appearance → Language** offers System, English, Deutsch, Español, and Français. System follows the operating system language for the supported languages and uses English otherwise; an OS language change is picked up on the next app launch. The selection saves immediately and persists across restarts. The separate **Stream language** filter controls Twitch discovery results, not interface text. UI translations ship in the app and require no download.
 
