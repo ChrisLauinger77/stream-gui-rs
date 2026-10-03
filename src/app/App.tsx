@@ -4,6 +4,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { DeveloperTools } from "./DeveloperTools";
 import { useAuthentication } from "./useAuthentication";
 import { BrowserWorkspace, type BrowserActions } from "../browse/Workspace";
+import { OpenChannel, type OpenChannelDraft } from "../browse/OpenChannel";
 import { errorText, friendlyError } from "../browse/errors";
 import type { Account, AuthStatus } from "../lib/generated";
 
@@ -43,6 +44,10 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const [support, setSupport] = useState(false);
   const [settings, setSettings] = useState(false);
   const [watching, setWatching] = useState(false);
+  const [openChannel, setOpenChannel] = useState(false);
+  const [lookup, setLookup] = useState<OpenChannelDraft>({ service: "kick", twitchLogin: "", kickSlug: "" });
+  const openChannelPanel = useRef<HTMLElement>(null);
+  const openChannelButton = useRef<HTMLButtonElement>(null);
   const [navigationFocus, setNavigationFocus] = useState<{ id: string; target: "channel" | "watching" | "test" } | null>(null);
   const playback = usePlayback();
   const { run } = playback;
@@ -116,15 +121,19 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   useEffect(() => { if (notificationTest) testHeading.current?.focus(); }, [notificationTest]);
   useEffect(() => { if (settings) settingsHeading.current?.focus(); }, [settings]);
   useEffect(() => { if (watching) watchingPanel.current?.querySelector<HTMLElement>("h2")?.focus(); }, [watching]);
+  useEffect(() => { if (openChannel && !auth.sessionId) openChannelPanel.current?.querySelector<HTMLElement>("h1")?.focus(); }, [openChannel, auth.sessionId]);
+  const closeOpenChannel = () => { setOpenChannel(false); openChannelButton.current?.focus(); };
   const navigate = (section: "search" | "following" | "live" | "categories" | "lookup" | "bookmarks") => {
-    setSettings(false); setWatching(false); workspace.current?.navigate(section);
+    setSettings(false); setWatching(false);
+    if (section === "lookup" && !auth.sessionId) setOpenChannel(true);
+    else workspace.current?.navigate(section);
   };
   useShortcuts({
     home: () => navigate("following"), forward: () => { setSettings(false); setWatching(false); workspace.current?.forward(); },
     search: () => navigate("search"), following: () => navigate("following"), live: () => navigate("live"), categories: () => navigate("categories"),
     open_channel: () => navigate("lookup"), bookmarks: () => navigate("bookmarks"),
     watching: () => { if (!watching) capture("watching"); setWatching(true); setSettings(false); }, settings: () => { if (!settings) capture("settings"); setSettings(true); setWatching(false); },
-    back: () => { if (settings) closeSettings(); else if (watching) closeWatching(); else if (notificationTest) setNotificationTest(false); else workspace.current?.back(); },
+    back: () => { if (settings) closeSettings(); else if (watching) closeWatching(); else if (notificationTest) setNotificationTest(false); else if (openChannel && !auth.sessionId) closeOpenChannel(); else workspace.current?.back(); },
     refresh: () => { if (!settings) workspace.current?.refresh(); },
   }, playback.settings?.shortcuts);
   const watch = useCallback((broadcasterId: string) => {
@@ -132,11 +141,16 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
     capture("watching"); setWatching(true); setSettings(false);
     void run(`launch:${broadcasterId}`, () => api.launch({ authSessionId: auth.sessionId!, broadcasterId, quality: null }), "app.playbackStarted");
   }, [auth.sessionId, run, capture]);
+  const watchKick = useCallback(async (slug: string) => {
+    capture("watching"); setWatching(true); setSettings(false);
+    await run(`launch:kick:${slug.toLowerCase()}`, () => api.launchKick({ slug, quality: null }), "app.playbackStarted");
+  }, [run, capture]);
   const activeCount = playback.sessions.filter(session => session.restarting || ["starting", "running", "stopping"].includes(session.phase)).length;
   const controls = <div className="account-controls">
     <span className="connection-dot" aria-hidden="true" />
     <span>{auth.account?.displayName ?? auth.status?.user?.login ?? t("app.notConnected")}</span>
     {auth.sessionId && <button className="quiet" disabled={auth.busy === "logout"} onClick={() => { void auth.run("logout"); }}>{t("app.signOut")}</button>}
+    {!auth.sessionId && <button ref={openChannelButton} className="quiet" aria-expanded={openChannel} onClick={() => { if (openChannel) closeOpenChannel(); else navigate("lookup"); }}>{t("browse.openChannel")}</button>}
     <button ref={watchingButton} className="quiet" aria-label={t("app.watching")} title={t("app.watchingShortcut", { shortcut: shortcuts.watching })} aria-expanded={watching} onClick={event => { if (watching) closeWatching(); else { capture("watching", event.currentTarget); setWatching(true); setSettings(false); } }}>{activeCount > 0 ? t("app.watchingCount", { count: activeCount }) : t("app.watching")}</button>
     <button ref={settingsButton} className="quiet" title={t("app.settingsShortcut", { shortcut: shortcuts.settings })} aria-expanded={settings} onClick={event => { if (settings) closeSettings(); else { capture("settings", event.currentTarget); setSettings(true); setWatching(false); } }}>{t("app.settings")}</button>
   </div>;
@@ -159,7 +173,8 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       <p>{t("app.notificationTestResult")}</p>
       <button onClick={() => setNotificationTest(false)}>{t("app.backToBrowsing2")}</button>
       <button onClick={developer}>{t("app.developerTools")}</button>
-    </main> : auth.sessionId ? <BrowserWorkspace preferences={playback.settings} saveLanguage={playback.saveLanguage} actionsRef={workspace} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} pending={playback.pending} /> :
+    </main> : auth.sessionId ? <BrowserWorkspace preferences={playback.settings} saveLanguage={playback.saveLanguage} actionsRef={workspace} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} watchKick={watchKick} pending={playback.pending} /> : openChannel ?
+      <main className="browse-content signed-out-channel" ref={openChannelPanel}><h1 tabIndex={-1}>{t("browse.openChannel")}</h1><OpenChannel sessionId={null} draft={lookup} change={setLookup} open={() => {}} onAuthLost={auth.lost} watchKick={watchKick} /><button className="quiet" onClick={closeOpenChannel}>{t("openChannel.backToSignIn")}</button></main> :
       <SignIn status={auth.status} account={auth.account} busy={auth.busy} run={auth.run} />}
     {about && <About activation={about} close={() => setAbout(null)} />}
     {support && <SupportReport close={() => setSupport(false)} />}

@@ -79,6 +79,22 @@ pub async fn streamlink_launch(
 }
 
 #[tauri::command]
+pub async fn play_kick_channel(
+    services: State<'_, Arc<Services>>,
+    request: crate::streamlink::playback::KickPlaybackRequest,
+) -> Result<SessionSnapshot> {
+    services.play_kick(request).await
+}
+
+#[tauri::command]
+pub async fn open_kick_browser_chat(
+    services: State<'_, Arc<Services>>,
+    request: crate::domain::chat::KickChatRequest,
+) -> Result<()> {
+    services.open_kick_browser_chat(request).await
+}
+
+#[tauri::command]
 pub async fn streamlink_stop(
     services: State<'_, Arc<Services>>,
     request: StopRequest,

@@ -3,6 +3,7 @@
 Stream GUI RS is a cross-platform desktop frontend for browsing Twitch and watching streams through external
 Streamlink and a separately installed player. The stack is Tauri 2, Rust, React, TypeScript and Vite;
 targets are Linux, macOS and Windows. Twitch supplies identity and browsing data; Streamlink handles media.
+Kick support is limited to exact live-channel playback and explicit browser chat, with no Kick credentials or API client.
 
 ```text
 Twitch → Rust auth / Helix / cache → typed Tauri IPC → React
@@ -125,6 +126,19 @@ user.
   extend established auth/rate deadlines.
 
 ## Streamlink, players and sessions
+
+- `PlaybackStream` is explicitly Twitch metadata or a validated `KickSlug` locator; never manufacture Twitch
+  IDs/metadata for Kick. Kick launch/chat take only a bounded channel slug (plus optional launch quality),
+  never URLs. Rust constructs fixed `kick.com` playback/popout destinations. Kick launch/restart work while
+  Twitch is signed out and must not acquire auth leases or invoke Helix/Kick APIs.
+- Kick reuses global/player-profile settings without channel overrides, persistent slug preferences or a
+  settings schema change. Automatic chat is disabled; explicit chat always uses the browser and never
+  Chatterino. Emit exactly the selected service's low-latency flag. Audio has no video fallback.
+- Streamlink owns Kick browser challenges. Do not read/import cookies or browser profiles. Drain bounded
+  Kick child output without retaining it; fixed supervisor messages and typed process state remain. Never
+  infer offline/browser/quality state from human-readable output. Support reports may include the closed
+  service enum only, never locators, URLs or challenge data. Preserve process-group/job ownership and
+  require real native challenge/playback acceptance separately from fixture/CI results.
 
 - Streamlink 8.0+ and players remain external dependencies. Orchestrate them; do not reimplement media
   transport or introduce download/transport frameworks.

@@ -13,6 +13,8 @@
     "allow-support-report",
     "allow-streamlink-probe",
     "allow-streamlink-launch",
+    "allow-play-kick-channel",
+    "allow-open-kick-browser-chat",
     "allow-streamlink-stop",
     "allow-streamlink-sessions",
     "allow-streamlink-restart",

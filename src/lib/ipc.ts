@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   TeamRequest, TeamDetails, DiscoveryMutation, ShortcutBindings, ProfileMutation, UpdateStatus, DesktopStatus, MonitorStatus, AcknowledgeDesktopAction, NotificationTestAction,
-  ChatRequest, ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
+  ChatRequest, KickChatRequest, KickPlaybackRequest, ChannelSettings, ChannelSettingsRequest, SaveChannelSettingsRequest,
   LookupChannelRequest, ChannelIdentity, StreamLanguage, UiLanguage, StreamBrowseRequest, CategoryStreamsRequest, BrowseRequest, EntityRequest, SearchRequest, PagedResult, StreamSummary, ChannelSummary, CategorySummary, CategoryDetails, ChannelDetails,
   Account, AuthStatus, BackendDiagnostics, PlaybackRequest, RestartRequest, Settings, PlayerDiscovery, ProbeRequest,
   ProbeResult, SessionSnapshot, StopRequest, SupportReport, AppInfo, CustomTheme,
@@ -47,6 +47,8 @@ type Commands = {
   backend_diagnostics: [undefined, BackendDiagnostics];
   streamlink_probe: [ProbeRequest, ProbeResult];
   streamlink_launch: [PlaybackRequest, SessionSnapshot];
+  play_kick_channel: [KickPlaybackRequest, SessionSnapshot];
+  open_kick_browser_chat: [KickChatRequest, null];
   streamlink_restart: [RestartRequest, SessionSnapshot];
   playback_settings: [undefined, Settings];
   custom_theme: [undefined, CustomTheme | null];
@@ -113,6 +115,8 @@ export const api = {
   diagnostics: () => call("backend_diagnostics"),
   probe: (request: ProbeRequest) => call("streamlink_probe", request),
   launch: (request: PlaybackRequest) => call("streamlink_launch", request),
+  launchKick: (request: KickPlaybackRequest) => call("play_kick_channel", request),
+  openKickBrowserChat: (request: KickChatRequest) => call("open_kick_browser_chat", request),
   restart: (request: RestartRequest) => call("streamlink_restart", request),
   playbackSettings: () => call("playback_settings"),
   customTheme: () => call("custom_theme"),

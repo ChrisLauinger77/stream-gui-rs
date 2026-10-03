@@ -764,6 +764,62 @@ fn profile(name: &str) -> profiles::ProfileDraft {
     }
 }
 #[test]
+fn kick_reuses_profiles_without_twitch_overrides_or_automatic_chat() {
+    use profiles::ProfileMutation::*;
+    let root = tempfile::tempdir().unwrap();
+    let store = SettingsStore::open(root.path()).unwrap();
+    let mut global = store.snapshot();
+    global.automatic_chat = true;
+    global.chat_provider = ChatProvider::Chatterino;
+    global.default_quality = QualityPolicy::Low;
+    store.update(global).unwrap();
+    store
+        .set_channel(SaveChannelSettingsRequest {
+            broadcaster_id: "123".into(),
+            overrides: ChannelOverrides {
+                quality: Some(QualityPolicy::Audio),
+                low_latency: Some(false),
+                ..Default::default()
+            },
+        })
+        .unwrap();
+    let base = store.effective_kick(None);
+    assert_eq!(base.quality, QualityPolicy::Low);
+    assert_eq!(base.chat_provider, ChatProvider::Browser);
+    assert!(!base.automatic_chat);
+    assert!(base.chatterino_path.is_none());
+    let created = store
+        .modify_profile(Create {
+            profile: profile("Kick and Twitch"),
+        })
+        .unwrap();
+    let id = created.profiles[0].id.clone();
+    store
+        .modify_profile(Select {
+            id: Some(id.clone()),
+        })
+        .unwrap();
+    let selected = store.effective_kick(None);
+    assert_eq!(selected.profile_id, Some(id));
+    assert_eq!(selected.quality, QualityPolicy::Medium);
+    assert!(selected.low_latency);
+    assert_eq!(selected.player.arguments, ["--volume=20"]);
+    assert_eq!(
+        store.effective("123", None).unwrap().quality,
+        QualityPolicy::Audio
+    );
+    assert!(!store.effective("123", None).unwrap().low_latency);
+    assert!(store.effective("123", None).unwrap().automatic_chat);
+    assert_eq!(
+        store.effective_kick(Some(QualityPolicy::High)).quality,
+        QualityPolicy::High
+    );
+    store.modify_profile(Select { id: None }).unwrap();
+    assert_eq!(store.effective_kick(None), base);
+    assert_eq!(selected.quality, QualityPolicy::Medium);
+    assert!(selected.low_latency);
+}
+#[test]
 fn profile_crud_precedence_and_deletion_preserve_immutable_snapshots() {
     use profiles::ProfileMutation::*;
     let root = tempfile::tempdir().unwrap();

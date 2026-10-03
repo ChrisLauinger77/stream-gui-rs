@@ -125,6 +125,8 @@ fn main() {
             "support_report",
             "streamlink_probe",
             "streamlink_launch",
+            "play_kick_channel",
+            "open_kick_browser_chat",
             "streamlink_stop",
             "streamlink_sessions",
             "streamlink_restart",

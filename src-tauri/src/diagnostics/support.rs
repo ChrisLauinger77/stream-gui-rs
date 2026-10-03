@@ -64,14 +64,19 @@ pub fn support_report(
     );
     for (index, session) in sessions.iter().take(MAX_RECORDS).enumerate() {
         let record = format!(
-            "Process {}: phase={}; failure={}; exit={}\n",
+            "Process {}: phase={}; failure={}; exit={}; service={}\n",
             index + 1,
             label(session.phase),
             session.failure.map(label).unwrap_or_else(|| "none".into()),
             session
                 .exit_code
                 .map(|code| code.to_string())
-                .unwrap_or_else(|| "unavailable".into())
+                .unwrap_or_else(|| "unavailable".into()),
+            session
+                .stream
+                .as_ref()
+                .map(|stream| label(stream.service()))
+                .unwrap_or_else(|| "unknown".into())
         );
         if text.len() + record.len() > MAX_BYTES {
             break;
@@ -87,7 +92,10 @@ mod tests {
     use crate::{
         config::{EffectivePlaybackSettings, Settings},
         domain::ErrorCode,
-        streamlink::{LogEntry, LogSource, SessionPhase, playback::PlaybackStream},
+        streamlink::{
+            LogEntry, LogSource, SessionPhase,
+            playback::{PlaybackStream, TwitchPlaybackStream},
+        },
     };
     const PRIVATE: &str = "oauth:synthetic-token password=synthetic alice ACCOUNT CHANNEL /home/alice /Users/alice C:\\Users\\alice --password=secret\u{1b}[31m arbitrary child output";
     fn hostile() -> SessionSnapshot {
@@ -101,14 +109,14 @@ mod tests {
             id: PRIVATE.into(),
             generation: 77,
             restarting: false,
-            stream: Some(PlaybackStream {
+            stream: Some(PlaybackStream::Twitch(TwitchPlaybackStream {
                 broadcaster_id: PRIVATE.into(),
                 stream_id: Some(PRIVATE.into()),
                 login: PRIVATE.into(),
                 display_name: PRIVATE.into(),
                 title: Some(PRIVATE.into()),
                 category: Some(PRIVATE.into()),
-            }),
+            })),
             quality_policy: None,
             effective_settings: Some(EffectivePlaybackSettings {
                 profile_id: None,
@@ -195,6 +203,27 @@ mod tests {
         let report = support_report(PlayerMode::Default, None, &[]).text;
         assert!(report.contains("Streamlink: not checked"));
         assert!(report.contains("Anonymous retained processes: 0"));
+    }
+    #[test]
+    fn kick_report_contains_only_the_service_enum_and_no_locator_or_challenge_data() {
+        let mut session = hostile();
+        session.stream = Some(PlaybackStream::Kick {
+            slug: crate::streamlink::playback::KickSlug::parse("private-channel").unwrap(),
+        });
+        session.url = "https://kick.com/private-channel".into();
+        let text = support_report(PlayerMode::Default, None, &[session]).text;
+        assert!(text.contains("service=kick"));
+        for private in [
+            "private-channel",
+            "https://",
+            "cookie",
+            "oauth",
+            "password",
+            "/home",
+            "arbitrary",
+        ] {
+            assert!(!text.contains(private));
+        }
     }
     #[tokio::test]
     async fn report_does_not_probe_a_configured_executable_or_access_unavailable_credentials() {

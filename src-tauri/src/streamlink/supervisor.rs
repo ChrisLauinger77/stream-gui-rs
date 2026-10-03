@@ -90,6 +90,15 @@ pub struct SessionSnapshot {
 
 impl SessionSnapshot {
     fn log(&mut self, source: LogSource, text: String) {
+        // Challenge output may include browser/cookie data in formats we do not
+        // recognize. Keep draining both bounded pipes, but retain only our fixed
+        // supervisor messages for Kick. Never infer state from child text.
+        if matches!(self.stream, Some(PlaybackStream::Kick { .. }))
+            && source != LogSource::Supervisor
+        {
+            self.dropped_log_entries = self.dropped_log_entries.saturating_add(1);
+            return;
+        }
         let sequence = self
             .logs
             .back()

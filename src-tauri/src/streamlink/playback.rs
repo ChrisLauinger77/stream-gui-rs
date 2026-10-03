@@ -78,14 +78,20 @@ pub struct PlaybackRequest {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct KickPlaybackRequest {
+    pub slug: String,
+    pub quality: Option<QualityPolicy>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RestartRequest {
     pub session_id: String,
     pub generation: u32,
     pub quality: Option<QualityPolicy>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct PlaybackStream {
+pub struct TwitchPlaybackStream {
     pub stream_id: Option<String>,
     pub broadcaster_id: String,
     pub login: String,
@@ -93,21 +99,77 @@ pub struct PlaybackStream {
     pub title: Option<String>,
     pub category: Option<String>,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum StreamingService {
+    Twitch,
+    Kick,
+}
+
+/// A locator, not a verified account identity. The application accepts 1–100
+/// ASCII letters/digits/underscores/hyphens and normalizes letters to lowercase.
+/// This bound is an input limit, not a claim about Kick's account naming policy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(try_from = "String")]
+pub struct KickSlug(String);
+impl KickSlug {
+    pub fn parse(value: &str) -> Result<Self> {
+        if value.is_empty()
+            || value.len() > 100
+            || !value
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+        {
+            return Err(AppError::new(
+                ErrorCode::InvalidKickSlug,
+                "Invalid Kick channel name.",
+            ));
+        }
+        Ok(Self(value.to_ascii_lowercase()))
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+    pub fn channel_url(&self) -> String {
+        format!("https://kick.com/{}", self.0)
+    }
+}
+impl TryFrom<String> for KickSlug {
+    type Error = AppError;
+    fn try_from(value: String) -> Result<Self> {
+        Self::parse(&value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "service", rename_all = "snake_case")]
+pub enum PlaybackStream {
+    Twitch(TwitchPlaybackStream),
+    Kick { slug: KickSlug },
+}
+impl PlaybackStream {
+    pub fn service(&self) -> StreamingService {
+        match self {
+            Self::Twitch(_) => StreamingService::Twitch,
+            Self::Kick { .. } => StreamingService::Kick,
+        }
+    }
+}
 impl From<crate::helix::browse::StreamSummary> for PlaybackStream {
     fn from(stream: crate::helix::browse::StreamSummary) -> Self {
-        Self {
+        Self::Twitch(TwitchPlaybackStream {
             stream_id: Some(stream.stream_id),
             broadcaster_id: stream.broadcaster_id,
             login: stream.login,
             display_name: stream.display_name,
             title: Some(stream.title),
             category: stream.category_name,
-        }
+        })
     }
 }
 
-/// Resolved native paths, policy and immutable Twitch metadata. This is never an
-/// IPC input: the service constructs it from settings and Rust-owned Helix data.
+/// Resolved native paths, policy and immutable service identity. This is never
+/// an IPC input: Twitch metadata comes from Helix; Kick contains only a locator.
 pub struct LaunchSpec {
     pub executable: PathBuf,
     pub player: Option<PathBuf>,
@@ -162,7 +224,10 @@ pub fn encode_player_arguments(arguments: &[String]) -> String {
 pub fn build_command(spec: LaunchSpec) -> Result<CommandSpec> {
     spec.settings.player.validate()?;
     let effective_settings = spec.settings.clone();
-    let url = channel_url(&spec.stream.login)?;
+    let url = match &spec.stream {
+        PlaybackStream::Twitch(stream) => channel_url(&stream.login)?,
+        PlaybackStream::Kick { slug } => slug.channel_url(),
+    };
     let (selection, exclude) = spec.settings.quality.selection();
     let mut arguments = vec![
         "--no-config".into(),
@@ -172,7 +237,13 @@ pub fn build_command(spec: LaunchSpec) -> Result<CommandSpec> {
         "--player-verbose".into(),
     ];
     if spec.settings.low_latency {
-        arguments.push("--twitch-low-latency".into());
+        arguments.push(
+            match spec.stream.service() {
+                StreamingService::Twitch => "--twitch-low-latency",
+                StreamingService::Kick => "--kick-low-latency",
+            }
+            .into(),
+        );
     }
     if let Some(player) = spec.player {
         let path = player.to_str().ok_or_else(|| {
@@ -255,14 +326,14 @@ mod tests {
                     arguments: vec![],
                 },
             },
-            stream: PlaybackStream {
+            stream: PlaybackStream::Twitch(TwitchPlaybackStream {
                 stream_id: Some("456".into()),
                 broadcaster_id: "123".into(),
                 login: "Example_1".into(),
                 display_name: "not --an-argument".into(),
                 title: Some("$(never execute) {playerinput}".into()),
                 category: Some("game; nope".into()),
-            },
+            }),
         }
     }
     #[test]
@@ -285,7 +356,115 @@ mod tests {
                 "best"
             ]
         );
-        assert_eq!(command.stream.unwrap().stream_id.as_deref(), Some("456"));
+        let Some(PlaybackStream::Twitch(stream)) = command.stream else {
+            panic!("expected Twitch identity")
+        };
+        assert_eq!(stream.stream_id.as_deref(), Some("456"));
+    }
+    #[test]
+    fn kick_slug_is_bounded_normalized_and_cannot_contain_a_destination() {
+        for (input, expected) in [
+            ("Example_1", "example_1"),
+            ("Example-Channel", "example-channel"),
+            ("123", "123"),
+        ] {
+            let slug = KickSlug::parse(input).unwrap();
+            assert_eq!(slug.as_str(), expected);
+            assert_eq!(slug.channel_url(), format!("https://kick.com/{expected}"));
+            let restored: KickSlug =
+                serde_json::from_str(&serde_json::to_string(&slug).unwrap()).unwrap();
+            assert_eq!(restored, slug);
+        }
+        assert!(KickSlug::parse(&"a".repeat(100)).is_ok());
+        for input in [
+            "",
+            " ",
+            " a",
+            "a b",
+            "a\nb",
+            "a\tb",
+            "a/b",
+            "a\\b",
+            "a?x",
+            "a#x",
+            "https://kick.com/a",
+            "../a",
+            "..",
+            "a;b",
+            "$(id)",
+            "a&b",
+            "a|b",
+            "a`id`",
+            "a%2fb",
+            "a@b",
+            "用户",
+            "é",
+            "a\0b",
+            &"a".repeat(101),
+        ] {
+            let error = KickSlug::parse(input).unwrap_err();
+            assert_eq!(error.code, ErrorCode::InvalidKickSlug);
+            assert_eq!(error.message, "Invalid Kick channel name.");
+            assert!(
+                serde_json::from_str::<KickSlug>(&serde_json::to_string(input).unwrap()).is_err()
+            );
+        }
+        assert!(
+            serde_json::from_str::<KickPlaybackRequest>(
+                r#"{"slug":"example","quality":null,"url":"https://evil.example"}"#
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn kick_argv_and_latency_are_service_specific_for_every_quality() {
+        for quality in [
+            QualityPolicy::Source,
+            QualityPolicy::High,
+            QualityPolicy::Medium,
+            QualityPolicy::Low,
+            QualityPolicy::Audio,
+        ] {
+            for low_latency in [false, true] {
+                let mut kick = spec(quality, PlayerMode::Default);
+                kick.stream = PlaybackStream::Kick {
+                    slug: KickSlug::parse("Example-1").unwrap(),
+                };
+                kick.settings.low_latency = low_latency;
+                let command = build_command(kick).unwrap();
+                let (selection, exclude) = quality.selection();
+                let mut expected = vec![
+                    "--no-config",
+                    "--no-plugin-sideloading",
+                    "--loglevel",
+                    "info",
+                    "--player-verbose",
+                ];
+                if low_latency {
+                    expected.push("--kick-low-latency");
+                }
+                if let Some(exclude) = exclude {
+                    expected.extend(["--stream-sorting-excludes", exclude]);
+                }
+                expected.extend(["--", "https://kick.com/example-1", selection]);
+                assert_eq!(command.arguments, expected);
+                assert_eq!(command.stream.unwrap().service(), StreamingService::Kick);
+                if quality == QualityPolicy::Audio {
+                    assert_eq!(selection, "audio,audio_only");
+                    assert!(exclude.is_none());
+                    assert!(!command.arguments.iter().any(|arg| arg.contains("best")));
+                }
+                let mut twitch = spec(quality, PlayerMode::Default);
+                twitch.settings.low_latency = low_latency;
+                let arguments = build_command(twitch).unwrap().arguments;
+                assert!(!arguments.iter().any(|arg| arg == "--kick-low-latency"));
+                assert_eq!(
+                    arguments.iter().any(|arg| arg == "--twitch-low-latency"),
+                    low_latency
+                );
+            }
+        }
     }
     #[test]
     fn exact_high_medium_low_and_audio_policy_argv() {

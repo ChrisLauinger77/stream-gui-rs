@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-play-kick-channel"
+description = "Enables the play_kick_channel command without any pre-configured scope."
+commands.allow = ["play_kick_channel"]
+
+[[permission]]
+identifier = "deny-play-kick-channel"
+description = "Denies the play_kick_channel command without any pre-configured scope."
+commands.deny = ["play_kick_channel"]

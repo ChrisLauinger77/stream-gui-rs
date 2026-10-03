@@ -411,7 +411,7 @@ test.each(["followed channels", "categories", "category details", "channel detai
 
 // Phase 3 uses the same application and navigation surfaces as the Phase 2 tests.
 const playing = (id = "play-one", broadcasterId = "channel-one"): import("../lib/generated").SessionSnapshot => ({
-  id, generation: 1, restarting: false, effectiveSettings: null, chatError: null, stream: { streamId: "stream-one", broadcasterId, login: "example", displayName: id === "play-one" ? "Example Channel" : "Second Channel", title: "A live broadcast", category: "Example Game" },
+  id, generation: 1, restarting: false, effectiveSettings: null, chatError: null, stream: { service: "twitch" as const, streamId: "stream-one", broadcasterId, login: "example", displayName: id === "play-one" ? "Example Channel" : "Second Channel", title: "A live broadcast", category: "Example Game" },
   qualityPolicy: "source", startedAt: 100, endedAt: null, failure: null, phase: "running", pid: 123,
   url: "https://www.twitch.tv/example", quality: "best", exitCode: null, stopRequested: false,
   logs: [{ sequence: 1, source: "stderr", text: "Synthetic diagnostic warning" }], droppedLogEntries: 5,
@@ -425,6 +425,118 @@ async function editControl(label: string, value: string, kind: "input" | "select
     control.dispatchEvent(new Event(kind === "input" ? "input" : "change", { bubbles: true }));
   });
 }
+const kickPlaying = (id = "kick-one", slug = "example-1"): import("../lib/generated").SessionSnapshot => ({ ...playing(id), stream: { service: "kick", slug }, url: `https://kick.com/${slug}`, logs: [], droppedLogEntries: 0 });
+
+test.each(["signed_out", "not_configured"] as const)("Kick launch is available when Twitch is %s without a Twitch lookup", async phase => {
+  vi.mocked(api.authStatus).mockResolvedValue({ ...signedOut, phase });
+  const launch = deferred<ReturnType<typeof kickPlaying>>();
+  vi.mocked(api.launchKick).mockReturnValue(launch.promise);
+  await render(); await click("Open channel");
+  expect(container.querySelector("h1")).toBe(document.activeElement);
+  expect(container.querySelector<HTMLSelectElement>('[data-focus="channel-service"]')?.value).toBe("kick");
+  await editControl("Kick channel name", "Example-1");
+  const form = container.querySelector(".exact-lookup")!;
+  await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+  expect(api.launchKick).toHaveBeenCalledExactlyOnceWith({ slug: "Example-1", quality: null });
+  expect(button("Play Kick channel").disabled).toBe(true);
+  await act(async () => { launch.resolve(kickPlaying()); });
+  expect(container.querySelector(".service-badge")?.textContent).toBe("Kick");
+  expect(container.querySelector(".session h3")?.textContent).toBe("example-1");
+  expect(container.querySelector(".session-title")).toBeNull();
+  expect(api.login).not.toHaveBeenCalled(); expect(api.launch).not.toHaveBeenCalled();
+  expect(api.lookupChannel).not.toHaveBeenCalled(); expect(api.followedStreams).not.toHaveBeenCalled();
+  await editControl("Service", "twitch", "select");
+  expect(text()).toContain("Connect to Twitch to look up Twitch channels");
+  expect(container.querySelector('[data-focus="exact-login"]')).toBeNull();
+  await click("Close Watching"); await click("Back to sign-in");
+  expect(document.activeElement).toBe(button("Open channel"));
+});
+
+test.each([
+  ["en", "Open channel", "Kick channel name", "Play Kick channel", "Enter 1–100"],
+  ["de", "Kanal öffnen", "Kick-Kanalname", "Kick-Kanal abspielen", "Gib 1–100"],
+  ["es", "Abrir canal", "Nombre del canal de Kick", "Reproducir canal de Kick", "Introduce entre 1 y 100"],
+  ["fr", "Ouvrir une chaîne", "Nom de la chaîne Kick", "Lire la chaîne Kick", "Saisissez de 1 à 100"],
+] as const)("invalid Kick input uses a safe announced %s error", async (uiLanguage, openLabel, channelLabel, playLabel, errorLabel) => {
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, uiLanguage });
+  vi.mocked(api.launchKick).mockRejectedValue({ code: "invalid_kick_slug", message: "PRIVATE raw response" });
+  await render(); await click(openLabel); await editControl(channelLabel, "https://evil.example"); await click(playLabel);
+  expect(container.querySelector('.playback-feedback[role="alert"]')?.textContent).toContain(errorLabel);
+  expect(text()).not.toContain("PRIVATE"); expect(api.login).not.toHaveBeenCalled();
+});
+
+test("Kick chat is independent of playback and ignores the Twitch Chatterino preference", async () => {
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, automaticChat: true, chatProvider: "chatterino" });
+  vi.mocked(api.openKickBrowserChat).mockRejectedValue({ code: "browser_open", message: "PRIVATE browser details" });
+  await render(); await click("Open channel"); await editControl("Kick channel name", "Example-1"); await click("Open Kick browser chat");
+  expect(api.openKickBrowserChat).toHaveBeenCalledExactlyOnceWith({ slug: "Example-1" });
+  expect(api.openChat).not.toHaveBeenCalled(); expect(api.launchKick).not.toHaveBeenCalled(); expect(api.login).not.toHaveBeenCalled();
+  expect(container.querySelector('.kick-chat [role="alert"]')?.textContent).toContain("Chat could not be opened");
+  expect(text()).not.toContain("PRIVATE");
+});
+
+test("switching from a pending Twitch lookup to Kick cannot navigate on the late response", async () => {
+  const lookup = deferred<Awaited<ReturnType<typeof api.lookupChannel>>>();
+  vi.mocked(api.lookupChannel).mockReturnValue(lookup.promise);
+  vi.mocked(api.launchKick).mockResolvedValue(kickPlaying());
+  await render(); await click("Open channel"); await editControl("Twitch login", "example");
+  await click("Open channel", ".exact-lookup");
+  await editControl("Service", "kick", "select");
+  await act(async () => { lookup.resolve({ broadcasterId: "123", displayName: "Late Twitch" }); });
+  expect(api.channel).not.toHaveBeenCalled();
+  expect(text()).not.toContain("Late Twitch");
+  await editControl("Kick channel name", "example-1"); await click("Play Kick channel");
+  expect(api.launchKick).toHaveBeenCalledOnce(); expect(api.launch).not.toHaveBeenCalled();
+});
+
+test("Open channel shortcut works while signed out and Back restores its control", async () => {
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  await render();
+  await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "5", ctrlKey: true, bubbles: true })); });
+  expect(container.querySelector("h1")).toBe(document.activeElement);
+  expect(container.querySelector('[data-focus="kick-slug"]')).not.toBeNull();
+  await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", altKey: true, bubbles: true })); });
+  expect(document.activeElement).toBe(button("Open channel"));
+  expect(button("Connect to Twitch")).toBeDefined();
+});
+
+test("Back restores the Kick service, channel draft and input focus", async () => {
+  await render(); await click("Open channel");
+  await editControl("Service", "kick", "select"); await editControl("Kick channel name", "example-1");
+  const input = container.querySelector<HTMLInputElement>('[data-focus="kick-slug"]')!;
+  input.focus();
+  await click("Categories", ".side-nav"); await click("Go back");
+  expect(container.querySelector<HTMLSelectElement>('[data-focus="channel-service"]')?.value).toBe("kick");
+  expect(container.querySelector<HTMLInputElement>('[data-focus="kick-slug"]')?.value).toBe("example-1");
+  expect(document.activeElement).toBe(container.querySelector('[data-focus="kick-slug"]'));
+});
+
+test("mixed Watching sessions show service identity and restart/stop explicit session IDs", async () => {
+  const kick = kickPlaying();
+  vi.mocked(api.sessions).mockResolvedValue([playing(), kick]);
+  vi.mocked(api.restart).mockResolvedValue({ ...kick, generation: 2 });
+  vi.mocked(api.stop).mockResolvedValue({ ...kick, generation: 2, phase: "exited" });
+  await render(); await click("Watching");
+  expect([...container.querySelectorAll(".service-badge")].map(el => el.textContent)).toEqual(["Kick", "Twitch"]);
+  const kickSession = container.querySelectorAll<HTMLElement>(".session")[0];
+  await act(async () => { [...kickSession.querySelectorAll("button")].find(b => b.textContent === "Restart")!.click(); });
+  expect(api.restart).toHaveBeenCalledWith({ sessionId: kick.id, generation: 1, quality: null });
+  await act(async () => { [...kickSession.querySelectorAll("button")].find(b => b.textContent === "Stop")!.click(); });
+  expect(api.stop).toHaveBeenCalledWith(kick.id);
+  expect(container.querySelectorAll(".session")[1].textContent).toContain("Running");
+  expect(api.launch).not.toHaveBeenCalled(); expect(api.launchKick).not.toHaveBeenCalled();
+});
+
+test("Kick Audio failure explains availability without claiming an offline channel or retrying video", async () => {
+  vi.mocked(api.sessions).mockResolvedValue([{ ...kickPlaying(), phase: "failed", failure: "startup_failed", qualityPolicy: "audio", quality: "audio,audio_only" }]);
+  await render(); await click("Watching");
+  expect(container.querySelector(".session")?.textContent).toContain("may not offer audio-only streams");
+  expect(container.querySelector(".session-title")).toBeNull();
+  expect(api.launchKick).not.toHaveBeenCalled(); expect(api.restart).not.toHaveBeenCalled();
+});
+
 test.each(["Following", "Live", "Category"])("Watch launches trusted broadcaster identity from %s and keeps browsing mounted", async location => {
   vi.mocked(api.followedStreams).mockResolvedValue(page([stream]));
   vi.mocked(api.launch).mockResolvedValue(playing());

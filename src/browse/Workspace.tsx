@@ -6,7 +6,7 @@ import { ViewMemory, usePage } from "./usePage";
 import { CategoryList, ChannelList, Media, PageFrame, StreamList } from "./components";
 import { LocalItemActions, SavedItems } from "../features/DiscoveryPreferences";
 import { TeamView } from "./TeamView";
-import { ExactChannelLookup } from "./ExactChannelLookup";
+import { OpenChannel, type OpenChannelDraft } from "./OpenChannel";
 import { LanguageFilter } from "./LanguageFilter";
 import { SearchView, ChannelView, LoginChannelView } from "./details";
 
@@ -14,13 +14,13 @@ type Section = "following" | "live" | "categories" | "search" | "lookup" | "book
 export type BrowserActions = { intent: (intent: NavigationIntent) => void; channel: (id: string, name: string) => void; navigate: (section: Section) => void; back: () => void; forward: () => void; refresh: () => void; focus: () => void };
 type Route = ({ kind: Section } | { kind: "category" | "channel" | "team" | "login"; id: string; name: string }) & { language?: StreamLanguage | null };
 type Visit = { route: Route; section: Section; scroll: number; focus?: string;
-  lookup: string; search: string; searchType: "channels" | "categories" | "teams"; following: "live" | "channels" };
+  lookup: OpenChannelDraft; search: string; searchType: "channels" | "categories" | "teams"; following: "live" | "channels" };
 const routeKey = (route: Route) => route.kind + ("id" in route ? `:${route.id}` : "") + (route.kind === "live" || route.kind === "category" ? `:${route.language ?? "any"}` : "");
 export type QueryContext = { sessionId: string; memory: ViewMemory; hidden?: Settings["discovery"]["hidden"]; onAuthLost: () => void };
 export type Watch = { watch: (id: string) => void; pending: ReadonlySet<string> };
 export type Links = Watch & { team: (name: string) => void; channel: (id: string, name: string) => void; category: (id: string, name: string) => void };
 export const pageRequest = (sessionId: string, cursor: string | null, refresh: boolean): BrowseRequest => ({ sessionId, cursor, refresh });
-export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAuthLost, watch, pending, actionsRef, preferences, saveLanguage }: { preferences: Settings | null; saveLanguage: (language: StreamLanguage | null) => Promise<Settings>; sessionId: string; onAuthLost: () => void; actionsRef: Ref<BrowserActions> } & Watch) {
+export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAuthLost, watch, watchKick, pending, actionsRef, preferences, saveLanguage }: { preferences: Settings | null; saveLanguage: (language: StreamLanguage | null) => Promise<Settings>; sessionId: string; onAuthLost: () => void; actionsRef: Ref<BrowserActions>; watchKick: (slug: string) => Promise<void> } & Watch) {
   const { t } = useI18n();
   const memory = useRef(new ViewMemory()).current;
   const [route, setRoute] = useState<Route>({ kind: "following" });
@@ -28,7 +28,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
   const [history, setHistory] = useState<Visit[]>([]);
   const [future, setFuture] = useState<Visit[]>([]);
   const [following, setFollowing] = useState<"live" | "channels">("live");
-  const [lookup, setLookup] = useState("");
+  const [lookup, setLookup] = useState<OpenChannelDraft>({ service: "twitch", twitchLogin: "", kickSlug: "" });
   const [search, setSearch] = useState("");
   const [searchType, setSearchType] = useState<"channels" | "categories" | "teams">("channels");
   const content = useRef<HTMLElement>(null);
@@ -105,7 +105,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
       {route.kind === "categories" && <Categories context={context} links={links} />}
       {route.kind === "category" && <Category key={`${route.id}:${language}`} id={route.id} language={language} context={context} links={links} />}
       {route.kind === "bookmarks" && <SavedItems list="bookmarks" open={(kind, id, name) => navigate({ kind, id, name })} />}
-      {route.kind === "lookup" && <ExactChannelLookup sessionId={sessionId} login={lookup} change={value => { setFuture([]); setLookup(value); }} open={links.channel} onAuthLost={onAuthLost} />}
+      {route.kind === "lookup" && <OpenChannel sessionId={sessionId} draft={lookup} change={value => { setFuture([]); setLookup(value); }} open={links.channel} onAuthLost={onAuthLost} watchKick={watchKick} />}
       {route.kind === "search" && <SearchView context={context} links={links} draft={search} setDraft={value => { setFuture([]); setSearch(value); }} type={searchType} setType={value => { setFuture([]); setSearchType(value); }} />}
       {route.kind === "team" && <TeamView key={route.id} name={route.id} context={context} links={links} />}
       {route.kind === "login" && <LoginChannelView key={route.id} login={route.id} context={context} links={links} />}
