@@ -502,6 +502,17 @@ test("Open channel shortcut works while signed out and Back restores its control
   expect(button("Connect to Twitch")).toBeDefined();
 });
 
+test("Back restores the Kick service, channel draft and input focus", async () => {
+  await render(); await click("Open channel");
+  await editControl("Service", "kick", "select"); await editControl("Kick channel name", "example-1");
+  const input = container.querySelector<HTMLInputElement>('[data-focus="kick-slug"]')!;
+  input.focus();
+  await click("Categories", ".side-nav"); await click("Go back");
+  expect(container.querySelector<HTMLSelectElement>('[data-focus="channel-service"]')?.value).toBe("kick");
+  expect(container.querySelector<HTMLInputElement>('[data-focus="kick-slug"]')?.value).toBe("example-1");
+  expect(document.activeElement).toBe(container.querySelector('[data-focus="kick-slug"]'));
+});
+
 test("mixed Watching sessions show service identity and restart/stop explicit session IDs", async () => {
   const kick = kickPlaying();
   vi.mocked(api.sessions).mockResolvedValue([playing(), kick]);
