@@ -543,6 +543,13 @@ impl SettingsDocument {
     }
     fn effective(&self, id: &str, quality: Option<QualityPolicy>) -> EffectivePlaybackSettings {
         let overrides = self.channel_overrides.get(id).cloned().unwrap_or_default();
+        self.resolve_playback(overrides, quality)
+    }
+    fn resolve_playback(
+        &self,
+        overrides: ChannelOverrides,
+        quality: Option<QualityPolicy>,
+    ) -> EffectivePlaybackSettings {
         let profile = self.settings.selected_profile();
         EffectivePlaybackSettings {
             profile_id: profile.map(|p| p.id.clone()),
@@ -660,6 +667,19 @@ impl SettingsStore {
             .lock()
             .expect("settings mutex poisoned")
             .effective(id, quality))
+    }
+    /// Kick has no stable account identity or per-channel preferences in Stage 1.
+    /// Resolve the same globals/profile without looking up any Twitch ID.
+    pub fn effective_kick(&self, quality: Option<QualityPolicy>) -> EffectivePlaybackSettings {
+        let mut settings = self
+            .value
+            .lock()
+            .expect("settings mutex poisoned")
+            .resolve_playback(ChannelOverrides::default(), quality);
+        settings.automatic_chat = false;
+        settings.chat_provider = ChatProvider::Browser;
+        settings.chatterino_path = None;
+        settings
     }
     pub fn set_channel(&self, request: SaveChannelSettingsRequest) -> Result<ChannelSettings> {
         validate_broadcaster_id(&request.broadcaster_id)?;

@@ -482,7 +482,7 @@ async fn windows_child_cannot_execute_before_job_assignment_and_descendant_is_ow
 }
 
 use stream_gui_rs::streamlink::playback::{
-    LaunchSpec, PlaybackStream, PlayerSettings, QualityPolicy, RestartRequest,
+    LaunchSpec, PlaybackStream, PlayerSettings, QualityPolicy, RestartRequest, TwitchPlaybackStream,
 };
 fn production_spec(channel: &str) -> LaunchSpec {
     LaunchSpec {
@@ -498,14 +498,14 @@ fn production_spec(channel: &str) -> LaunchSpec {
             quality: QualityPolicy::Source,
             automatic_chat: false,
         },
-        stream: PlaybackStream {
+        stream: PlaybackStream::Twitch(TwitchPlaybackStream {
             stream_id: Some(format!("stream-{channel}")),
             broadcaster_id: if channel == "holdb" { "456" } else { "123" }.into(),
             login: channel.into(),
             display_name: format!("Channel {channel}"),
             title: Some("A test stream".into()),
             category: Some("Test category".into()),
-        },
+        }),
     }
 }
 async fn starting(supervisor: &Supervisor, id: &str) {
@@ -526,6 +526,288 @@ async fn starting(supervisor: &Supervisor, id: &str) {
     .unwrap();
 }
 
+fn kick_request(slug: &str) -> stream_gui_rs::streamlink::playback::KickPlaybackRequest {
+    stream_gui_rs::streamlink::playback::KickPlaybackRequest {
+        slug: slug.into(),
+        quality: None,
+    }
+}
+
+#[tokio::test]
+async fn kick_launch_and_restart_reuse_latest_profile_without_auth_or_twitch_overrides() {
+    use stream_gui_rs::config::{
+        ChannelOverrides, ChatProvider, SaveChannelSettingsRequest,
+        profiles::{ProfileDraft, ProfileMutation},
+    };
+    let root = helper_directory();
+    let executable = renamed_helper(root.path(), "kickrecord");
+    let services = std::sync::Arc::new(Services::new(root.path(), None).unwrap());
+    services
+        .settings
+        .set_streamlink_path(Some(executable.to_string_lossy().into_owned()))
+        .unwrap();
+    let mut globals = services.settings.snapshot();
+    globals.automatic_chat = true;
+    globals.chat_provider = ChatProvider::Chatterino;
+    services.save_settings(globals).await.unwrap();
+    services
+        .settings
+        .set_channel(SaveChannelSettingsRequest {
+            broadcaster_id: "123".into(),
+            overrides: ChannelOverrides {
+                quality: Some(QualityPolicy::Audio),
+                low_latency: Some(false),
+                ..Default::default()
+            },
+        })
+        .unwrap();
+    let first = services.play_kick(kick_request("hold")).await.unwrap();
+    assert_eq!(first.url, "https://kick.com/hold");
+    assert_eq!(
+        serde_json::to_value(&first.stream).unwrap(),
+        serde_json::json!({"service":"kick", "slug":"hold"})
+    );
+    assert!(!first.effective_settings.as_ref().unwrap().automatic_chat);
+    assert_eq!(
+        first.effective_settings.as_ref().unwrap().chat_provider,
+        ChatProvider::Browser
+    );
+    assert_eq!(first.quality_policy, Some(QualityPolicy::Source));
+    let profile = services
+        .modify_profile(ProfileMutation::Create {
+            profile: ProfileDraft {
+                name: "Shared".into(),
+                player: PlayerSettings {
+                    arguments: vec!["one literal argument".into()],
+                    ..Default::default()
+                },
+                quality: Some(QualityPolicy::Medium),
+                low_latency: Some(true),
+            },
+        })
+        .await
+        .unwrap();
+    let id = profile.profiles[0].id.clone();
+    services
+        .modify_profile(ProfileMutation::Select {
+            id: Some(id.clone()),
+        })
+        .await
+        .unwrap();
+    let unchanged = &services.sessions.sessions().await[0];
+    assert_eq!(unchanged.effective_settings, first.effective_settings);
+    let restarted = services
+        .restart_playback(RestartRequest {
+            session_id: first.id.clone(),
+            generation: first.generation,
+            quality: None,
+        })
+        .await
+        .unwrap();
+    assert_process_exited(first.pid);
+    assert_eq!(restarted.stream, first.stream);
+    let effective = restarted.effective_settings.as_ref().unwrap();
+    assert_eq!(effective.profile_id.as_ref(), Some(&id));
+    assert_eq!(effective.quality, QualityPolicy::Medium);
+    assert_eq!(effective.player.arguments, ["one literal argument"]);
+    assert!(effective.low_latency);
+    assert!(!effective.automatic_chat);
+    services
+        .modify_profile(ProfileMutation::Select { id: None })
+        .await
+        .unwrap();
+    let again = services
+        .restart_playback(RestartRequest {
+            session_id: first.id.clone(),
+            generation: restarted.generation,
+            quality: Some(QualityPolicy::Low),
+        })
+        .await
+        .unwrap();
+    assert_process_exited(restarted.pid);
+    assert_eq!(again.quality_policy, Some(QualityPolicy::Low));
+    assert!(!again.effective_settings.as_ref().unwrap().low_latency);
+    assert!(
+        again
+            .effective_settings
+            .as_ref()
+            .unwrap()
+            .profile_id
+            .is_none()
+    );
+    assert!(effective.low_latency);
+    assert_eq!(
+        services.auth.status().await.phase,
+        stream_gui_rs::twitch::AuthPhase::NotConfigured
+    );
+    services.shutdown().await.unwrap();
+    assert_process_exited(again.pid);
+}
+
+#[tokio::test]
+async fn mixed_kick_and_twitch_sessions_keep_capacity_generation_failure_and_stop_independent() {
+    let root = tempfile::tempdir().unwrap();
+    let services = std::sync::Arc::new(Services::new(root.path(), None).unwrap());
+    services
+        .settings
+        .set_streamlink_path(Some(helper().to_string_lossy().into_owned()))
+        .unwrap();
+    let twitch = services
+        .sessions
+        .launch_spec(production_spec("hold"))
+        .await
+        .unwrap();
+    let kick = services.play_kick(kick_request("hold")).await.unwrap();
+    let other = services.play_kick(kick_request("holdb")).await.unwrap();
+    assert_ne!(kick.id, twitch.id);
+    assert_ne!(other.id, kick.id);
+    assert_eq!(
+        kick.stream.as_ref().unwrap().service(),
+        stream_gui_rs::streamlink::playback::StreamingService::Kick
+    );
+    let failed = services.play_kick(kick_request("fail")).await.unwrap();
+    let failure = terminal(&services.sessions, &failed.id).await;
+    assert_eq!(failure.phase, SessionPhase::Failed);
+    assert_ne!(failure.failure, Some(ErrorCode::StreamOffline));
+    assert!(
+        failure
+            .logs
+            .iter()
+            .all(|line| line.source == LogSource::Supervisor)
+    );
+    let restarted = services
+        .restart_playback(RestartRequest {
+            session_id: kick.id.clone(),
+            generation: kick.generation,
+            quality: None,
+        })
+        .await
+        .unwrap();
+    assert_process_exited(kick.pid);
+    assert_eq!(restarted.generation, 2);
+    assert_eq!(
+        services
+            .restart_playback(RestartRequest {
+                session_id: kick.id.clone(),
+                generation: 1,
+                quality: None
+            })
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::RestartFailed
+    );
+    services.sessions.stop(&other.id).await.unwrap();
+    assert_process_exited(other.pid);
+    for _ in 0..6 {
+        services.play_kick(kick_request("holdb")).await.unwrap();
+    }
+    assert_eq!(
+        services
+            .play_kick(kick_request("hold"))
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::Capacity
+    );
+    let before = services.sessions.sessions().await;
+    assert!(before.iter().any(|s| s.id == twitch.id
+        && s.pid == twitch.pid
+        && s.generation == 1
+        && s.phase == SessionPhase::Running));
+    assert!(before.iter().any(|s| s.id == kick.id
+        && s.pid == restarted.pid
+        && s.generation == 2
+        && s.phase == SessionPhase::Running));
+    services.shutdown().await.unwrap();
+    for session in before {
+        if session.pid != 0 {
+            assert_process_exited(session.pid);
+        }
+    }
+}
+
+#[tokio::test]
+async fn kick_audio_unavailable_fails_without_a_video_fallback_or_raw_output() {
+    let root = helper_directory();
+    let executable = renamed_helper(root.path(), "kickrecord");
+    let services = std::sync::Arc::new(Services::new(root.path(), None).unwrap());
+    services
+        .settings
+        .set_streamlink_path(Some(executable.to_string_lossy().into_owned()))
+        .unwrap();
+    let mut request = kick_request("video-only");
+    request.quality = Some(QualityPolicy::Audio);
+    let started = services.play_kick(request).await.unwrap();
+    let failed = terminal(&services.sessions, &started.id).await;
+    assert_eq!(failed.phase, SessionPhase::Failed);
+    assert_eq!(failed.quality_policy, Some(QualityPolicy::Audio));
+    assert_eq!(failed.generation, 1);
+    assert_eq!(failed.failure, Some(ErrorCode::StartupFailed));
+    let args: Vec<String> =
+        serde_json::from_slice(&std::fs::read(executable.with_extension("argv.json")).unwrap())
+            .unwrap();
+    assert_eq!(args.last().unwrap(), "audio,audio_only");
+    assert!(!args.iter().any(|arg| arg.contains("best")));
+    assert!(
+        failed
+            .logs
+            .iter()
+            .all(|line| line.source == LogSource::Supervisor)
+    );
+    assert!(failed.dropped_log_entries > 0);
+    assert_eq!(services.sessions.sessions().await.len(), 1);
+    services.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn kick_child_trees_are_owned_during_stop_and_quit() {
+    for quit in [false, true] {
+        let root = helper_directory();
+        let executable = renamed_helper(root.path(), "kickrecord");
+        let services = std::sync::Arc::new(Services::new(root.path(), None).unwrap());
+        services
+            .settings
+            .set_streamlink_path(Some(executable.to_string_lossy().into_owned()))
+            .unwrap();
+        let parent = services.play_kick(kick_request("tree")).await.unwrap();
+        let descendant: u32 = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Ok(text) = std::fs::read_to_string(executable.with_extension("descendant"))
+                    && let Ok(pid) = text.parse()
+                {
+                    break pid;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        if quit {
+            services.shutdown().await.unwrap();
+        } else {
+            services.sessions.stop(&parent.id).await.unwrap();
+        }
+        assert_process_exited(parent.pid);
+        // The direct child was waited above. Its orphaned child is reaped by the
+        // OS, which can lag group termination briefly under concurrent test load.
+        #[cfg(unix)]
+        tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                // SAFETY: query only the descendant PID reported by our fixture.
+                if unsafe { libc::kill(descendant as i32, 0) } == -1 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("owned descendant should exit and be reaped");
+        assert_process_exited(descendant);
+        services.shutdown().await.unwrap();
+    }
+}
+
 #[tokio::test]
 async fn production_launch_keeps_metadata_and_uses_exact_native_argv() {
     let supervisor = Supervisor::default();
@@ -541,11 +823,11 @@ async fn production_launch_keeps_metadata_and_uses_exact_native_argv() {
     assert_eq!(ended.generation, 1);
     assert!(ended.started_at > 0);
     assert!(ended.ended_at.is_some());
-    assert_eq!(
-        ended.stream.as_ref().unwrap().stream_id.as_deref(),
-        Some("stream-arguments")
-    );
-    assert_eq!(ended.stream.as_ref().unwrap().broadcaster_id, "123");
+    let Some(PlaybackStream::Twitch(stream)) = &ended.stream else {
+        panic!("expected Twitch metadata")
+    };
+    assert_eq!(stream.stream_id.as_deref(), Some("stream-arguments"));
+    assert_eq!(stream.broadcaster_id, "123");
     let args: Vec<String> = serde_json::from_str(
         &ended
             .logs
@@ -657,10 +939,7 @@ async fn restart_reaps_previous_generation_preserves_identity_and_leaves_other_s
     assert_ne!(restarted.pid, first.pid);
     assert_process_exited(first.pid);
     assert_eq!(restarted.quality_policy, Some(QualityPolicy::Audio));
-    assert_eq!(
-        restarted.stream.unwrap().stream_id,
-        first.stream.unwrap().stream_id
-    );
+    assert_eq!(restarted.stream, first.stream);
     assert_eq!(
         supervisor
             .sessions()

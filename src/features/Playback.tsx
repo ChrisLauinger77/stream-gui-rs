@@ -4,6 +4,7 @@ import type { QualityPolicy, SessionSnapshot } from "../lib/generated";
 import { Panel } from "../components/Panel";
 import { useQualityLabels } from "../playback/QualitySelect";
 import { playbackError } from "../playback/usePlayback";
+import { KickChatButton } from "./KickChatButton";
 
 type Props = {
   sessions: SessionSnapshot[];
@@ -27,25 +28,30 @@ function Session({ session, isStopping, isRestarting, stop, restart }: Props & {
   useEffect(() => setQuality(null), [session.generation, session.qualityPolicy]);
   const active = session.restarting || ["starting", "running", "stopping"].includes(session.phase);
   const busy = isRestarting(session.id) || session.restarting;
-  const name = session.stream?.displayName ?? session.url;
+  const twitch = session.stream?.service === "twitch" ? session.stream : null;
+  const kick = session.stream?.service === "kick" ? session.stream : null;
+  const name = twitch?.displayName ?? kick?.slug ?? session.url;
   const end = session.endedAt ?? Math.floor(Date.now() / 1000);
   const elapsed = Math.max(0, end - session.startedAt);
   const phase = t(({ starting: "playback.phaseStarting", running: "playback.phaseRunning", stopping: "playback.phaseStopping", exited: "playback.phaseExited", failed: "playback.phaseFailed" } as const)[session.phase]);
   return <article className="session" aria-label={t("playback.namedSession", { name })}>
-    <div className="session-heading"><h3>{name}</h3><strong>{phase}</strong></div>
-    <p className="session-title" title={session.stream?.title ?? undefined}>{session.stream?.title}</p>
-    <p className="muted">{session.stream?.category && <>{session.stream.category} · </>}{session.qualityPolicy ? qualityLabels[session.qualityPolicy] : session.quality}{session.effectiveSettings && <> · {t("playback.lowLatency", { state: t(session.effectiveSettings.lowLatency ? "channelPreferences.on" : "channelPreferences.off") })}</>} · {t("playback.startedAt", { time: date(session.startedAt * 1000, { hour: "2-digit", minute: "2-digit" }) })} · {t("playback.duration", { minutes: number(Math.floor(elapsed / 60)), seconds: number(elapsed % 60) })}{busy && <> · {t("playback.restarting")}</>}</p>
+    <div className="session-heading"><h3>{name}</h3>{session.stream && <span className="service-badge">{t(kick ? "service.kick" : "service.twitch")}</span>}<strong>{phase}</strong></div>
+    {twitch?.title && <p className="session-title" title={twitch.title}>{twitch.title}</p>}
+    <p className="muted">{twitch?.category && <>{twitch.category} · </>}{session.qualityPolicy ? qualityLabels[session.qualityPolicy] : session.quality}{session.effectiveSettings && <> · {t("playback.lowLatency", { state: t(session.effectiveSettings.lowLatency ? "channelPreferences.on" : "channelPreferences.off") })}</>} · {t("playback.startedAt", { time: date(session.startedAt * 1000, { hour: "2-digit", minute: "2-digit" }) })} · {t("playback.duration", { minutes: number(Math.floor(elapsed / 60)), seconds: number(elapsed % 60) })}{busy && <> · {t("playback.restarting")}</>}</p>
     {session.chatError && <p className="notice">{t("playback.chatFailure")}</p>}
     {session.failure && <p className="error">{playbackError({ code: session.failure })}</p>}
+    {kick && session.phase === "failed" && <p className="notice">{t(session.qualityPolicy === "audio" ? "kick.audioFailure" : "kick.playbackFailure")}</p>}
     <div className="session-actions">
       <button disabled={isStopping(session.id) || !active} onClick={() => stop(session.id)}>{t("playback.stop")}</button>
       <label>{t("playback.restartQuality")}<select value={quality ?? "inherit"} onChange={event => setQuality(event.target.value === "inherit" ? null : event.target.value as QualityPolicy)} disabled={busy}>
-        <option value="inherit">{t("playback.useCurrentChannelDefault")}</option>{Object.entries(qualityLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+        <option value="inherit">{t(kick ? "kick.useCurrentDefault" : "playback.useCurrentChannelDefault")}</option>{Object.entries(qualityLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
       </select></label>
       <button disabled={busy || isStopping(session.id) || !session.stream} onClick={() => restart(session, quality)}>{t("playback.restart")}</button>
+      {kick && <KickChatButton slug={kick.slug} />}
       <span className="muted">{t("playback.qualityRestartHelp")}</span>
     </div>
     <details className="session-diagnostics"><summary>{t("playback.diagnostics")}</summary>
+      {kick && <p className="muted">{t("kick.diagnosticsHelp")}</p>}
       <p className="muted path">{t("playback.session")}{" "}{session.id}{" "}{t("playback.generation")}{" "}{session.generation}{" "}{t("playback.pid")}{" "}{session.pid || "—"}{" "}{t("playback.exit")}{" "}{session.exitCode ?? "—"}</p>
       <pre tabIndex={0} aria-label={t("playback.diagnosticsFor", { id: session.id })}>{session.logs.map(entry => `[${entry.source}] ${entry.text}`).join("\n") || t("playback.noDiagnostics")}</pre>
       {session.droppedLogEntries > 0 && <p className="muted">{count("playback.droppedLogs", session.droppedLogEntries)}</p>}

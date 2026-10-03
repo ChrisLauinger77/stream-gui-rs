@@ -131,6 +131,8 @@ fn build_app(initial: Option<crate::navigation::NavigationIntent>) -> tauri::Res
             commands::discover_players,
             commands::streamlink_restart,
             commands::streamlink_launch,
+            commands::play_kick_channel,
+            commands::open_kick_browser_chat,
             commands::streamlink_stop,
             commands::streamlink_sessions,
             commands::auth_status,
@@ -416,6 +418,8 @@ mod tests {
             "modify_player_profile",
             "discover_chatterino",
             "open_browser_chat",
+            "play_kick_channel",
+            "open_kick_browser_chat",
         ] {
             assert!(
                 authority

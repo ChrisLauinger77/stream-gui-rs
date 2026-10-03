@@ -4,7 +4,8 @@ use super::{AppError, ErrorCode, Result};
 use crate::streamlink::{
     discovery::{PlayerDiscovery, SearchLocations, discover_players, resolve_player},
     playback::{
-        LaunchSpec, PlaybackRequest, PlaybackStream, QualityPolicy, RestartRequest, check_version,
+        KickPlaybackRequest, KickSlug, LaunchSpec, PlaybackRequest, PlaybackStream, QualityPolicy,
+        RestartRequest, check_version,
     },
 };
 use crate::{
@@ -106,6 +107,16 @@ impl Services {
     pub async fn open_browser_chat(&self, request: super::chat::ChatRequest) -> Result<()> {
         self.open_chat_using(request, true).await
     }
+    pub async fn open_kick_browser_chat(
+        &self,
+        request: super::chat::KickChatRequest,
+    ) -> Result<()> {
+        self.ensure_open()?;
+        let target = super::chat::ChatTarget::for_kick(KickSlug::parse(&request.slug)?);
+        self.chat
+            .open(target, tokio_util::sync::CancellationToken::new())
+            .await
+    }
     async fn open_chat_using(
         &self,
         request: super::chat::ChatRequest,
@@ -152,7 +163,7 @@ impl Services {
         {
             return snapshot;
         }
-        let Some(stream) = &snapshot.stream else {
+        let Some(PlaybackStream::Twitch(stream)) = &snapshot.stream else {
             return snapshot;
         };
         let result = match super::chat::ChatTarget::for_login(&stream.login) {
@@ -399,7 +410,12 @@ impl Services {
         quality: Option<QualityPolicy>,
     ) -> Result<LaunchSpec> {
         self.ensure_open()?;
-        let settings = self.settings.effective(&stream.broadcaster_id, quality)?;
+        let settings = match &stream {
+            PlaybackStream::Twitch(stream) => {
+                self.settings.effective(&stream.broadcaster_id, quality)?
+            }
+            PlaybackStream::Kick { .. } => self.settings.effective_kick(quality),
+        };
         let player = resolve_player(&settings.player, &SearchLocations::system())?;
         let probe =
             streamlink::probe(settings.streamlink_path.as_deref(), Duration::from_secs(5)).await?;
@@ -451,6 +467,32 @@ impl Services {
                 .await?;
             drop(_operation);
             Ok(services.automatic_chat(snapshot, lease.cancel).await)
+        })
+        .await
+        .map_err(|_| {
+            AppError::new(
+                ErrorCode::Internal,
+                "Playback operation ended unexpectedly.",
+            )
+        })?
+    }
+
+    pub async fn play_kick(
+        self: &Arc<Self>,
+        request: KickPlaybackRequest,
+    ) -> Result<SessionSnapshot> {
+        let stream = PlaybackStream::Kick {
+            slug: KickSlug::parse(&request.slug)?,
+        };
+        let permit = self.playback_permit()?;
+        let services = self.clone();
+        // Like Twitch launch, native preparation remains owned if the UI goes away.
+        tokio::spawn(async move {
+            let _permit = permit;
+            let _operation = services.streamlink_operation.lock().await;
+            let spec = services.prepare_playback(stream, request.quality).await?;
+            services.ensure_open()?;
+            services.sessions.launch_spec(spec).await
         })
         .await
         .map_err(|_| {

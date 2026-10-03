@@ -1,6 +1,7 @@
 import type { ErrorCode } from "../lib/generated";
 import { currentLocale, translate, type Locale, type MessageKey } from "../i18n";
 const keys: Record<ErrorCode, MessageKey> = {
+  invalid_kick_slug: "kick.invalidSlug",
   incomplete: "errors.incomplete",
   notification: "errors.notification",
   chatterino_not_found: "errors.chatterinoNotFound",

@@ -15,11 +15,17 @@ pub struct ChatRequest {
     pub auth_session_id: String,
     pub broadcaster_id: String,
 }
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct KickChatRequest {
+    pub slug: String,
+}
 
 #[derive(Clone, Debug)]
 pub struct ChatTarget {
     url: String,
-    login: String,
+    // Only a Twitch target may reach Chatterino.
+    login: Option<String>,
 }
 impl ChatTarget {
     pub(crate) fn for_login(login: &str) -> Result<Self> {
@@ -29,8 +35,14 @@ impl ChatTarget {
                 "https://www.twitch.tv/popout/{}/chat",
                 login.to_ascii_lowercase()
             ),
-            login: login.to_ascii_lowercase(),
+            login: Some(login.to_ascii_lowercase()),
         })
+    }
+    pub(crate) fn for_kick(slug: crate::streamlink::playback::KickSlug) -> Self {
+        Self {
+            url: format!("https://kick.com/popout/{}/chat", slug.as_str()),
+            login: None,
+        }
     }
     pub fn url(&self) -> &str {
         &self.url
@@ -50,7 +62,7 @@ impl ChatOpener for Unavailable {
 pub fn open_error() -> AppError {
     AppError::new(
         ErrorCode::BrowserOpen,
-        "Could not open Twitch chat in the default browser.",
+        "Could not open chat in the default browser.",
     )
 }
 
@@ -114,7 +126,12 @@ impl BrowserChat {
                         opener.open(&target).map_err(|_| open_error())
                     }
                     crate::config::ChatProvider::Chatterino => chatterino.open_after_discovery(
-                        &target.login,
+                        target.login.as_deref().ok_or_else(|| {
+                            AppError::new(
+                                ErrorCode::ChatLaunch,
+                                "Chatterino requires a Twitch channel.",
+                            )
+                        })?,
                         || {
                             crate::chatterino::resolve(
                                 path.as_deref(),
@@ -210,6 +227,67 @@ mod tests {
             .is_err()
         );
         assert_eq!(recorder.0.lock().unwrap().len(), 1);
+    }
+    #[tokio::test]
+    async fn kick_browser_chat_is_fixed_independent_and_never_routes_to_chatterino() {
+        use crate::streamlink::playback::KickSlug;
+        let target = ChatTarget::for_kick(KickSlug::parse("Example-1").unwrap());
+        assert_eq!(target.url(), "https://kick.com/popout/example-1/chat");
+        let recorder = Arc::new(Recorder::default());
+        let chat = BrowserChat::new(recorder.clone());
+        assert_eq!(
+            chat.open_configured(
+                target.clone(),
+                crate::config::ChatProvider::Chatterino,
+                None,
+                CancellationToken::new()
+            )
+            .await
+            .unwrap_err()
+            .code,
+            ErrorCode::ChatLaunch
+        );
+        assert!(recorder.0.lock().unwrap().is_empty());
+        chat.open(target, CancellationToken::new()).await.unwrap();
+        assert_eq!(
+            *recorder.0.lock().unwrap(),
+            ["https://kick.com/popout/example-1/chat"]
+        );
+        let directory = tempfile::tempdir().unwrap();
+        let services = crate::domain::services::Services::new(directory.path(), None)
+            .unwrap()
+            .with_chat_opener(recorder.clone());
+        let mut settings = services.settings.snapshot();
+        settings.chat_provider = crate::config::ChatProvider::Chatterino;
+        services.settings.update(settings).unwrap();
+        services
+            .open_kick_browser_chat(KickChatRequest {
+                slug: "Other-2".into(),
+            })
+            .await
+            .unwrap();
+        assert!(services.sessions.sessions().await.is_empty());
+        assert_eq!(
+            recorder.0.lock().unwrap()[1],
+            "https://kick.com/popout/other-2/chat"
+        );
+        for slug in ["https://evil.example", "a/../../x", "x?token=secret"] {
+            assert_eq!(
+                services
+                    .open_kick_browser_chat(KickChatRequest { slug: slug.into() })
+                    .await
+                    .unwrap_err()
+                    .code,
+                ErrorCode::InvalidKickSlug
+            );
+        }
+        assert_eq!(recorder.0.lock().unwrap().len(), 2);
+        assert!(
+            serde_json::from_str::<KickChatRequest>(
+                r#"{"slug":"example","url":"https://evil.example"}"#
+            )
+            .is_err()
+        );
     }
     #[tokio::test]
     async fn queued_open_rechecks_auth_cancellation_before_native_dispatch() {

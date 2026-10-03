@@ -109,6 +109,18 @@ fn main() {
     assert_eq!(args[0], "--no-config");
     let boundary = args.iter().position(|arg| arg == "--").unwrap();
     let url = &args[boundary + 1];
+    if url.starts_with("https://kick.com/") && name.contains("kickrecord") {
+        std::fs::write(
+            executable.with_extension("argv.json"),
+            serde_json::to_vec(&args).unwrap(),
+        )
+        .unwrap();
+    }
+    if url.ends_with("/video-only") && args[boundary + 2] == "audio,audio_only" {
+        // Deterministic rendition selection failure, not authoritative live status.
+        eprintln!("Only video renditions are available; private challenge state must not escape");
+        std::process::exit(1);
+    }
     if url.ends_with("/arguments") {
         println!("{}", serde_json::to_string(&args).unwrap());
     } else if url.ends_with("/delayed") {
@@ -147,11 +159,18 @@ fn main() {
         }
     } else if url.ends_with("/hold") || url.ends_with("/holdb") || url.ends_with("/tree") {
         if url.ends_with("/tree") {
-            let child = std::process::Command::new(executable)
+            let child = std::process::Command::new(&executable)
                 .arg("--descendant")
                 .spawn()
                 .unwrap();
             println!("descendant {}", child.id());
+            if name.contains("kickrecord") {
+                std::fs::write(
+                    executable.with_extension("descendant"),
+                    child.id().to_string(),
+                )
+                .unwrap();
+            }
             // The supervisor owns the tree; this parent deliberately doesn't
             // reap the descendant to simulate an external process tree.
             std::mem::forget(child);
