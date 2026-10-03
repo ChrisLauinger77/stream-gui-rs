@@ -12,7 +12,33 @@ Stream GUI RS has moved from a playback prototype to a cross-platform desktop ap
 
 Rust now owns authentication, Helix/cache/rate limits, settings, native integrations and the sole Streamlink process supervisor. React owns presentation and interaction through typed IPC. Linux, macOS and Windows builds share these boundaries. The core browsing, playback, settings, notification/background, discovery and installed-link capabilities are established; new work should preserve their security, session and lifecycle guarantees rather than restart the architecture.
 
-Advanced transports, more chat clients, legacy configuration import, an embedded player, automatic updating, a separate automation CLI and additional streaming services remain deferred. None is a prerequisite for 1.0; revisit them only for a demonstrated user workflow and a viable cross-platform maintenance plan.
+Exact Kick live-channel playback and explicit browser chat are implemented through Streamlink and the existing playback services; official Kick discovery remains deferred as described below. Advanced transports, more chat clients, legacy configuration import, an embedded player, automatic updating, a separate automation CLI and further streaming services remain deferred. None is a prerequisite for 1.0; revisit them only for a demonstrated user workflow and a viable cross-platform maintenance plan.
+
+## Kick discovery (Stage 2): deferred
+
+**Decision B, revalidated 2026-10-03.** Kick Stage 2 remains deferred because the official discovery APIs still require authenticated tokens that cannot currently be obtained safely by a distributed desktop application without a confidential client secret or backend. The short revalidation found no material change to the access constraints established by the feasibility research earlier that day. Stage 1 playback and explicit browser chat remain available independently of Kick authentication.
+
+Official sources checked:
+
+- [Kick OAuth guide](https://docs.kick.com/getting-started/generating-tokens-oauth2-flow): authorization-code exchange requires both PKCE and `client_secret`; app tokens use `client_credentials` with `client_secret`. No public/native secretless client registration, secretless PKCE exchange or device flow is documented.
+- [Kick API specification](https://api.kick.com/swagger/doc.yaml): discovery operations require an app or user token; no anonymous discovery access or viewer Following-list operation is documented.
+- [Kick documentation index](https://docs.kick.com/llms.txt): no additional public/native authorization flow is listed.
+- [Official changelog](https://github.com/KickEngineering/KickDevDocs/blob/main/changelog.md): V2 categories and livestreams plus user-ID livestream lookup are documented; no new secretless desktop access model is announced. V1 category discovery and V1 livestream browsing are deprecated.
+
+Relevant official operations at `https://api.kick.com` remain:
+
+| Operation | Discovery capability | Required access |
+| --- | --- | --- |
+| `GET /public/v2/categories` | Categories with filters and cursor pagination | App or user token |
+| `GET /public/v2/livestreams` | Live browsing, including category filtering, with cursor pagination | App or user token |
+| `GET /public/v1/channels` | Exact channel metadata by slug or broadcaster ID | App token, or user token with `channel:read` |
+| `GET /public/v1/users/livestreams` | Active streams for supplied user IDs | App or user token |
+
+The last operation requires known IDs; it does not return a viewer's Following list. Token authorization and a Following-list endpoint are separate prerequisites. Existing follow events do not supply that list.
+
+**Revisit trigger:** Kick must officially document access to the needed discovery operations through anonymous requests, secretless public/native OAuth (PKCE or device flow), or another token model that does not require a confidential application secret. Verify that both registration and the complete token lifecycle support distributed desktop clients before implementation. A future official model requiring a backend/shared secret needs explicit product approval before changing this architecture. Following remains separately deferred until an official viewer Following-list endpoint and its authorization requirements are documented.
+
+**Current implementation boundary:** no Kick discovery client, OAuth, dependencies, secret handling or backend is added. Do not replace the blocked official access with website scraping, undocumented endpoints, Streamlink-based browsing or user-supplied developer registrations. No Kick developer-app scopes are required for the deferred work or existing playback/browser chat; the registration remains unused.
 
 ## Native dependency maintenance after 1.0
 

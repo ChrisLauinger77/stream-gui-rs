@@ -123,6 +123,8 @@ Kick low latency uses `--kick-low-latency`. Availability and stability depend on
 
 Kick login, Following, browsing/categories/search, monitoring/notifications, persistent Kick channel overrides, bookmarks/hides, Chatterino integration, public deep links and VOD/clip UI are not supported.
 
+Official Kick discovery remains deferred: the documented API tokens require a confidential client secret, with no documented safe access path for a distributed desktop app. See the [Stage 2 decision and revisit conditions](docs/road-to-1.0.md#kick-discovery-stage-2-deferred) revalidated on 2026-10-03. Existing playback and browser chat require no Kick developer-app scopes.
+
 ## Discovery, appearance, and support
 
 **Live** and category streams offer **Stream language**: Any language, a curated language list, or Other. Twitch applies the filter on the server. Changing it starts that view from its first page and saves the default for later discovery visits. Back restores the language used by that earlier visit. Following, Search, and the background monitor keep their existing scope.
