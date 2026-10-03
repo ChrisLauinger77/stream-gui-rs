@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 1.5.0 - 2026-10-03
+
+### Added
+
+- Exact Kick live-channel playback and explicit browser chat, including while signed out of Twitch.
+- Service labels in Watching, with independent Stop/Restart controls for Twitch and Kick sessions.
+
+### Improved
+
+- Kick reuses global/player-profile settings and quality policies, with its own low-latency option and no automatic chat.
+- Updated UUID, libc and the Rust toolchain action.
+
 ## 1.1.0 - 2026-10-01
 
 ### Added
