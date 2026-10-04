@@ -80,6 +80,12 @@ test("single-line controls share sizing across browsing, settings and playback",
       const fieldStyle = getComputedStyle(field);
       expect(fieldStyle.height, field.outerHTML).toBe(controlHeight);
     }
+    for (const select of fixture.querySelectorAll("select")) {
+      const selectStyle = getComputedStyle(select);
+      expect(selectStyle.paddingTop, "native select text needs the full inner height").toBe("0px");
+      expect(selectStyle.paddingBottom, "native select descenders must not be clipped").toBe("0px");
+      expect(selectStyle.lineHeight, "native selects center their own text line").toBe("normal");
+    }
     for (const button of fixture.querySelectorAll("button:not(.text-button):not(.item-link)")) {
       const buttonStyle = getComputedStyle(button);
       expect(buttonStyle.minHeight, button.outerHTML).toBe(controlHeight);
