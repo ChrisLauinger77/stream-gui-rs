@@ -59,3 +59,35 @@ test("text size percentages preserve the system base and scalable text units", (
     expect(rule.style.getPropertyValue("font-size"), `fixed text size in ${rule.selectorText}`).not.toMatch(/px$/);
   }
 });
+
+test("single-line controls share sizing across browsing, settings and playback", () => {
+  const style = document.createElement("style"); style.textContent = css; document.head.append(style);
+  const fixture = document.createElement("div");
+  fixture.innerHTML = `
+    <div class="language-filter"><label>Stream language<select><option>English</option></select></label><button>Reset language</button></div>
+    <div class="open-channel"><label>Service<select><option>Twitch</option></select></label><form class="search-form exact-lookup"><label>Channel<input></label><button>Open channel</button></form></div>
+    <form class="search-form"><label>Search<input type="search"></label></form>
+    <div class="argument-row"><label>Player argument<input></label><button>Remove</button></div>
+    <div class="session-actions"><label>Quality<select><option>Source</option></select></label><button>Restart</button></div>
+    <button class="watch-button">Watch</button><div class="sign-in"><button class="primary">Sign in</button></div>
+    <label class="checkbox-label"><input type="checkbox">Low latency</label>
+    <button class="text-button">Category</button><button class="item-link">Channel</button>`;
+  document.body.append(fixture);
+  try {
+    const controlHeight = "var(--control-height)";
+    expect(getComputedStyle(document.documentElement).getPropertyValue("--control-height").trim()).toMatch(/^\d+(\.\d+)?rem$/);
+    for (const field of fixture.querySelectorAll('input:not([type="checkbox"]),select')) {
+      const fieldStyle = getComputedStyle(field);
+      expect(fieldStyle.height, field.outerHTML).toBe(controlHeight);
+    }
+    for (const button of fixture.querySelectorAll("button:not(.text-button):not(.item-link)")) {
+      const buttonStyle = getComputedStyle(button);
+      expect(buttonStyle.minHeight, button.outerHTML).toBe(controlHeight);
+      expect(buttonStyle.height, "long labels must be able to wrap").toBe("auto");
+      expect(buttonStyle.paddingTop).toBe(getComputedStyle(fixture.querySelector("input")).paddingTop);
+      expect(buttonStyle.paddingBottom).toBe(getComputedStyle(fixture.querySelector("input")).paddingBottom);
+    }
+    expect(getComputedStyle(fixture.querySelector('input[type="checkbox"]')).height).toBe("auto");
+    for (const link of fixture.querySelectorAll(".text-button,.item-link")) expect(getComputedStyle(link).minHeight).toBe("0px");
+  } finally { fixture.remove(); style.remove(); }
+});
