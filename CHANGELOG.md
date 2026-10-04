@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.5.1 - 2026-10-04
+
+### Fixed
+
+- Standardized single-line button, input and select heights across browsing, settings and playback while allowing long button labels to wrap.
+
+### Improved
+
+- Updated Tokio to 1.53.2.
+
 ## 1.5.0 - 2026-10-03
 
 ### Added
