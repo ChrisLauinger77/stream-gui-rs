@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.5.2 - 2026-10-04
+
+### Fixed
+
+- Prevented clipped text in native dropdowns while preserving consistent control heights.
+
+### Improved
+
+- Updated the jsdom test dependency to 30.1.2.
+
 ## 1.5.1 - 2026-10-04
 
 ### Fixed
