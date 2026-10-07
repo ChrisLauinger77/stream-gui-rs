@@ -56,6 +56,17 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "candidate-run=$candidate_run" >> "$GITHUB_OUTPUT"
           echo "Source: $GITHUB_SHA; version: $version; candidate run: $candidate_run" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            {
+              printf '\nAfter this candidate succeeds and the release gate passes, run:\n\n'
+              printf '%s\n' '```bash' \
+                "git tag -a v$version $GITHUB_SHA \\" \
+                "  -m \"Stream GUI RS $version\" \\" \
+                "  -m \"Candidate-Run: $candidate_run\"" \
+                "git push origin v$version" \
+                '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   linux-x86_64:
     name: Linux x86_64 packages
