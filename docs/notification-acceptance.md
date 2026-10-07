@@ -4,13 +4,11 @@ The `notification-acceptance` Cargo feature exposes **Settings → Developer too
 
 Each **Send test notification** queues fixed, clearly labeled test content through the same production adapter as followed-live notifications. Sending is enabled only when Rust reports granted or OS-managed permission; the backend also rejects tests while permission is unknown, unrequested, denied or unavailable. “Queued” confirms worker submission, not OS delivery. Clicking uses the real OS callback, opaque activation lookup, window restore/focus and acknowledged desktop action. The destination is **TEST notification · Synthetic channel**, a local view with no channel request, playback or chat action. Twitch sign-in, HTTP and monitoring are not required. Sending or clearing does not change settings, monitor baselines or deduplication.
 
-## CI acceptance packages
+## CI package checks
 
-After a successful **Desktop checks** run for a push to `main` or a same-repository pull request, download the matching `stream-gui-rs-notification-acceptance-<OS>-<architecture>-<commit>` artifact: Linux `.deb`, Windows NSIS installer, or macOS `.dmg`. These debug packages include the test action and require the repository's registered public client ID during packaging. Fork and Dependabot pull requests run compilation checks without uploading acceptance packages; the normal packaged-mode build is still checked without the acceptance feature.
+**CI** runs on pull requests targeting `main`, including pushes to an open PR branch, and manual dispatch. It does not run automatically on pushes to `main` and does not upload artifacts. Same-repository pull requests (except Dependabot) and manual runs validate debug acceptance packaging with the repository's registered public client ID. Fork and Dependabot pull requests retain compilation checks without packaging secrets.
 
-For a pull request, the artifact commit and About commit identify GitHub's tested merge commit, not just the branch head. Record the workflow run, artifact name and About version/commit when reporting native results. Building these packages does not merge the pull request or publish a release.
-
-The macOS CI artifact targets the runner's native architecture, recorded in its name; it is not the universal release image. Install the matching package and use the manual checks below. CI creation does not prove notification behavior on the target desktop. Artifacts request 14-day retention, but the repository's weekly cleanup can remove them once they are more than 24 hours old; download the intended build promptly. These artifacts are development builds, not GitHub Releases.
+For native acceptance, build the reviewed revision on each affected platform using the commands below. Record the source commit, build command and About version/commit when reporting results. CI packaging and signature checks do not prove notification behavior on the target desktop.
 
 ## Build and run
 
@@ -39,7 +37,7 @@ TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --deb
 
 Open `src-tauri/target/debug/bundle/macos/Stream GUI RS.app` as an application bundle. In Developer tools, use **Allow desktop notifications** if permission is not requested. If denied, re-enable in System Settings. A bare executable cannot exercise the macOS notification adapter. Test separately on the supported native architectures.
 
-Tauri explicitly ad-hoc signs the completed macOS app bundle, and CI verifies that signature before uploading the package. This requires no Apple credentials and does not provide Developer ID trust or notarization. If no permission prompt appears and the app is absent from System Settings → Notifications, inspect the installed bundle:
+Tauri explicitly ad-hoc signs the completed macOS app bundle, and CI verifies that signature during package checks. This requires no Apple credentials and does not provide Developer ID trust or notarization. If no permission prompt appears and the app is absent from System Settings → Notifications, inspect the installed bundle:
 
 ```sh
 codesign --display --verbose=2 '/Applications/Stream GUI RS.app'
