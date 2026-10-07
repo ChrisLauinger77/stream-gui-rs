@@ -52,7 +52,8 @@ jobs:
             node scripts/verify-release-candidate.mjs candidate-run.json "$GITHUB_SHA"
           fi
           node scripts/set-version.mjs --check "$version"
-          test -f "docs/release-notes-$version.md"
+          test -f docs/release-notes.md
+          test "$(head -n 1 docs/release-notes.md)" = "# Stream GUI RS $version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "candidate-run=$candidate_run" >> "$GITHUB_OUTPUT"
           echo "Source: $GITHUB_SHA; version: $version; candidate run: $candidate_run" >> "$GITHUB_STEP_SUMMARY"
@@ -358,7 +359,7 @@ jobs:
               --verify-tag \
               --draft \
               --title "Stream GUI RS ${VERSION}" \
-              --notes-file "docs/release-notes-$VERSION.md"
+              --notes-file docs/release-notes.md
           fi
           gh release upload "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --clobber
       - name: Verify uploaded assets and publish

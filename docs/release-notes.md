@@ -1,5 +1,7 @@
 # Stream GUI RS 1.5.2
 
+Changes since Stream GUI RS 1.5.1.
+
 This patch release fixes clipped text in native dropdowns.
 
 ## Fixes
