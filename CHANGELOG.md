@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.5.3 - 2026-10-09
+
+### Improved
+
+- Updated Tauri to 2.12.2, objc2 to 0.6.5, zeroize to 1.9.1 and tokio-util to 0.7.20.
+- Updated Vite to 8.3.4, the React Vite plugin to 6.1.2 and CI tooling.
+- Consolidated release notes and added candidate tag commands to release workflow summaries.
+
 ## 1.5.2 - 2026-10-04
 
 ### Fixed
