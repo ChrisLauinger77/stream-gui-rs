@@ -2,9 +2,95 @@ use super::localization as l10n;
 use super::*;
 use crate::domain::background::DesktopAction;
 use tauri::{
+    image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
 };
+
+const GLYPH_SIZE: u32 = 64;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+const WHITE: [u8; 3] = [255, 255, 255];
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+const BLACK: [u8; 3] = [0, 0, 0];
+
+/// Rasterizes the status-area glyph: the logo's stream lines and play mark in
+/// one color with antialiased alpha. Status areas conventionally show
+/// monochrome icons, while windows, bundles and notifications keep the
+/// colored application icon. Geometry uses a 32-unit design grid.
+fn glyph(size: u32, [r, g, b]: [u8; 3]) -> Vec<u8> {
+    const SAMPLES: u32 = 4;
+    let scale = 32.0 / size as f32;
+    let sample =
+        |pixel: u32, step: u32| (pixel as f32 + (step as f32 + 0.5) / SAMPLES as f32) * scale;
+    let mut rgba = Vec::with_capacity((size * size * 4) as usize);
+    for y in 0..size {
+        for x in 0..size {
+            let hits = (0..SAMPLES * SAMPLES)
+                .filter(|&step| glyph_covers(sample(x, step % SAMPLES), sample(y, step / SAMPLES)))
+                .count() as u32;
+            rgba.extend_from_slice(&[r, g, b, (hits * 255 / (SAMPLES * SAMPLES)) as u8]);
+        }
+    }
+    rgba
+}
+
+fn glyph_covers(x: f32, y: f32) -> bool {
+    let near = |(ax, ay): (f32, f32), (bx, by): (f32, f32), radius: f32| {
+        let (dx, dy) = (bx - ax, by - ay);
+        let t = (((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
+        let (ex, ey) = (x - ax - t * dx, y - ay - t * dy);
+        ex * ex + ey * ey <= radius * radius
+    };
+    let lines = [
+        ((6.0, 9.5), (13.0, 9.5)),
+        ((3.0, 16.0), (13.0, 16.0)),
+        ((7.0, 22.5), (13.0, 22.5)),
+    ];
+    if lines.iter().any(|&(a, b)| near(a, b, 1.5)) {
+        return true;
+    }
+    // Play mark with one-unit rounded corners.
+    let (top, bottom, tip): ((f32, f32), (f32, f32), (f32, f32)) =
+        ((17.5, 7.5), (17.5, 24.5), (29.0, 16.0));
+    let rise = (x - top.0) * (tip.1 - top.1) / (tip.0 - top.0);
+    let inside = x >= top.0 && y >= top.1 + rise && y <= bottom.1 - rise;
+    inside || near(top, bottom, 1.0) || near(top, tip, 1.0) || near(bottom, tip, 1.0)
+}
+
+fn glyph_image(color: [u8; 3]) -> Image<'static> {
+    Image::new_owned(glyph(GLYPH_SIZE, color), GLYPH_SIZE, GLYPH_SIZE)
+}
+
+/// Windows has no template icons; follow the taskbar's own light/dark mode.
+/// A missing value means a pre-1903 dark taskbar.
+#[cfg(target_os = "windows")]
+fn light_taskbar() -> bool {
+    use ::windows::{
+        Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW},
+        core::w,
+    };
+    let mut value = 0u32;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    // SAFETY: fixed NUL-terminated names; RRF_RT_REG_DWORD restricts the
+    // result to a DWORD written into this exactly sized buffer.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"),
+            w!("SystemUsesLightTheme"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some((&raw mut value).cast()),
+            Some(&raw mut size),
+        )
+    };
+    status.is_ok() && value != 0
+}
+
+#[cfg(target_os = "windows")]
+fn taskbar_glyph(light: bool) -> Image<'static> {
+    glyph_image(if light { BLACK } else { WHITE })
+}
 
 #[cfg(target_os = "linux")]
 fn indicator_available() -> bool {
@@ -90,7 +176,7 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
             &quit,
         ],
     )?;
-    let mut builder = TrayIconBuilder::with_id("main-tray")
+    let builder = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
         .tooltip("Stream GUI RS")
         .show_menu_on_left_click(true)
@@ -116,9 +202,16 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
             "quit" => begin_shutdown(app),
             _ => {}
         });
-    if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone());
-    }
+    // macOS tints a template image for the menu bar appearance itself.
+    #[cfg(target_os = "macos")]
+    let builder = builder.icon(glyph_image(BLACK)).icon_as_template(true);
+    #[cfg(target_os = "windows")]
+    let mut light = light_taskbar();
+    #[cfg(target_os = "windows")]
+    let builder = builder.icon(taskbar_glyph(light));
+    // Linux indicator hosts cannot recolor pixmaps; panels are predominantly dark.
+    #[cfg(target_os = "linux")]
+    let builder = builder.icon(glyph_image(WHITE));
     let tray = builder.build(app)?;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -130,6 +223,13 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
                 .load(Ordering::SeqCst)
             {
                 break;
+            }
+            #[cfg(target_os = "windows")]
+            if let Ok(current) = tauri::async_runtime::spawn_blocking(light_taskbar).await
+                && current != light
+            {
+                let _ = tray.set_icon(Some(taskbar_glyph(current)));
+                light = current;
             }
             let services = app.state::<Arc<Services>>();
             let status = services.monitor.snapshot();
@@ -204,4 +304,23 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
         }
     });
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tray_glyph_is_single_color_with_separated_marks() {
+        let rgba = glyph(32, [10, 20, 30]);
+        assert_eq!(rgba.len(), 32 * 32 * 4);
+        assert!(rgba.chunks(4).all(|pixel| pixel[..3] == [10, 20, 30]));
+        let alpha = |x: usize, y: usize| rgba[(y * 32 + x) * 4 + 3];
+        // Stream line, play mark, and the transparent gap and margin around them.
+        assert_eq!(alpha(8, 16), 255);
+        assert_eq!(alpha(21, 16), 255);
+        assert_eq!(alpha(15, 16), 0);
+        assert_eq!(alpha(0, 0), 0);
+        assert!(rgba.chunks(4).any(|pixel| pixel[3] > 0 && pixel[3] < 255));
+    }
 }
