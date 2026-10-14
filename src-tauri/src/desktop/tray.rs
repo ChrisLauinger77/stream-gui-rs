@@ -10,31 +10,61 @@ use tauri::{
 const GLYPH_SIZE: u32 = 64;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 const WHITE: [u8; 3] = [255, 255, 255];
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 const BLACK: [u8; 3] = [0, 0, 0];
 
+/// Outline drawn around a glyph: color, alpha and width in design units.
+type Halo = ([u8; 3], u8, f32);
+
+/// Linux indicator hosts show pixmaps untinted on light or dark panels, and the
+/// tray may be the only way back to a hidden window. A translucent dark
+/// outline keeps the white glyph visible on both.
+#[cfg(target_os = "linux")]
+const PANEL_HALO: Halo = (BLACK, 180, 1.0);
+
 /// Rasterizes the status-area glyph: the logo's stream lines and play mark in
-/// one color with antialiased alpha. Status areas conventionally show
-/// monochrome icons, while windows, bundles and notifications keep the
-/// colored application icon. Geometry uses a 32-unit design grid.
-fn glyph(size: u32, [r, g, b]: [u8; 3]) -> Vec<u8> {
+/// one color with antialiased alpha, optionally outlined. Status areas
+/// conventionally show monochrome icons, while windows, bundles and
+/// notifications keep the colored application icon. Geometry uses a 32-unit
+/// design grid.
+fn glyph(size: u32, color: [u8; 3], halo: Option<Halo>) -> Vec<u8> {
     const SAMPLES: u32 = 4;
     let scale = 32.0 / size as f32;
     let sample =
         |pixel: u32, step: u32| (pixel as f32 + (step as f32 + 0.5) / SAMPLES as f32) * scale;
+    let (halo_color, halo_alpha, grow) = halo.unwrap_or((color, 0, 0.0));
     let mut rgba = Vec::with_capacity((size * size * 4) as usize);
     for y in 0..size {
         for x in 0..size {
-            let hits = (0..SAMPLES * SAMPLES)
-                .filter(|&step| glyph_covers(sample(x, step % SAMPLES), sample(y, step / SAMPLES)))
-                .count() as u32;
-            rgba.extend_from_slice(&[r, g, b, (hits * 255 / (SAMPLES * SAMPLES)) as u8]);
+            let (mut fill, mut outline) = (0u32, 0u32);
+            for step in 0..SAMPLES * SAMPLES {
+                let (sx, sy) = (sample(x, step % SAMPLES), sample(y, step / SAMPLES));
+                if glyph_covers(sx, sy, 0.0) {
+                    fill += 1;
+                } else if grow > 0.0 && glyph_covers(sx, sy, grow) {
+                    outline += 1;
+                }
+            }
+            // Fill and outline samples are disjoint, so their weights add.
+            let (fill, outline) = (fill * 255, outline * u32::from(halo_alpha));
+            let total = fill + outline;
+            let channel = |c: u8, h: u8| match total {
+                0 => c,
+                _ => ((fill * u32::from(c) + outline * u32::from(h)) / total) as u8,
+            };
+            rgba.extend_from_slice(&[
+                channel(color[0], halo_color[0]),
+                channel(color[1], halo_color[1]),
+                channel(color[2], halo_color[2]),
+                (total / (SAMPLES * SAMPLES)) as u8,
+            ]);
         }
     }
     rgba
 }
 
-fn glyph_covers(x: f32, y: f32) -> bool {
+/// Whether a point lies within `grow` units of the glyph. Expanding every
+/// stroke radius dilates the shape exactly because the play mark is convex.
+fn glyph_covers(x: f32, y: f32, grow: f32) -> bool {
     let near = |(ax, ay): (f32, f32), (bx, by): (f32, f32), radius: f32| {
         let (dx, dy) = (bx - ax, by - ay);
         let t = (((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
@@ -46,7 +76,7 @@ fn glyph_covers(x: f32, y: f32) -> bool {
         ((3.0, 16.0), (13.0, 16.0)),
         ((7.0, 22.5), (13.0, 22.5)),
     ];
-    if lines.iter().any(|&(a, b)| near(a, b, 1.5)) {
+    if lines.iter().any(|&(a, b)| near(a, b, 1.5 + grow)) {
         return true;
     }
     // Play mark with one-unit rounded corners.
@@ -54,11 +84,12 @@ fn glyph_covers(x: f32, y: f32) -> bool {
         ((17.5, 7.5), (17.5, 24.5), (29.0, 16.0));
     let rise = (x - top.0) * (tip.1 - top.1) / (tip.0 - top.0);
     let inside = x >= top.0 && y >= top.1 + rise && y <= bottom.1 - rise;
-    inside || near(top, bottom, 1.0) || near(top, tip, 1.0) || near(bottom, tip, 1.0)
+    let edge = 1.0 + grow;
+    inside || near(top, bottom, edge) || near(top, tip, edge) || near(bottom, tip, edge)
 }
 
-fn glyph_image(color: [u8; 3]) -> Image<'static> {
-    Image::new_owned(glyph(GLYPH_SIZE, color), GLYPH_SIZE, GLYPH_SIZE)
+fn glyph_image(color: [u8; 3], halo: Option<Halo>) -> Image<'static> {
+    Image::new_owned(glyph(GLYPH_SIZE, color, halo), GLYPH_SIZE, GLYPH_SIZE)
 }
 
 /// Windows has no template icons; follow the taskbar's own light/dark mode.
@@ -89,7 +120,7 @@ fn light_taskbar() -> bool {
 
 #[cfg(target_os = "windows")]
 fn taskbar_glyph(light: bool) -> Image<'static> {
-    glyph_image(if light { BLACK } else { WHITE })
+    glyph_image(if light { BLACK } else { WHITE }, None)
 }
 
 #[cfg(target_os = "linux")]
@@ -204,14 +235,16 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
         });
     // macOS tints a template image for the menu bar appearance itself.
     #[cfg(target_os = "macos")]
-    let builder = builder.icon(glyph_image(BLACK)).icon_as_template(true);
+    let builder = builder
+        .icon(glyph_image(BLACK, None))
+        .icon_as_template(true);
     #[cfg(target_os = "windows")]
     let mut light = light_taskbar();
     #[cfg(target_os = "windows")]
     let builder = builder.icon(taskbar_glyph(light));
-    // Linux indicator hosts cannot recolor pixmaps; panels are predominantly dark.
+    // Linux indicator hosts cannot recolor pixmaps; outline for any panel color.
     #[cfg(target_os = "linux")]
-    let builder = builder.icon(glyph_image(WHITE));
+    let builder = builder.icon(glyph_image(WHITE, Some(PANEL_HALO)));
     let tray = builder.build(app)?;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -312,7 +345,7 @@ mod tests {
 
     #[test]
     fn tray_glyph_is_single_color_with_separated_marks() {
-        let rgba = glyph(32, [10, 20, 30]);
+        let rgba = glyph(32, [10, 20, 30], None);
         assert_eq!(rgba.len(), 32 * 32 * 4);
         assert!(rgba.chunks(4).all(|pixel| pixel[..3] == [10, 20, 30]));
         let alpha = |x: usize, y: usize| rgba[(y * 32 + x) * 4 + 3];
@@ -322,5 +355,17 @@ mod tests {
         assert_eq!(alpha(15, 16), 0);
         assert_eq!(alpha(0, 0), 0);
         assert!(rgba.chunks(4).any(|pixel| pixel[3] > 0 && pixel[3] < 255));
+    }
+
+    #[test]
+    fn tray_glyph_halo_outlines_marks_for_any_panel_color() {
+        let rgba = glyph(64, [250, 250, 250], Some(([0, 0, 0], 180, 1.0)));
+        let pixel = |x: usize, y: usize| &rgba[(y * 64 + x) * 4..][..4];
+        // Fill keeps its color; the band just outside a stream line and the
+        // gap before the play mark become the translucent outline.
+        assert_eq!(pixel(16, 32), [250, 250, 250, 255]);
+        assert_eq!(pixel(16, 35), [0, 0, 0, 180]);
+        assert_eq!(pixel(30, 32), [0, 0, 0, 180]);
+        assert_eq!(pixel(0, 0)[3], 0);
     }
 }
