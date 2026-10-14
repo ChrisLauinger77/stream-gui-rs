@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.5.4 - 2026-10-14
+
+### Improved
+
+- Replaced the colored tray icon with a monochrome status-area glyph that follows the macOS menu bar and Windows taskbar appearance and stays outlined on Linux panels.
+- Updated Tauri to 2.12.3, the single-instance plugin to 2.5.3, tokio to 1.53.3, keyring-core to 1.0.1, Vitest to 5.0.4 and CI tooling.
+
 ## 1.5.3 - 2026-10-09
 
 ### Improved
