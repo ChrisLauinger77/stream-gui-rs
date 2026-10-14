@@ -19,6 +19,15 @@
       "groupName": null
     },
     {
+      "matchPackageNames": [
+        "react",
+        "react-dom",
+        "@types/react",
+        "@types/react-dom"
+      ],
+      "groupName": "react"
+    },
+    {
       "description": "Keep unrelated Rust updates independently reviewable",
       "matchManagers": [
         "cargo"
