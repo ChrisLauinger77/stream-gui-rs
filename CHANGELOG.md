@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.5.5 - 2026-10-15
+
+### Improved
+
+- Updated Tauri to 2.12.4, the single-instance plugin to 2.5.4, zbus to 5.19.0, hyper to 1.12.0, rustls to 0.23.46 and other locked Rust dependencies.
+- Raised the minimum supported Rust version to 1.90, as required by Tauri 2.12.
+
 ## 1.5.4 - 2026-10-14
 
 ### Improved
