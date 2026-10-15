@@ -7,7 +7,7 @@ license = "GPL-3.0-only"
 repository = "https://github.com/ChrisLauinger77/stream-gui-rs"
 homepage = "https://github.com/ChrisLauinger77/stream-gui-rs"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.90"
 default-run = "stream-gui-rs"
 
 [lib]
