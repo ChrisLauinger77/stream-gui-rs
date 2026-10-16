@@ -73,6 +73,51 @@ Platform requirements:
 
 Secure credential storage is mandatory for Twitch authentication. There is no plaintext fallback. A locked or unavailable native credential store produces an explicit error. Kick playback does not use this store or require Twitch sign-in.
 
+### Installing Streamlink
+
+Pick one method for your platform. Packages outside the Streamlink project are maintained by third parties and can lag behind; check `streamlink --version` reports 8.0 or newer. The [official install guide](https://streamlink.github.io/install.html) is authoritative.
+
+**Windows**
+
+| Method | Command |
+| --- | --- |
+| Windows Package Manager | `winget install streamlink` |
+| Scoop | `scoop bucket add extras` then `scoop install streamlink` |
+| Chocolatey | `choco install streamlink` |
+| Installer / portable | Download from [streamlink/windows-builds](https://github.com/streamlink/windows-builds/releases); the installer adds Streamlink to `PATH` and bundles FFmpeg |
+
+**macOS**
+
+| Method | Command |
+| --- | --- |
+| Homebrew (recommended) | `brew install streamlink` |
+
+**Linux**
+
+| Distribution | Command |
+| --- | --- |
+| Arch Linux | `sudo pacman -S streamlink` |
+| Debian testing/unstable | `sudo apt install streamlink` |
+| Debian stable | Enable `trixie-backports`, then `sudo apt -t trixie-backports install streamlink` |
+| Fedora | `sudo dnf install streamlink` |
+| openSUSE | `sudo zypper install streamlink` |
+| Gentoo | `sudo emerge net-misc/streamlink` |
+| NixOS | `nix-env -iA nixos.streamlink` |
+| Alpine | `sudo apk add streamlink` |
+| Void | `sudo xbps-install streamlink` |
+| Solus | `sudo eopkg install streamlink` |
+| AppImage | Download from [streamlink/streamlink-appimage](https://github.com/streamlink/streamlink-appimage/releases) (glibc 2.28+), `chmod +x` it, and select it by path in Settings |
+
+Ubuntu's package is inherited from Debian without updates and is usually too old; use the AppImage or pip instead.
+
+**Any platform (Python 3.10+)**
+
+```sh
+pip install --user -U streamlink
+```
+
+`pipx install streamlink` or `uv tool install streamlink` keep Streamlink in an isolated environment. If the resulting executable is not on the desktop application's `PATH`, select it in **Settings → Streamlink**.
+
 ## Install and connect
 
 1. Download the artifact for your platform and its checksum file from [GitHub Releases](https://github.com/ChrisLauinger77/stream-gui-rs/releases).
