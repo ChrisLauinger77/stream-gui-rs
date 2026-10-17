@@ -3,7 +3,7 @@
 Stream GUI RS is a cross-platform desktop frontend for browsing Twitch and watching streams through external
 Streamlink and a separately installed player. The stack is Tauri 2, Rust, React, TypeScript and Vite;
 targets are Linux, macOS and Windows. Twitch supplies identity and browsing data; Streamlink handles media.
-Kick support is limited to exact live-channel playback and explicit browser chat, with no Kick credentials or API client.
+Kick and YouTube support is limited to exact live playback and explicit browser chat, with no Kick/Google credentials or API client.
 
 ```text
 Twitch → Rust auth / Helix / cache → typed Tauri IPC → React
@@ -139,6 +139,10 @@ user.
   infer offline/browser/quality state from human-readable output. Support reports may include the closed
   service enum only, never locators, URLs or challenge data. Preserve process-group/job ownership and
   require real native challenge/playback acceptance separately from fixture/CI results.
+- `PlaybackStream::Youtube` carries only a validated `YoutubeLocator` (11-character video ID, `@handle` or
+  `UC…` channel ID), never a URL. It shares Kick's anonymous launch path, settings inheritance and browser-only
+  chat; chat requires a video ID. Emit no low-latency flag for YouTube. Keep normal bounded diagnostics, never
+  read cookies or Google credentials, and treat playback as best-effort against YouTube consent/bot checks.
 
 - Streamlink 8.0+ and players remain external dependencies. Orchestrate them; do not reimplement media
   transport or introduce download/transport frameworks.
