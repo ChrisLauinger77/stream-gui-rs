@@ -128,6 +128,20 @@ pip install --user -U streamlink
 6. Open **Settings → Streamlink** to test discovery, then choose and test the player settings.
 7. Browse a live channel and select **Watch**. Use **Watching** to stop or restart sessions.
 
+WinGet users can install the Windows build from the community `winget` source instead of downloading the installer manually:
+
+```powershell
+winget install --id ChrisLauinger77.Stream-GUI-RS --exact --source winget
+```
+
+To update an existing installation when a newer version is available in WinGet:
+
+```powershell
+winget upgrade --id ChrisLauinger77.Stream-GUI-RS --exact --source winget
+```
+
+The [WinGet package manifests](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/ChrisLauinger77/Stream-GUI-RS) may lag behind GitHub Releases. Streamlink and a player are still separate requirements; after installation, continue with step 3 above.
+
 Scoop users can install the portable Windows build from the author's bucket:
 
 ```powershell
