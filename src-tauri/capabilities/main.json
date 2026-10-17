@@ -15,6 +15,8 @@
     "allow-streamlink-launch",
     "allow-play-kick-channel",
     "allow-open-kick-browser-chat",
+    "allow-play-youtube-stream",
+    "allow-open-youtube-browser-chat",
     "allow-streamlink-stop",
     "allow-streamlink-sessions",
     "allow-streamlink-restart",

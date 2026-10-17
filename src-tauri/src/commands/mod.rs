@@ -87,6 +87,22 @@ pub async fn play_kick_channel(
 }
 
 #[tauri::command]
+pub async fn play_youtube_stream(
+    services: State<'_, Arc<Services>>,
+    request: crate::streamlink::playback::YoutubePlaybackRequest,
+) -> Result<SessionSnapshot> {
+    services.play_youtube(request).await
+}
+
+#[tauri::command]
+pub async fn open_youtube_browser_chat(
+    services: State<'_, Arc<Services>>,
+    request: crate::domain::chat::YoutubeChatRequest,
+) -> Result<()> {
+    services.open_youtube_browser_chat(request).await
+}
+
+#[tauri::command]
 pub async fn open_kick_browser_chat(
     services: State<'_, Arc<Services>>,
     request: crate::domain::chat::KickChatRequest,

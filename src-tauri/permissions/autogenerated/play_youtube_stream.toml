@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-play-youtube-stream"
+description = "Enables the play_youtube_stream command without any pre-configured scope."
+commands.allow = ["play_youtube_stream"]
+
+[[permission]]
+identifier = "deny-play-youtube-stream"
+description = "Denies the play_youtube_stream command without any pre-configured scope."
+commands.deny = ["play_youtube_stream"]

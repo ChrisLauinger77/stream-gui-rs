@@ -12,6 +12,7 @@ fn desktop_browser_dispatch_uses_the_default_handler_and_reaps_its_launcher() {
     for destination in [
         "https://www.twitch.tv/popout/synthetic/chat",
         "https://kick.com/popout/synthetic-channel/chat",
+        "https://www.youtube.com/live_chat?v=synthetic_1",
         env!("CARGO_PKG_REPOSITORY"),
     ] {
         check_destination(destination);

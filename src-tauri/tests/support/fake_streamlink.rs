@@ -109,13 +109,22 @@ fn main() {
     assert_eq!(args[0], "--no-config");
     let boundary = args.iter().position(|arg| arg == "--").unwrap();
     let url = &args[boundary + 1];
-    if url.starts_with("https://kick.com/") && name.contains("kickrecord") {
+    if (url.starts_with("https://kick.com/") && name.contains("kickrecord"))
+        || (url.starts_with("https://www.youtube.com/") && name.contains("youtuberecord"))
+    {
         std::fs::write(
             executable.with_extension("argv.json"),
             serde_json::to_vec(&args).unwrap(),
         )
         .unwrap();
     }
+    // YouTube handle URLs carry a fixed /live suffix; map them onto the shared
+    // scenario names so the same fixture drives every service.
+    let youtube = url
+        .strip_prefix("https://www.youtube.com/@")
+        .and_then(|rest| rest.strip_suffix("/live"))
+        .map(|scenario| format!("https://www.youtube.com/{scenario}"));
+    let url = youtube.as_ref().unwrap_or(url);
     if url.ends_with("/video-only") && args[boundary + 2] == "audio,audio_only" {
         // Deterministic rendition selection failure, not authoritative live status.
         eprintln!("Only video renditions are available; private challenge state must not escape");

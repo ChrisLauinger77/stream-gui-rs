@@ -127,6 +127,8 @@ fn main() {
             "streamlink_launch",
             "play_kick_channel",
             "open_kick_browser_chat",
+            "play_youtube_stream",
+            "open_youtube_browser_chat",
             "streamlink_stop",
             "streamlink_sessions",
             "streamlink_restart",

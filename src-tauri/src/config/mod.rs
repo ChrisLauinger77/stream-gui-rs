@@ -668,9 +668,9 @@ impl SettingsStore {
             .expect("settings mutex poisoned")
             .effective(id, quality))
     }
-    /// Kick has no stable account identity or per-channel preferences in Stage 1.
-    /// Resolve the same globals/profile without looking up any Twitch ID.
-    pub fn effective_kick(&self, quality: Option<QualityPolicy>) -> EffectivePlaybackSettings {
+    /// Kick and YouTube have no stable account identity or per-channel
+    /// preferences. Resolve the same globals/profile without any Twitch ID.
+    pub fn effective_anonymous(&self, quality: Option<QualityPolicy>) -> EffectivePlaybackSettings {
         let mut settings = self
             .value
             .lock()

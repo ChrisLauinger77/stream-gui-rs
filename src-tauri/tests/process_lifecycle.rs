@@ -760,6 +760,133 @@ async fn kick_audio_unavailable_fails_without_a_video_fallback_or_raw_output() {
     services.shutdown().await.unwrap();
 }
 
+fn youtube_request(locator: &str) -> stream_gui_rs::streamlink::playback::YoutubePlaybackRequest {
+    stream_gui_rs::streamlink::playback::YoutubePlaybackRequest {
+        locator: locator.into(),
+        quality: None,
+    }
+}
+
+#[tokio::test]
+async fn youtube_launches_signed_out_without_low_latency_and_restarts_beside_kick() {
+    use stream_gui_rs::config::ChatProvider;
+    use stream_gui_rs::streamlink::playback::StreamingService;
+    let root = helper_directory();
+    let executable = renamed_helper(root.path(), "youtuberecord");
+    let services = std::sync::Arc::new(Services::new(root.path(), None).unwrap());
+    services
+        .settings
+        .set_streamlink_path(Some(executable.to_string_lossy().into_owned()))
+        .unwrap();
+    let mut globals = services.settings.snapshot();
+    globals.automatic_chat = true;
+    globals.chat_provider = ChatProvider::Chatterino;
+    globals.low_latency = true;
+    services.save_settings(globals).await.unwrap();
+    for invalid in ["https://www.youtube.com/@hold", "@h", "hold"] {
+        assert_eq!(
+            services
+                .play_youtube(youtube_request(invalid))
+                .await
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidYoutubeLocator
+        );
+    }
+    let first = services
+        .play_youtube(youtube_request("@Hold"))
+        .await
+        .unwrap();
+    assert_eq!(first.url, "https://www.youtube.com/@hold/live");
+    assert_eq!(
+        serde_json::to_value(&first.stream).unwrap(),
+        serde_json::json!({"service":"youtube", "locator":"@hold"})
+    );
+    let effective = first.effective_settings.as_ref().unwrap();
+    assert!(!effective.automatic_chat);
+    assert_eq!(effective.chat_provider, ChatProvider::Browser);
+    assert!(effective.low_latency);
+    let args: Vec<String> = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            // The fixture writes non-atomically; retry until the JSON is complete.
+            if let Ok(bytes) = std::fs::read(executable.with_extension("argv.json"))
+                && let Ok(args) = serde_json::from_slice(&bytes)
+            {
+                break args;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(!args.iter().any(|arg| arg.ends_with("-low-latency")));
+    assert_eq!(
+        &args[args.len() - 3..],
+        ["--", "https://www.youtube.com/@hold/live", "best"]
+    );
+    let kick = services.play_kick(kick_request("holdb")).await.unwrap();
+    assert_eq!(
+        kick.stream.as_ref().unwrap().service(),
+        StreamingService::Kick
+    );
+    let restarted = services
+        .restart_playback(RestartRequest {
+            session_id: first.id.clone(),
+            generation: first.generation,
+            quality: Some(QualityPolicy::Low),
+        })
+        .await
+        .unwrap();
+    assert_process_exited(first.pid);
+    assert_eq!(restarted.generation, 2);
+    assert_eq!(restarted.stream, first.stream);
+    assert_eq!(restarted.quality_policy, Some(QualityPolicy::Low));
+    let sessions = services.sessions.sessions().await;
+    assert!(
+        sessions
+            .iter()
+            .any(|s| s.id == kick.id && s.phase == SessionPhase::Running)
+    );
+    assert_eq!(
+        services.auth.status().await.phase,
+        stream_gui_rs::twitch::AuthPhase::NotConfigured
+    );
+    services.shutdown().await.unwrap();
+    assert_process_exited(restarted.pid);
+    assert_process_exited(kick.pid);
+}
+
+#[tokio::test]
+async fn youtube_audio_unavailable_fails_without_a_video_fallback_or_offline_status() {
+    let root = helper_directory();
+    let executable = renamed_helper(root.path(), "youtuberecord");
+    let services = std::sync::Arc::new(Services::new(root.path(), None).unwrap());
+    services
+        .settings
+        .set_streamlink_path(Some(executable.to_string_lossy().into_owned()))
+        .unwrap();
+    let mut request = youtube_request("@video-only");
+    request.quality = Some(QualityPolicy::Audio);
+    let started = services.play_youtube(request).await.unwrap();
+    let failed = terminal(&services.sessions, &started.id).await;
+    assert_eq!(failed.phase, SessionPhase::Failed);
+    assert_eq!(failed.failure, Some(ErrorCode::StartupFailed));
+    let args: Vec<String> =
+        serde_json::from_slice(&std::fs::read(executable.with_extension("argv.json")).unwrap())
+            .unwrap();
+    assert_eq!(args.last().unwrap(), "audio,audio_only");
+    assert!(!args.iter().any(|arg| arg.contains("best")));
+    // Unlike Kick, YouTube has no browser challenge, so bounded child output
+    // stays visible for diagnosing consent or bot-check failures.
+    assert!(
+        failed
+            .logs
+            .iter()
+            .any(|line| line.source == LogSource::Stderr)
+    );
+    services.shutdown().await.unwrap();
+}
+
 #[tokio::test]
 async fn kick_child_trees_are_owned_during_stop_and_quit() {
     for quit in [false, true] {

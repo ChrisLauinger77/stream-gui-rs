@@ -20,6 +20,11 @@ pub struct ChatRequest {
 pub struct KickChatRequest {
     pub slug: String,
 }
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct YoutubeChatRequest {
+    pub locator: String,
+}
 
 #[derive(Clone, Debug)]
 pub struct ChatTarget {
@@ -43,6 +48,21 @@ impl ChatTarget {
             url: format!("https://kick.com/popout/{}/chat", slug.as_str()),
             login: None,
         }
+    }
+    /// Handles and channel IDs do not name a chat without an API lookup.
+    pub(crate) fn for_youtube(
+        locator: &crate::streamlink::playback::YoutubeLocator,
+    ) -> Result<Self> {
+        let id = locator.video_id().ok_or_else(|| {
+            AppError::new(
+                ErrorCode::InvalidYoutubeLocator,
+                "YouTube chat needs a video ID.",
+            )
+        })?;
+        Ok(Self {
+            url: format!("https://www.youtube.com/live_chat?v={id}"),
+            login: None,
+        })
     }
     pub fn url(&self) -> &str {
         &self.url
@@ -285,6 +305,52 @@ mod tests {
         assert!(
             serde_json::from_str::<KickChatRequest>(
                 r#"{"slug":"example","url":"https://evil.example"}"#
+            )
+            .is_err()
+        );
+    }
+    #[tokio::test]
+    async fn youtube_browser_chat_needs_a_video_id_and_never_routes_to_chatterino() {
+        let recorder = Arc::new(Recorder::default());
+        let directory = tempfile::tempdir().unwrap();
+        let services = crate::domain::services::Services::new(directory.path(), None)
+            .unwrap()
+            .with_chat_opener(recorder.clone());
+        let mut settings = services.settings.snapshot();
+        settings.chat_provider = crate::config::ChatProvider::Chatterino;
+        services.settings.update(settings).unwrap();
+        services
+            .open_youtube_browser_chat(YoutubeChatRequest {
+                locator: "aBc-_123XyZ".into(),
+            })
+            .await
+            .unwrap();
+        assert!(services.sessions.sessions().await.is_empty());
+        assert_eq!(
+            *recorder.0.lock().unwrap(),
+            ["https://www.youtube.com/live_chat?v=aBc-_123XyZ"]
+        );
+        for locator in [
+            "@example",
+            "UCaBcDeFgHiJkLmNoPqRsT_-",
+            "https://evil.example",
+            "aBc-_123XyZ&x=1",
+        ] {
+            assert_eq!(
+                services
+                    .open_youtube_browser_chat(YoutubeChatRequest {
+                        locator: locator.into(),
+                    })
+                    .await
+                    .unwrap_err()
+                    .code,
+                ErrorCode::InvalidYoutubeLocator
+            );
+        }
+        assert_eq!(recorder.0.lock().unwrap().len(), 1);
+        assert!(
+            serde_json::from_str::<YoutubeChatRequest>(
+                r#"{"locator":"aBc-_123XyZ","url":"https://evil.example"}"#
             )
             .is_err()
         );

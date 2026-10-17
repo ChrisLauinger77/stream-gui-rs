@@ -424,6 +424,7 @@
   "search.offline": "Offline — derzeit kein Live-Stream",
   "service.kick": "Kick",
   "service.twitch": "Twitch",
+  "service.youtube": "YouTube",
   "settings.autoExecutable": "Automatische Suche über PATH und übliche Installationsorte",
   "settings.automaticChat": "Chat beim Start der Wiedergabe öffnen",
   "settings.chatHelp": "Öffnet die ausgewählte Chat-Anwendung bei jedem Start oder ausdrücklichen Neustart. Kanaldetails können Qualität, niedrige Latenz und Chat unabhängig überschreiben.",
@@ -591,5 +592,14 @@
   "workspace.goHome": "Zur Startseite",
   "workspace.home": "Startseite",
   "workspace.liveStreams": "Live-Streams",
-  "workspace.mainNavigation": "Hauptnavigation"
+  "workspace.mainNavigation": "Hauptnavigation",
+  "youtube.audioFailure": "Die reine Audiowiedergabe ist fehlgeschlagen. YouTube-Livestreams bieten oft keinen reinen Audiostream. Wähle vor dem Neustart eine Videoqualität.",
+  "youtube.browserChat": "YouTube-Browserchat öffnen",
+  "youtube.invalidLocator": "Gib eine 11-stellige Video-ID, ein @Handle mit 3–30 Buchstaben, Ziffern, Punkten, Unterstrichen oder Bindestrichen oder eine 24-stellige UC…-Kanal-ID ein. Füge keine URL ein.",
+  "youtube.locator": "YouTube-Video-ID, @Handle oder Kanal-ID",
+  "youtube.locatorHelp": "Gib eine 11-stellige Video-ID, ein @Handle oder eine UC…-Kanal-ID ein, keine URL. Live-Status und Kanaldetails werden nicht geprüft.",
+  "youtube.lowLatencyUnavailable": "nicht verfügbar",
+  "youtube.play": "YouTube-Stream abspielen",
+  "youtube.playbackFailure": "Die YouTube-Wiedergabe ist fehlgeschlagen. Prüfe Video-ID oder Kanal, deine Verbindung, den Player und Streamlink. YouTube verlangt eventuell eine Zustimmung oder Bot-Prüfung, die Streamlink nicht bestehen kann. Das bedeutet nicht, dass der Stream offline ist.",
+  "youtube.playbackHelp": "Verwendet dein aktuelles Playerprofil und deine Qualitätseinstellung; niedrige Latenz gilt hier nicht. Die Wiedergabe hängt von deiner Streamlink-Version ab und kann scheitern, wenn YouTube eine Zustimmung oder Bot-Prüfung verlangt. Der Chat braucht eine Video-ID und öffnet sich separat; automatischer Chat ist für YouTube aus."
 }

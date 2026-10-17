@@ -424,6 +424,7 @@
   "search.offline": "Hors ligne — aucun stream en direct",
   "service.kick": "Kick",
   "service.twitch": "Twitch",
+  "service.youtube": "YouTube",
   "settings.autoExecutable": "Détection automatique dans PATH et les emplacements d’installation habituels",
   "settings.automaticChat": "Ouvrir le chat au démarrage de la lecture",
   "settings.chatHelp": "Ouvre l’application de chat choisie à chaque lancement ou redémarrage explicite. Les détails de chaîne peuvent modifier séparément la qualité, la faible latence et le chat.",
@@ -591,5 +592,14 @@
   "workspace.goHome": "Accueil",
   "workspace.home": "Accueil",
   "workspace.liveStreams": "Streams en direct",
-  "workspace.mainNavigation": "Navigation principale"
+  "workspace.mainNavigation": "Navigation principale",
+  "youtube.audioFailure": "La lecture audio seule a échoué. Les directs YouTube n’offrent souvent pas de flux audio seul. Choisissez une qualité vidéo avant de redémarrer.",
+  "youtube.browserChat": "Ouvrir le chat YouTube dans le navigateur",
+  "youtube.invalidLocator": "Saisissez un ID de vidéo de 11 caractères, un @identifiant de 3 à 30 lettres, chiffres, points, tirets bas ou traits d’union, ou un ID de chaîne UC… de 24 caractères. Ne collez pas d’URL.",
+  "youtube.locator": "ID de vidéo YouTube, @identifiant ou ID de chaîne",
+  "youtube.locatorHelp": "Saisissez un ID de vidéo de 11 caractères, un @identifiant ou un ID de chaîne UC…, pas une URL. Le statut en direct et les détails de la chaîne ne sont pas vérifiés.",
+  "youtube.lowLatencyUnavailable": "non disponible",
+  "youtube.play": "Lire le stream YouTube",
+  "youtube.playbackFailure": "La lecture YouTube a échoué. Vérifiez l’ID de vidéo ou la chaîne, votre connexion, le lecteur et Streamlink. YouTube peut exiger un consentement ou une vérification anti-robot que Streamlink ne peut pas passer. Cela n’établit pas que le stream est hors ligne.",
+  "youtube.playbackHelp": "Utilise votre profil de lecteur et votre préférence de qualité actuels ; la faible latence ne s’applique pas. La lecture dépend de votre version de Streamlink et peut échouer si YouTube demande un consentement ou une vérification anti-robot. Le chat nécessite un ID de vidéo et s’ouvre séparément ; le chat automatique est désactivé pour YouTube."
 }

@@ -783,7 +783,7 @@ fn kick_reuses_profiles_without_twitch_overrides_or_automatic_chat() {
             },
         })
         .unwrap();
-    let base = store.effective_kick(None);
+    let base = store.effective_anonymous(None);
     assert_eq!(base.quality, QualityPolicy::Low);
     assert_eq!(base.chat_provider, ChatProvider::Browser);
     assert!(!base.automatic_chat);
@@ -799,7 +799,7 @@ fn kick_reuses_profiles_without_twitch_overrides_or_automatic_chat() {
             id: Some(id.clone()),
         })
         .unwrap();
-    let selected = store.effective_kick(None);
+    let selected = store.effective_anonymous(None);
     assert_eq!(selected.profile_id, Some(id));
     assert_eq!(selected.quality, QualityPolicy::Medium);
     assert!(selected.low_latency);
@@ -811,11 +811,11 @@ fn kick_reuses_profiles_without_twitch_overrides_or_automatic_chat() {
     assert!(!store.effective("123", None).unwrap().low_latency);
     assert!(store.effective("123", None).unwrap().automatic_chat);
     assert_eq!(
-        store.effective_kick(Some(QualityPolicy::High)).quality,
+        store.effective_anonymous(Some(QualityPolicy::High)).quality,
         QualityPolicy::High
     );
     store.modify_profile(Select { id: None }).unwrap();
-    assert_eq!(store.effective_kick(None), base);
+    assert_eq!(store.effective_anonymous(None), base);
     assert_eq!(selected.quality, QualityPolicy::Medium);
     assert!(selected.low_latency);
 }

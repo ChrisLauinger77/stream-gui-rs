@@ -8,7 +8,7 @@
 
 <img src="src/assets/app-icon.svg" alt="Stream GUI RS application icon" width="128">
 
-Stream GUI RS is a native desktop application for browsing Twitch and watching Twitch or exact Kick live channels through [Streamlink](https://streamlink.github.io/). It uses a compact Tauri interface and launches video in a separately installed player. Kick support is playback-only.
+Stream GUI RS is a native desktop application for browsing Twitch and watching Twitch, exact Kick live channels or exact YouTube live streams through [Streamlink](https://streamlink.github.io/). It uses a compact Tauri interface and launches video in a separately installed player. Kick and YouTube support is playback-only.
 
 [Project website](https://chrislauinger77.github.io/stream-gui-rs/) · [Latest release](https://github.com/ChrisLauinger77/stream-gui-rs/releases/latest)
 
@@ -25,6 +25,7 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Server-side language filtering for Live/category streams and exact Twitch-login lookup
 - Streamlink 8.0+ discovery and external playback
 - Exact Kick channel playback and explicit browser chat, including while signed out of Twitch; no Kick developer credentials required
+- Best-effort exact YouTube live playback by video ID, @handle or channel ID, and browser chat for video IDs; no Google account or API key required
 - Streamlink default player, mpv, VLC, and custom executable modes
 - Source, High, Medium, Low, and Audio quality policies
 - Multiple simultaneous streams with Stop, Restart, Watching, and bounded diagnostics
@@ -184,13 +185,23 @@ Kick login, Following, browsing/categories/search, monitoring/notifications, per
 
 Official Kick discovery remains deferred: the documented API tokens require a confidential client secret, with no documented safe access path for a distributed desktop app. See the [Stage 2 decision and revisit conditions](docs/road-to-1.0.md#kick-discovery-stage-2-deferred) revalidated on 2026-10-03. Existing playback and browser chat require no Kick developer-app scopes.
 
+### YouTube playback
+
+Choose **Open channel → Service → YouTube**, enter a locator and select **Play YouTube stream**. It works while signed out of Twitch. Accepted locators are an 11-character video ID (for example the part after `watch?v=`), an `@handle`, or a 24-character `UC…` channel ID; enter the locator, not a URL. A handle or channel ID plays that channel's current live stream. The app does not check live status or retrieve titles, viewer counts or categories.
+
+YouTube uses the same global settings, selected player profile and quality policy as Kick, without channel overrides. Streamlink has no YouTube low-latency option, so that preference does not apply. YouTube rendition names differ from Twitch, so High, Medium and Low pick the best stream within the policy limit. Audio fails when no audio-only stream is offered, which is common for YouTube live streams.
+
+**Open YouTube browser chat** opens the fixed live-chat popout in the default browser and needs a video ID; a handle or channel ID cannot identify the chat without an API lookup. Automatic chat and Chatterino are not used for YouTube.
+
+YouTube playback is best-effort and depends on the installed Streamlink version. YouTube may show consent pages or bot checks that Streamlink cannot pass, and the app never imports browser cookies to work around them. Members-only and age-restricted streams are not supported. Failure does not prove that a stream is offline; Streamlink output remains visible in the session diagnostics. The support report contains only the service enum, never the locator or URL. YouTube browsing, Following, monitoring/notifications, Google sign-in and VOD playback UI are not supported; see the [roadmap decision](docs/road-to-1.0.md#youtube-live-playback-stage-1).
+
 ## Discovery, appearance, and support
 
 **Live** and category streams offer **Stream language**: Any language, a curated language list, or Other. Twitch applies the filter on the server. Changing it starts that view from its first page and saves the default for later discovery visits. Back restores the language used by that earlier visit. Following, Search, and the background monitor keep their existing scope.
 
-**Open channel → Twitch** accepts an exact Twitch login (letters, numbers, underscores, up to 25 characters; case-insensitive). It opens the existing channel details, including offline channels. Enter a login, not a URL; Twitch lookup never starts playback. Search remains the Twitch discovery tool for partial names and categories. Kick uses the separate playback action described above.
+**Open channel → Twitch** accepts an exact Twitch login (letters, numbers, underscores, up to 25 characters; case-insensitive). It opens the existing channel details, including offline channels. Enter a login, not a URL; Twitch lookup never starts playback. Search remains the Twitch discovery tool for partial names and categories. Kick and YouTube use the separate playback actions described above.
 
-**Settings → Playback → Prefer low latency** defaults off. Twitch channel preferences can inherit, enable, or disable it; Kick uses global/profile preferences only. This adds exactly one service-specific Streamlink flag: `--twitch-low-latency` or `--kick-low-latency`. Actual delay depends on the stream, connection, buffering and player. Saving leaves current processes unchanged. Restart applies current preferences to that session.
+**Settings → Playback → Prefer low latency** defaults off. Twitch channel preferences can inherit, enable, or disable it; Kick uses global/profile preferences only. This adds exactly one service-specific Streamlink flag: `--twitch-low-latency` or `--kick-low-latency`. YouTube has no such flag and ignores the preference. Actual delay depends on the stream, connection, buffering and player. Saving leaves current processes unchanged. Restart applies current preferences to that session.
 
 **Settings → Appearance → Language** offers System, English, Deutsch, Español, and Français. System follows the operating system language for the supported languages and uses English otherwise; an OS language change is picked up on the next app launch. The selection saves immediately and persists across restarts. The separate **Stream language** filter controls Twitch discovery results, not interface text. UI translations ship in the app and require no download.
 
