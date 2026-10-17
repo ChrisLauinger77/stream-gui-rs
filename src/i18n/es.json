@@ -424,6 +424,7 @@
   "search.offline": "Desconectado: no hay stream en directo",
   "service.kick": "Kick",
   "service.twitch": "Twitch",
+  "service.youtube": "YouTube",
   "settings.autoExecutable": "Detección automática en PATH y ubicaciones de instalación habituales",
   "settings.automaticChat": "Abrir chat al iniciar la reproducción",
   "settings.chatHelp": "Abre la aplicación de chat seleccionada en cada inicio o reinicio explícito. Los detalles del canal pueden cambiar por separado la calidad, la baja latencia y el chat.",
@@ -591,5 +592,14 @@
   "workspace.goHome": "Ir al inicio",
   "workspace.home": "Inicio",
   "workspace.liveStreams": "Streams en directo",
-  "workspace.mainNavigation": "Navegación principal"
+  "workspace.mainNavigation": "Navegación principal",
+  "youtube.audioFailure": "Falló la reproducción de solo audio. Los directos de YouTube a menudo no ofrecen una transmisión de solo audio. Elige una calidad de vídeo antes de reiniciar.",
+  "youtube.browserChat": "Abrir el chat de YouTube en el navegador",
+  "youtube.invalidLocator": "Introduce un ID de vídeo de 11 caracteres, un @identificador de 3 a 30 letras, dígitos, puntos, guiones bajos o guiones, o un ID de canal UC… de 24 caracteres. No pegues una URL.",
+  "youtube.locator": "ID de vídeo de YouTube, @identificador o ID de canal",
+  "youtube.locatorHelp": "Introduce un ID de vídeo de 11 caracteres, un @identificador o un ID de canal UC…, no una URL. No se comprueban el estado en directo ni los detalles del canal.",
+  "youtube.lowLatencyUnavailable": "no disponible",
+  "youtube.play": "Reproducir directo de YouTube",
+  "youtube.playbackFailure": "Falló la reproducción de YouTube. Comprueba el ID de vídeo o el canal, tu conexión, el reproductor y Streamlink. YouTube puede exigir consentimiento o una comprobación antibots que Streamlink no puede superar. Esto no indica que el directo esté sin conexión.",
+  "youtube.playbackHelp": "Usa tu perfil de reproductor y tu preferencia de calidad actuales; la baja latencia no se aplica. La reproducción depende de tu versión de Streamlink y puede fallar si YouTube pide consentimiento o una comprobación antibots. El chat necesita un ID de vídeo y se abre por separado; el chat automático está desactivado para YouTube."
 }

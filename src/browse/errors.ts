@@ -2,6 +2,7 @@ import type { ErrorCode } from "../lib/generated";
 import { currentLocale, translate, type Locale, type MessageKey } from "../i18n";
 const keys: Record<ErrorCode, MessageKey> = {
   invalid_kick_slug: "kick.invalidSlug",
+  invalid_youtube_locator: "youtube.invalidLocator",
   incomplete: "errors.incomplete",
   notification: "errors.notification",
   chatterino_not_found: "errors.chatterinoNotFound",

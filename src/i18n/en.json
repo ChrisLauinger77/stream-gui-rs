@@ -424,6 +424,7 @@
   "search.offline": "Offline — no current live stream",
   "service.kick": "Kick",
   "service.twitch": "Twitch",
+  "service.youtube": "YouTube",
   "settings.autoExecutable": "Automatic discovery from PATH and standard installation locations",
   "settings.automaticChat": "Open chat when playback starts",
   "settings.chatHelp": "Opens the selected chat application for each launch or explicit restart. Channel details can override quality, low latency and chat independently.",
@@ -591,5 +592,14 @@
   "workspace.goHome": "Go home",
   "workspace.home": "Home",
   "workspace.liveStreams": "Live streams",
-  "workspace.mainNavigation": "Main navigation"
+  "workspace.mainNavigation": "Main navigation",
+  "youtube.audioFailure": "Audio-only playback failed. YouTube live streams often have no audio-only stream. Choose a video quality before restarting.",
+  "youtube.browserChat": "Open YouTube browser chat",
+  "youtube.invalidLocator": "Enter an 11-character video ID, an @handle with 3–30 letters, digits, periods, underscores or hyphens, or a 24-character UC… channel ID. Do not paste a URL.",
+  "youtube.locator": "YouTube video ID, @handle or channel ID",
+  "youtube.locatorHelp": "Enter an 11-character video ID, an @handle or a UC… channel ID, not a URL. Live status and channel details are not checked.",
+  "youtube.lowLatencyUnavailable": "not available",
+  "youtube.play": "Play YouTube stream",
+  "youtube.playbackFailure": "YouTube playback failed. Check the video ID or channel, your connection, player and Streamlink. YouTube may require consent or a bot check that Streamlink cannot pass. This does not establish that the stream is offline.",
+  "youtube.playbackHelp": "Uses your current player profile and quality preference; low latency does not apply. Playback depends on your Streamlink version and can fail when YouTube asks for consent or a bot check. Chat needs a video ID and opens separately; automatic chat is off for YouTube."
 }

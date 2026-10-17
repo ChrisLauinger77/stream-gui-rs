@@ -45,7 +45,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const [settings, setSettings] = useState(false);
   const [watching, setWatching] = useState(false);
   const [openChannel, setOpenChannel] = useState(false);
-  const [lookup, setLookup] = useState<OpenChannelDraft>({ service: "kick", twitchLogin: "", kickSlug: "" });
+  const [lookup, setLookup] = useState<OpenChannelDraft>({ service: "kick", twitchLogin: "", kickSlug: "", youtubeLocator: "" });
   const openChannelPanel = useRef<HTMLElement>(null);
   const openChannelButton = useRef<HTMLButtonElement>(null);
   const [navigationFocus, setNavigationFocus] = useState<{ id: string; target: "channel" | "watching" | "test" } | null>(null);
@@ -145,6 +145,10 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
     capture("watching"); setWatching(true); setSettings(false);
     await run(`launch:kick:${slug.toLowerCase()}`, () => api.launchKick({ slug, quality: null }), "app.playbackStarted");
   }, [run, capture]);
+  const watchYoutube = useCallback(async (locator: string) => {
+    capture("watching"); setWatching(true); setSettings(false);
+    await run(`launch:youtube:${locator}`, () => api.launchYoutube({ locator, quality: null }), "app.playbackStarted");
+  }, [run, capture]);
   const activeCount = playback.sessions.filter(session => session.restarting || ["starting", "running", "stopping"].includes(session.phase)).length;
   const controls = <div className="account-controls">
     <span className="connection-dot" aria-hidden="true" />
@@ -173,8 +177,8 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       <p>{t("app.notificationTestResult")}</p>
       <button onClick={() => setNotificationTest(false)}>{t("app.backToBrowsing2")}</button>
       <button onClick={developer}>{t("app.developerTools")}</button>
-    </main> : auth.sessionId ? <BrowserWorkspace preferences={playback.settings} saveLanguage={playback.saveLanguage} actionsRef={workspace} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} watchKick={watchKick} pending={playback.pending} /> : openChannel ?
-      <main className="browse-content signed-out-channel" ref={openChannelPanel}><h1 tabIndex={-1}>{t("browse.openChannel")}</h1><OpenChannel sessionId={null} draft={lookup} change={setLookup} open={() => {}} onAuthLost={auth.lost} watchKick={watchKick} /><button className="quiet" onClick={closeOpenChannel}>{t("openChannel.backToSignIn")}</button></main> :
+    </main> : auth.sessionId ? <BrowserWorkspace preferences={playback.settings} saveLanguage={playback.saveLanguage} actionsRef={workspace} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} watchKick={watchKick} watchYoutube={watchYoutube} pending={playback.pending} /> : openChannel ?
+      <main className="browse-content signed-out-channel" ref={openChannelPanel}><h1 tabIndex={-1}>{t("browse.openChannel")}</h1><OpenChannel sessionId={null} draft={lookup} change={setLookup} open={() => {}} onAuthLost={auth.lost} watchKick={watchKick} watchYoutube={watchYoutube} /><button className="quiet" onClick={closeOpenChannel}>{t("openChannel.backToSignIn")}</button></main> :
       <SignIn status={auth.status} account={auth.account} busy={auth.busy} run={auth.run} />}
     {about && <About activation={about} close={() => setAbout(null)} />}
     {support && <SupportReport close={() => setSupport(false)} />}

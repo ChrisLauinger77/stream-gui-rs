@@ -513,6 +513,52 @@ test("Back restores the Kick service, channel draft and input focus", async () =
   expect(document.activeElement).toBe(container.querySelector('[data-focus="kick-slug"]'));
 });
 
+const youtubePlaying = (id = "youtube-one", locator = "@example"): import("../lib/generated").SessionSnapshot => ({ ...playing(id), stream: { service: "youtube", locator }, url: `https://www.youtube.com/${locator}/live`, logs: [], droppedLogEntries: 0 });
+
+test("YouTube launch works signed out and chat waits for a video ID", async () => {
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, automaticChat: true, chatProvider: "chatterino", lowLatency: true });
+  const launch = deferred<ReturnType<typeof youtubePlaying>>();
+  vi.mocked(api.launchYoutube).mockReturnValue(launch.promise);
+  vi.mocked(api.openYoutubeBrowserChat).mockResolvedValue(null);
+  await render(); await click("Open channel");
+  await editControl("Service", "youtube", "select");
+  await editControl("YouTube video ID, @handle or channel ID", "@Example");
+  expect(button("Open YouTube browser chat").disabled).toBe(true);
+  const form = container.querySelector(".exact-lookup")!;
+  await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+  expect(api.launchYoutube).toHaveBeenCalledExactlyOnceWith({ locator: "@Example", quality: null });
+  expect(button("Play YouTube stream").disabled).toBe(true);
+  await act(async () => { launch.resolve({ ...youtubePlaying(), effectiveSettings: { profileId: null, chatProvider: "browser", chatterinoPath: null, streamlinkPath: null, player: playbackSettings.player, quality: "source", automaticChat: false, lowLatency: true } }); });
+  expect(container.querySelector(".service-badge")?.textContent).toBe("YouTube");
+  expect(container.querySelector(".session h3")?.textContent).toBe("@example");
+  expect(container.querySelector(".session")?.textContent).toContain("Low latency: not available");
+  expect(container.querySelector(".session")?.textContent).not.toContain("Open YouTube browser chat");
+  expect(api.login).not.toHaveBeenCalled(); expect(api.launch).not.toHaveBeenCalled(); expect(api.launchKick).not.toHaveBeenCalled();
+  await click("Close Watching");
+  await editControl("YouTube video ID, @handle or channel ID", "aBc-_123XyZ");
+  await click("Open YouTube browser chat");
+  expect(api.openYoutubeBrowserChat).toHaveBeenCalledExactlyOnceWith({ locator: "aBc-_123XyZ" });
+  expect(api.openChat).not.toHaveBeenCalled(); expect(api.openKickBrowserChat).not.toHaveBeenCalled();
+});
+
+test("invalid YouTube input uses a safe announced error", async () => {
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  vi.mocked(api.launchYoutube).mockRejectedValue({ code: "invalid_youtube_locator", message: "PRIVATE raw response" });
+  await render(); await click("Open channel");
+  await editControl("Service", "youtube", "select");
+  await editControl("YouTube video ID, @handle or channel ID", "https://evil.example"); await click("Play YouTube stream");
+  expect(container.querySelector('.playback-feedback[role="alert"]')?.textContent).toContain("Enter an 11-character video ID");
+  expect(text()).not.toContain("PRIVATE");
+});
+
+test("a failed YouTube audio session explains the missing audio stream and keeps video-ID chat", async () => {
+  vi.mocked(api.sessions).mockResolvedValue([{ ...youtubePlaying("youtube-audio", "aBc-_123XyZ"), phase: "failed", failure: "startup_failed", qualityPolicy: "audio" }]);
+  await render(); await click("Watching");
+  expect(container.querySelector(".session")?.textContent).toContain("YouTube live streams often have no audio-only stream");
+  expect(button("Open YouTube browser chat").disabled).toBe(false);
+});
+
 test("mixed Watching sessions show service identity and restart/stop explicit session IDs", async () => {
   const kick = kickPlaying();
   vi.mocked(api.sessions).mockResolvedValue([playing(), kick]);
