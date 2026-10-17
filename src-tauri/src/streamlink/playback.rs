@@ -84,6 +84,12 @@ pub struct KickPlaybackRequest {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct YoutubePlaybackRequest {
+    pub locator: String,
+    pub quality: Option<QualityPolicy>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RestartRequest {
     pub session_id: String,
     pub generation: u32,
@@ -104,6 +110,7 @@ pub struct TwitchPlaybackStream {
 pub enum StreamingService {
     Twitch,
     Kick,
+    Youtube,
 }
 
 /// A locator, not a verified account identity. The application accepts 1–100
@@ -141,17 +148,70 @@ impl TryFrom<String> for KickSlug {
     }
 }
 
+/// A YouTube locator, not a verified identity: an 11-character video ID, an
+/// `@handle` or a `UC…` channel ID. The three shapes cannot overlap, so the
+/// canonical string alone identifies its kind. Video and channel IDs are
+/// case-sensitive; handles are case-insensitive and normalized to lowercase.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(try_from = "String")]
+pub struct YoutubeLocator(String);
+impl YoutubeLocator {
+    pub fn parse(value: &str) -> Result<Self> {
+        let id_byte = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b'-';
+        let valid = if let Some(handle) = value.strip_prefix('@') {
+            (3..=30).contains(&handle.len()) && handle.bytes().all(|c| id_byte(c) || c == b'.')
+        } else if value.len() == 24 && value.starts_with("UC") {
+            value.bytes().all(id_byte)
+        } else {
+            value.len() == 11 && value.bytes().all(id_byte)
+        };
+        if !valid {
+            return Err(AppError::new(
+                ErrorCode::InvalidYoutubeLocator,
+                "Invalid YouTube video, handle or channel ID.",
+            ));
+        }
+        Ok(Self(if value.starts_with('@') {
+            value.to_ascii_lowercase()
+        } else {
+            value.to_owned()
+        }))
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+    /// Only a video ID identifies a live chat without an API lookup.
+    pub fn video_id(&self) -> Option<&str> {
+        (self.0.len() == 11 && !self.0.starts_with('@')).then_some(self.0.as_str())
+    }
+    pub fn channel_url(&self) -> String {
+        match self.video_id() {
+            Some(id) => format!("https://www.youtube.com/watch?v={id}"),
+            None if self.0.starts_with('@') => format!("https://www.youtube.com/{}/live", self.0),
+            None => format!("https://www.youtube.com/channel/{}/live", self.0),
+        }
+    }
+}
+impl TryFrom<String> for YoutubeLocator {
+    type Error = AppError;
+    fn try_from(value: String) -> Result<Self> {
+        Self::parse(&value)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "service", rename_all = "snake_case")]
 pub enum PlaybackStream {
     Twitch(TwitchPlaybackStream),
     Kick { slug: KickSlug },
+    Youtube { locator: YoutubeLocator },
 }
 impl PlaybackStream {
     pub fn service(&self) -> StreamingService {
         match self {
             Self::Twitch(_) => StreamingService::Twitch,
             Self::Kick { .. } => StreamingService::Kick,
+            Self::Youtube { .. } => StreamingService::Youtube,
         }
     }
 }
@@ -227,6 +287,7 @@ pub fn build_command(spec: LaunchSpec) -> Result<CommandSpec> {
     let url = match &spec.stream {
         PlaybackStream::Twitch(stream) => channel_url(&stream.login)?,
         PlaybackStream::Kick { slug } => slug.channel_url(),
+        PlaybackStream::Youtube { locator } => locator.channel_url(),
     };
     let (selection, exclude) = spec.settings.quality.selection();
     let mut arguments = vec![
@@ -236,14 +297,15 @@ pub fn build_command(spec: LaunchSpec) -> Result<CommandSpec> {
         "info".into(),
         "--player-verbose".into(),
     ];
-    if spec.settings.low_latency {
-        arguments.push(
-            match spec.stream.service() {
-                StreamingService::Twitch => "--twitch-low-latency",
-                StreamingService::Kick => "--kick-low-latency",
-            }
-            .into(),
-        );
+    // Streamlink has no YouTube low-latency option; the preference does not
+    // turn into generic HLS tuning for it.
+    let low_latency = match spec.stream.service() {
+        StreamingService::Twitch => Some("--twitch-low-latency"),
+        StreamingService::Kick => Some("--kick-low-latency"),
+        StreamingService::Youtube => None,
+    };
+    if let Some(flag) = low_latency.filter(|_| spec.settings.low_latency) {
+        arguments.push(flag.into());
     }
     if let Some(player) = spec.player {
         let path = player.to_str().ok_or_else(|| {
@@ -463,6 +525,120 @@ mod tests {
                     arguments.iter().any(|arg| arg == "--twitch-low-latency"),
                     low_latency
                 );
+            }
+        }
+    }
+    #[test]
+    fn youtube_locator_shapes_are_bounded_and_cannot_contain_a_destination() {
+        for (input, canonical, url, video) in [
+            (
+                "dQw4w9WgXcQ",
+                "dQw4w9WgXcQ",
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                true,
+            ),
+            (
+                "a-_0123456Z",
+                "a-_0123456Z",
+                "https://www.youtube.com/watch?v=a-_0123456Z",
+                true,
+            ),
+            (
+                "@Example.Channel-1_",
+                "@example.channel-1_",
+                "https://www.youtube.com/@example.channel-1_/live",
+                false,
+            ),
+            ("@abc", "@abc", "https://www.youtube.com/@abc/live", false),
+            (
+                "UCaBcDeFgHiJkLmNoPqRsT_-",
+                "UCaBcDeFgHiJkLmNoPqRsT_-",
+                "https://www.youtube.com/channel/UCaBcDeFgHiJkLmNoPqRsT_-/live",
+                false,
+            ),
+        ] {
+            let locator = YoutubeLocator::parse(input).unwrap();
+            assert_eq!(locator.as_str(), canonical);
+            assert_eq!(locator.channel_url(), url);
+            assert_eq!(locator.video_id().is_some(), video);
+            let restored: YoutubeLocator =
+                serde_json::from_str(&serde_json::to_string(&locator).unwrap()).unwrap();
+            assert_eq!(restored, locator);
+        }
+        assert!(YoutubeLocator::parse(&format!("@{}", "a".repeat(30))).is_ok());
+        for input in [
+            "",
+            " ",
+            "dQw4w9WgXc",
+            "dQw4w9WgXcQQ",
+            "dQw4w9WgXc ",
+            "dQw4w9WgX/Q",
+            "dQw4w9WgX?Q",
+            "dQw4w9WgX&Q",
+            "dQw4w9WgX.Q",
+            "dQw4w9WgX\nQ",
+            "@",
+            "@ab",
+            &format!("@{}", "a".repeat(31)),
+            "@a b",
+            "@a/b",
+            "@a?b",
+            "@@abc",
+            "@用户名",
+            "UCaBcDeFgHiJkLmNoPqRsT_",
+            "UCaBcDeFgHiJkLmNoPqRsT_-x",
+            "UCaBcDeFgHiJkLmNoPqRsT/-",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "youtu.be/dQw4w9WgXcQ",
+            "$(id)",
+            "a\0bcdefghij",
+        ] {
+            let error = YoutubeLocator::parse(input).unwrap_err();
+            assert_eq!(error.code, ErrorCode::InvalidYoutubeLocator);
+            assert!(
+                serde_json::from_str::<YoutubeLocator>(&serde_json::to_string(input).unwrap())
+                    .is_err()
+            );
+        }
+        assert!(
+            serde_json::from_str::<YoutubePlaybackRequest>(
+                r#"{"locator":"dQw4w9WgXcQ","quality":null,"url":"https://evil.example"}"#
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn youtube_argv_never_carries_a_low_latency_flag() {
+        for quality in [
+            QualityPolicy::Source,
+            QualityPolicy::High,
+            QualityPolicy::Medium,
+            QualityPolicy::Low,
+            QualityPolicy::Audio,
+        ] {
+            for low_latency in [false, true] {
+                let mut youtube = spec(quality, PlayerMode::Default);
+                youtube.stream = PlaybackStream::Youtube {
+                    locator: YoutubeLocator::parse("@Example").unwrap(),
+                };
+                youtube.settings.low_latency = low_latency;
+                let command = build_command(youtube).unwrap();
+                let (selection, exclude) = quality.selection();
+                let mut expected = vec![
+                    "--no-config",
+                    "--no-plugin-sideloading",
+                    "--loglevel",
+                    "info",
+                    "--player-verbose",
+                ];
+                if let Some(exclude) = exclude {
+                    expected.extend(["--stream-sorting-excludes", exclude]);
+                }
+                expected.extend(["--", "https://www.youtube.com/@example/live", selection]);
+                assert_eq!(command.arguments, expected);
+                assert_eq!(command.url, "https://www.youtube.com/@example/live");
+                assert_eq!(command.stream.unwrap().service(), StreamingService::Youtube);
             }
         }
     }

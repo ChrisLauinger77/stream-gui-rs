@@ -133,6 +133,8 @@ fn build_app(initial: Option<crate::navigation::NavigationIntent>) -> tauri::Res
             commands::streamlink_launch,
             commands::play_kick_channel,
             commands::open_kick_browser_chat,
+            commands::play_youtube_stream,
+            commands::open_youtube_browser_chat,
             commands::streamlink_stop,
             commands::streamlink_sessions,
             commands::auth_status,
@@ -420,6 +422,8 @@ mod tests {
             "open_browser_chat",
             "play_kick_channel",
             "open_kick_browser_chat",
+            "play_youtube_stream",
+            "open_youtube_browser_chat",
         ] {
             assert!(
                 authority

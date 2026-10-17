@@ -225,6 +225,19 @@ mod tests {
             assert!(!text.contains(private));
         }
     }
+    #[test]
+    fn youtube_report_contains_only_the_service_enum_and_no_locator() {
+        let mut session = hostile();
+        session.stream = Some(PlaybackStream::Youtube {
+            locator: crate::streamlink::playback::YoutubeLocator::parse("@privatechannel").unwrap(),
+        });
+        session.url = "https://www.youtube.com/@privatechannel/live".into();
+        let text = support_report(PlayerMode::Default, None, &[session]).text;
+        assert!(text.contains("service=youtube"));
+        for private in ["privatechannel", "https://", "youtube.com"] {
+            assert!(!text.contains(private));
+        }
+    }
     #[tokio::test]
     async fn report_does_not_probe_a_configured_executable_or_access_unavailable_credentials() {
         let directory = tempfile::tempdir().unwrap();

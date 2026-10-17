@@ -5,7 +5,7 @@ use crate::streamlink::{
     discovery::{PlayerDiscovery, SearchLocations, discover_players, resolve_player},
     playback::{
         KickPlaybackRequest, KickSlug, LaunchSpec, PlaybackRequest, PlaybackStream, QualityPolicy,
-        RestartRequest, check_version,
+        RestartRequest, YoutubeLocator, YoutubePlaybackRequest, check_version,
     },
 };
 use crate::{
@@ -113,6 +113,17 @@ impl Services {
     ) -> Result<()> {
         self.ensure_open()?;
         let target = super::chat::ChatTarget::for_kick(KickSlug::parse(&request.slug)?);
+        self.chat
+            .open(target, tokio_util::sync::CancellationToken::new())
+            .await
+    }
+    pub async fn open_youtube_browser_chat(
+        &self,
+        request: super::chat::YoutubeChatRequest,
+    ) -> Result<()> {
+        self.ensure_open()?;
+        let target =
+            super::chat::ChatTarget::for_youtube(&YoutubeLocator::parse(&request.locator)?)?;
         self.chat
             .open(target, tokio_util::sync::CancellationToken::new())
             .await
@@ -414,7 +425,9 @@ impl Services {
             PlaybackStream::Twitch(stream) => {
                 self.settings.effective(&stream.broadcaster_id, quality)?
             }
-            PlaybackStream::Kick { .. } => self.settings.effective_kick(quality),
+            PlaybackStream::Kick { .. } | PlaybackStream::Youtube { .. } => {
+                self.settings.effective_anonymous(quality)
+            }
         };
         let player = resolve_player(&settings.player, &SearchLocations::system())?;
         let probe =
@@ -484,13 +497,32 @@ impl Services {
         let stream = PlaybackStream::Kick {
             slug: KickSlug::parse(&request.slug)?,
         };
+        self.play_anonymous(stream, request.quality).await
+    }
+
+    pub async fn play_youtube(
+        self: &Arc<Self>,
+        request: YoutubePlaybackRequest,
+    ) -> Result<SessionSnapshot> {
+        let stream = PlaybackStream::Youtube {
+            locator: YoutubeLocator::parse(&request.locator)?,
+        };
+        self.play_anonymous(stream, request.quality).await
+    }
+
+    /// Kick and YouTube launch without an auth lease or Helix lookup.
+    async fn play_anonymous(
+        self: &Arc<Self>,
+        stream: PlaybackStream,
+        quality: Option<QualityPolicy>,
+    ) -> Result<SessionSnapshot> {
         let permit = self.playback_permit()?;
         let services = self.clone();
         // Like Twitch launch, native preparation remains owned if the UI goes away.
         tokio::spawn(async move {
             let _permit = permit;
             let _operation = services.streamlink_operation.lock().await;
-            let spec = services.prepare_playback(stream, request.quality).await?;
+            let spec = services.prepare_playback(stream, quality).await?;
             services.ensure_open()?;
             services.sessions.launch_spec(spec).await
         })
