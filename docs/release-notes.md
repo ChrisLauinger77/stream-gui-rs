@@ -2,18 +2,26 @@
 
 Changes since Stream GUI RS 1.5.4.
 
-This patch release updates the desktop runtime and locked Rust dependencies. There are no user-facing feature changes.
+This patch release updates the desktop runtime and locked dependencies, expands installation documentation and improves release automation. There are no user-facing feature changes.
 
 ## Dependencies
 
 - Updated Tauri to 2.12.4 and the single-instance plugin to 2.5.4 ([#72](https://github.com/ChrisLauinger77/stream-gui-rs/pull/72), [#73](https://github.com/ChrisLauinger77/stream-gui-rs/pull/73)).
 - Refreshed locked Rust dependencies, including zbus 5.19.0, hyper 1.12.0, rustls 0.23.46, aws-lc-rs 1.18.2 and time 0.3.55 ([#74](https://github.com/ChrisLauinger77/stream-gui-rs/pull/74)).
+- Refreshed locked npm transitive dependencies.
 - Updated the pinned Claude review workflow action ([#71](https://github.com/ChrisLauinger77/stream-gui-rs/pull/71)).
+
+## Documentation
+
+- Added platform-specific Streamlink installation instructions for Windows, macOS and Linux.
+- Added WinGet installation and upgrade commands for Stream GUI RS, with a note that package manifests may lag behind GitHub Releases.
 
 ## Development
 
 - Building from source now requires Rust 1.90 or later, matching Tauri 2.12's minimum supported Rust version.
 - Optional Git hooks in `.githooks/` refresh npm and Cargo dependencies after pulls that change the lockfiles. Enable them per clone with `git config core.hooksPath .githooks`.
+- Grouped React, React DOM and their TypeScript type updates into a single Renovate pull request.
+- Added automatic WinGet manifest pull request submission after release publication when `WINGET_TOKEN` is configured, and documented token setup and post-publication checks. Without the token, submission remains manual.
 
 ## Upgrade and platform support
 
