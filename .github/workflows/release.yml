@@ -390,3 +390,26 @@ jobs:
         run: |
           gh api --method POST repos/ChrisLauinger77/scoop-bucket/dispatches -f event_type=update-scoop
           gh api --method POST repos/ChrisLauinger77/homebrew-cask/dispatches -f event_type=update-cask -F 'client_payload[cask]=stream-gui-rs'
+
+  publish-winget:
+    name: Request WinGet manifest update
+    # Promotion intentionally skips builds; do not inherit their skipped status.
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    needs: publish
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    env:
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - name: Skip when no WinGet token exists
+        if: ${{ env.WINGET_TOKEN == '' }}
+        run: echo 'WINGET_TOKEN is not configured; submit the WinGet manifest update manually.'
+      - name: Request WinGet manifest update
+        if: ${{ env.WINGET_TOKEN != '' }}
+        uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
+        with:
+          identifier: ChrisLauinger77.Stream-GUI-RS
+          release-tag: ${{ github.ref_name }}
+          installers-regex: '^Stream-GUI-RS_[0-9]+\.[0-9]+\.[0-9]+_windows_x86_64-setup\.exe$'
+          token: ${{ env.WINGET_TOKEN }}
