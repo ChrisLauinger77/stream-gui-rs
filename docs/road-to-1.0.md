@@ -12,7 +12,7 @@ Stream GUI RS has moved from a playback prototype to a cross-platform desktop ap
 
 Rust now owns authentication, Helix/cache/rate limits, settings, native integrations and the sole Streamlink process supervisor. React owns presentation and interaction through typed IPC. Linux, macOS and Windows builds share these boundaries. The core browsing, playback, settings, notification/background, discovery and installed-link capabilities are established; new work should preserve their security, session and lifecycle guarantees rather than restart the architecture.
 
-Exact Kick live-channel playback and explicit browser chat are implemented through Streamlink and the existing playback services; official Kick discovery remains deferred as described below. Advanced transports, more chat clients, legacy configuration import, an embedded player, automatic updating, a separate automation CLI and further streaming services remain deferred. None is a prerequisite for 1.0; revisit them only for a demonstrated user workflow and a viable cross-platform maintenance plan.
+Exact Kick live-channel playback and explicit browser chat are implemented through Streamlink and the existing playback services; official Kick discovery remains deferred as described below. Exact YouTube live playback follows the same Stage 1 model, described below. Advanced transports, more chat clients, legacy configuration import, an embedded player, automatic updating, a separate automation CLI and further streaming services remain deferred. None is a prerequisite for 1.0; revisit them only for a demonstrated user workflow and a viable cross-platform maintenance plan.
 
 ## Kick discovery (Stage 2): deferred
 
@@ -39,6 +39,14 @@ The last operation requires known IDs; it does not return a viewer's Following l
 **Revisit trigger:** Kick must officially document access to the needed discovery operations through anonymous requests, secretless public/native OAuth (PKCE or device flow), or another token model that does not require a confidential application secret. Verify that both registration and the complete token lifecycle support distributed desktop clients before implementation. A future official model requiring a backend/shared secret needs explicit product approval before changing this architecture. Following remains separately deferred until an official viewer Following-list endpoint and its authorization requirements are documented.
 
 **Current implementation boundary:** no Kick discovery client, OAuth, dependencies, secret handling or backend is added. Do not replace the blocked official access with website scraping, undocumented endpoints, Streamlink-based browsing or user-supplied developer registrations. No Kick developer-app scopes are required for the deferred work or existing playback/browser chat; the registration remains unused.
+
+## YouTube live playback (Stage 1)
+
+YouTube is approved for the same anonymous playback-only scope as Kick Stage 1: users who already know a live stream can open it by video ID, `@handle` or `UC…` channel ID without leaving the app's player workflow. Streamlink's bundled YouTube plugin supplies media; Rust validates the locator and constructs fixed `www.youtube.com` destinations. Explicit browser chat uses the fixed live-chat popout and is available only for video IDs, because a handle or channel ID does not identify a chat without an API lookup.
+
+There is no Google account, OAuth, YouTube Data API client, cookie or browser-profile import, per-channel YouTube preference or settings schema change. Global and player-profile settings apply; automatic chat and Chatterino are disabled. Streamlink has no YouTube low-latency option, so the preference is ignored for YouTube rather than replaced with transport tuning.
+
+Playback is best-effort: YouTube regularly changes its pages and may present consent or bot checks that the installed Streamlink version cannot pass. Such failures are reported as ordinary process failures, never as offline status. Discovery, following and notifications remain deferred: the Data API's Google OAuth verification and daily quota make polling followed channels impractical for a distributed desktop client.
 
 ## Native dependency maintenance after 1.0
 
