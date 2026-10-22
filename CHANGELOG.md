@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.6.0 - 2026-10-22
+
+### Added
+
+- Best-effort YouTube live playback from a video ID, `@handle` or `UC…` channel ID, including while signed out of Twitch, with explicit browser chat for video IDs.
+
+### Improved
+
+- Updated Tauri to 2.12.5, Tokio to 1.54.1, rustls-webpki to 0.103.16, React to 19.3.1, Vite to 8.3.5, Vitest to 5.0.5 and CI tooling.
+
 ## 1.5.5 - 2026-10-15
 
 ### Improved

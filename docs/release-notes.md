@@ -1,34 +1,26 @@
-# Stream GUI RS 1.5.5
+# Stream GUI RS 1.6.0
 
-Changes since Stream GUI RS 1.5.4.
+Changes since Stream GUI RS 1.5.5.
 
-This patch release updates the desktop runtime and locked dependencies, expands installation documentation and improves release automation. There are no user-facing feature changes.
+This feature release adds best-effort YouTube live playback alongside Twitch and Kick, and refreshes the desktop runtime and locked dependencies.
+
+## Features
+
+- Added YouTube live playback ([#76](https://github.com/ChrisLauinger77/stream-gui-rs/pull/76)). Open channel accepts an 11-character video ID, an `@handle` or a `UC…` channel ID; URLs are not accepted. Playback works while signed out of Twitch and uses no Google account, cookies or YouTube API.
+- YouTube sessions reuse the global and player-profile settings and quality policies, appear in Watching with a service label and have independent Stop/Restart controls. Streamlink has no YouTube low-latency option, so Watching shows it as not available. Audio does not fall back to video.
+- An explicit **Open YouTube browser chat** action opens the live chat popout in the browser for video IDs. Automatic chat and Chatterino are not used for YouTube.
+- YouTube playback is best-effort: YouTube consent or bot checks can prevent Streamlink from starting a stream, and a failure does not mean the stream is offline. Live status and channel details are not checked before launch.
+- The support report identifies YouTube sessions by service only.
 
 ## Dependencies
 
-- Updated Tauri to 2.12.4 and the single-instance plugin to 2.5.4 ([#72](https://github.com/ChrisLauinger77/stream-gui-rs/pull/72), [#73](https://github.com/ChrisLauinger77/stream-gui-rs/pull/73)).
-- Refreshed locked Rust dependencies, including zbus 5.19.0, hyper 1.12.0, rustls 0.23.46, aws-lc-rs 1.18.2 and time 0.3.55 ([#74](https://github.com/ChrisLauinger77/stream-gui-rs/pull/74)).
-- Refreshed locked npm transitive dependencies.
-- Updated the pinned Claude review workflow action ([#71](https://github.com/ChrisLauinger77/stream-gui-rs/pull/71)).
-
-## Documentation
-
-- Added platform-specific Streamlink installation instructions for Windows, macOS and Linux.
-- Added WinGet installation and upgrade commands for Stream GUI RS, with a note that package manifests may lag behind GitHub Releases.
-
-## Development
-
-- Building from source now requires Rust 1.90 or later, matching Tauri 2.12's minimum supported Rust version.
-- Optional Git hooks in `.githooks/` refresh npm and Cargo dependencies after pulls that change the lockfiles. Enable them per clone with `git config core.hooksPath .githooks`.
-- Grouped React, React DOM and their TypeScript type updates into a single Renovate pull request.
-- Added automatic WinGet manifest pull request submission after release publication when `WINGET_TOKEN` is configured, and documented token setup and post-publication checks. Without the token, submission remains manual.
+- Updated Tauri to 2.12.5, tauri-build to 2.7.4 and the Tauri JavaScript API and CLI to 2.12.4 ([#81](https://github.com/ChrisLauinger77/stream-gui-rs/pull/81), [#87](https://github.com/ChrisLauinger77/stream-gui-rs/pull/87)).
+- Refreshed locked Rust dependencies, including Tokio 1.54.1, rustls-webpki 0.103.16, webpki-root-certs 1.0.10, libc 0.2.191 and the ICU 2.4 crates ([#82](https://github.com/ChrisLauinger77/stream-gui-rs/pull/82), [#83](https://github.com/ChrisLauinger77/stream-gui-rs/pull/83), [#85](https://github.com/ChrisLauinger77/stream-gui-rs/pull/85), [#89](https://github.com/ChrisLauinger77/stream-gui-rs/pull/89)).
+- Updated React to 19.3.1, Vite to 8.3.5, Vitest to 5.0.5 and jsdom to 30.1.3 ([#77](https://github.com/ChrisLauinger77/stream-gui-rs/pull/77), [#88](https://github.com/ChrisLauinger77/stream-gui-rs/pull/88), [#80](https://github.com/ChrisLauinger77/stream-gui-rs/pull/80), [#79](https://github.com/ChrisLauinger77/stream-gui-rs/pull/79)).
+- Updated the pinned Rust toolchain and Claude review workflow actions ([#78](https://github.com/ChrisLauinger77/stream-gui-rs/pull/78), [#84](https://github.com/ChrisLauinger77/stream-gui-rs/pull/84), [#86](https://github.com/ChrisLauinger77/stream-gui-rs/pull/86)).
 
 ## Upgrade and platform support
 
 Settings remain at schema 9. Upgrade without signing out or clearing settings.
 
 Streamlink 8.0+ and a separately installed player remain required. Package formats remain Windows x86_64 installer and portable/Scoop ZIP; Linux x86_64 AppImage, DEB and RPM; and a universal macOS DMG for Apple Silicon and Intel requiring macOS 11.0 or later. Verify downloads against the accompanying SHA-256 files.
-
-Windows packages are unsigned. macOS bundles have an ad-hoc signature, without Developer ID signing or notarization.
-
-[Full changelog](https://github.com/ChrisLauinger77/stream-gui-rs/compare/v1.5.4...v1.5.5)
