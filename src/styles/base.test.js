@@ -97,3 +97,25 @@ test("single-line controls share sizing across browsing, settings and playback",
     for (const link of fixture.querySelectorAll(".text-button,.item-link")) expect(getComputedStyle(link).minHeight).toBe("0px");
   } finally { fixture.remove(); style.remove(); }
 });
+
+test("Open channel aligns action buttons independently of feedback height", () => {
+  const style = document.createElement("style"); style.textContent = css; document.head.append(style);
+  const fixture = document.createElement("div");
+  fixture.innerHTML = `
+    <form class="exact-lookup"><div class="session-actions">
+      <button>Play</button>
+      <div class="kick-chat"><button>Chat</button><p role="alert">Chat could not be opened.</p></div>
+      <div class="anonymous-bookmark"><button>Add bookmark</button><p role="status"></p></div>
+    </div></form>
+    <div class="session-actions"><label>Quality<select><option>Source</option></select></label><button>Restart</button></div>`;
+  document.body.append(fixture);
+  try {
+    const actions = fixture.querySelector(".exact-lookup .session-actions");
+    for (const message of ["", "Bookmark saved locally.", "The saved settings could not be read."]) {
+      fixture.querySelector('[role="status"]').textContent = message;
+      expect(getComputedStyle(actions).alignItems).toBe("flex-start");
+      expect(getComputedStyle(actions).flexWrap).toBe("wrap");
+    }
+    expect(getComputedStyle(fixture.querySelector(":scope > .session-actions")).alignItems).toBe("end");
+  } finally { fixture.remove(); style.remove(); }
+});
