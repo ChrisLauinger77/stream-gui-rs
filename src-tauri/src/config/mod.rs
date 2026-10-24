@@ -23,7 +23,7 @@ use std::{
 };
 use ts_rs::TS;
 
-pub const SETTINGS_VERSION: u32 = 9;
+pub const SETTINGS_VERSION: u32 = 10;
 const MAX_SETTINGS_BYTES: u64 = 256 * 1024;
 const MAX_CHANNEL_OVERRIDES: usize = 1000;
 
@@ -524,7 +524,13 @@ impl SettingsDocument {
                 serde_json::from_value(value)
                     .map_err(|_| settings_error("Invalid version 8 settings."))?
             }
-            Some(9) => serde_json::from_value(value).map_err(|_| {
+            Some(9) => {
+                let mut value = value;
+                value["version"] = SETTINGS_VERSION.into();
+                serde_json::from_value(value)
+                    .map_err(|_| settings_error("Invalid version 9 settings."))?
+            }
+            Some(10) => serde_json::from_value(value).map_err(|_| {
                 settings_error("Settings schema is invalid; the file was not changed.")
             })?,
             _ => {

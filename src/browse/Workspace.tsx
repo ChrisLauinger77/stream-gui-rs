@@ -104,7 +104,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
       {route.kind === "live" && <Streams key={`live:${language}`} mode="live" language={language} context={context} links={links} />}
       {route.kind === "categories" && <Categories context={context} links={links} />}
       {route.kind === "category" && <Category key={`${route.id}:${language}`} id={route.id} language={language} context={context} links={links} />}
-      {route.kind === "bookmarks" && <SavedItems list="bookmarks" open={(kind, id, name) => navigate({ kind, id, name })} />}
+      {route.kind === "bookmarks" && <SavedItems list="bookmarks" watchKick={watchKick} watchYoutube={watchYoutube} open={(kind, id, name) => navigate({ kind, id, name })} />}
       {route.kind === "lookup" && <OpenChannel sessionId={sessionId} draft={lookup} change={value => { setFuture([]); setLookup(value); }} open={links.channel} onAuthLost={onAuthLost} watchKick={watchKick} watchYoutube={watchYoutube} />}
       {route.kind === "search" && <SearchView context={context} links={links} draft={search} setDraft={value => { setFuture([]); setSearch(value); }} type={searchType} setType={value => { setFuture([]); setSearchType(value); }} />}
       {route.kind === "team" && <TeamView key={route.id} name={route.id} context={context} links={links} />}

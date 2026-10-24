@@ -3,7 +3,7 @@
 Stream GUI RS is a cross-platform desktop frontend for browsing Twitch and watching streams through external
 Streamlink and a separately installed player. The stack is Tauri 2, Rust, React, TypeScript and Vite;
 targets are Linux, macOS and Windows. Twitch supplies identity and browsing data; Streamlink handles media.
-Kick and YouTube support is limited to exact live playback and explicit browser chat, with no Kick/Google credentials or API client.
+Kick and YouTube support is limited to exact live playback, local locator bookmarks and explicit browser chat, with no Kick/Google credentials or API client.
 
 ```text
 Twitch → Rust auth / Helix / cache → typed Tauri IPC → React
@@ -131,8 +131,8 @@ user.
   IDs/metadata for Kick. Kick launch/chat take only a bounded channel slug (plus optional launch quality),
   never URLs. Rust constructs fixed `kick.com` playback/popout destinations. Kick launch/restart work while
   Twitch is signed out and must not acquire auth leases or invoke Helix/Kick APIs.
-- Kick reuses global/player-profile settings without channel overrides, persistent slug preferences or a
-  settings schema change. Automatic chat is disabled; explicit chat always uses the browser and never
+- Kick reuses global/player-profile settings without channel overrides or persistent per-channel playback
+  preferences. Local bookmarks store canonical locators only. Automatic chat is disabled; explicit chat always uses the browser and never
   Chatterino. Emit exactly the selected service's low-latency flag. Audio has no video fallback.
 - Streamlink owns Kick browser challenges. Do not read/import cookies or browser profiles. Drain bounded
   Kick child output without retaining it; fixed supervisor messages and typed process state remain. Never
@@ -180,9 +180,9 @@ user.
 
 ## Settings and launch configuration
 
-- `SettingsStore` owns strict version 9 settings: global Streamlink/player/quality/low-latency/chat/theme/color-mode/background/discovery-language/UI-language/text-scale preferences
+- `SettingsStore` owns strict version 10 settings: global Streamlink/player/quality/low-latency/chat/theme/color-mode/background/discovery-language/UI-language/text-scale preferences
   and sparse channel overrides, under Tauri's app config directory. Preserve atomic replacement, in-memory
-  migrations from this app's versions 1, 2, 3, 4, 5, 6, 7 and 8, and rejection of malformed/unknown schemas without overwrite.
+  migrations from this app's versions 1, 2, 3, 4, 5, 6, 7, 8 and 9, and rejection of malformed/unknown schemas without overwrite.
   Files are bounded to 256 KiB and channel overrides to 1,000 records.
 - Precedence is global defaults → selected player profile → optional channel overrides → optional request quality → immutable
   effective snapshot in `LaunchSpec` and the session. `quality: null` inherits; resolve only in Rust.
@@ -197,7 +197,7 @@ user.
   probes update only the path. React holds editable drafts and displays Rust effective previews.
 
 - Profiles have Rust-assigned stable UUIDs; at most 16, with unique trimmed names up to 64 characters/128 UTF-8 bytes. Reuse `PlayerSettings`; no Streamlink argument editor. There are no channel profile references. Delete clears an active selection; running snapshots remain immutable. Profile mutations share the existing global settings coordinator and backend operation lock. Global saves must preserve profiles/selection atomically, including stale/cancelled callers.
-- Local bookmarks and hidden items are independent 200-record lists of stable channel/category IDs and bounded labels. Shortcuts contain twelve typed application-local actions only. All mutations reuse the settings coordinator and atomic store; stale global saves preserve these fields. Direct navigation/bookmarks bypass passive hide filters. No Twitch follow mutation, arbitrary shortcut command or OS hotkey is permitted.
+- Local bookmarks and hidden items are independent 200-record lists with bounded labels. Bookmarks accept stable Twitch channel/category IDs and canonical Kick/YouTube locators; hidden items accept only Twitch IDs. Version 9 migrates to 10 without changing values. Bookmarks are reachable while signed out; anonymous playback requires an explicit Play action, with no live-status lookup. Shortcuts contain twelve typed application-local actions only. All mutations reuse the settings coordinator and atomic store; stale global saves preserve these fields. Direct navigation/bookmarks bypass passive hide filters. No Twitch follow mutation, arbitrary shortcut command or OS hotkey is permitted.
 - External navigation accepts only bounded Show/Channel/Category/Team intents. Parse strictly in Rust, never autoplay, and retain only the latest pending intent until frontend readiness/authentication. Preserve UUID-matched acknowledgement, single-instance forwarding and native hidden-window activation. No external URL, process argument or credential may enter the intent model or support report.
 - Chatterino gets only typed channel arguments and a fixed desktop-environment allowlist, never this app's credentials. Linux Flatpak support is restricted to the fixed `app/com.chatterino.chatterino` reference after native discovery; preserve bounded probes, explicit native override precedence and cancellation checks after probing. Its children are independent of Streamlink groups/jobs and survive Stop/Quit. Keep launcher wait/reaping bounded; never claim native instance reuse from source alone. Browser fallback is an explicit user action.
 - Update awareness is manual-only. Keep the fixed unauthenticated GitHub source separate from Twitch HTTP, reject redirects/untrusted release URLs, bound body/time/cache and never download or execute installers. Update failure must not affect startup or other services. About remains network-independent.

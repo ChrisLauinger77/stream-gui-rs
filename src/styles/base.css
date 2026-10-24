@@ -216,7 +216,7 @@ button, select { max-width:100%; overflow-wrap:anywhere; }
 .local-item-actions, .saved-item { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .local-item-actions > p { flex-basis: 100%; margin: 0; }
 .saved-items { display: grid; gap: .65rem; }
-.saved-item > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.saved-item > :first-child, .saved-item > .muted { min-width: 0; overflow-wrap: anywhere; }
 .saved-item > button:last-child { margin-left: auto; }
 
 .shortcut-editor { display: grid; gap: .5rem; }
