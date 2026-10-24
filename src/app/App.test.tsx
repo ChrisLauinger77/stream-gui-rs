@@ -6,6 +6,7 @@ import type { AuthStatus, SessionSnapshot } from "../lib/generated";
 import { defaultBindings } from "./shortcuts";
 import { api } from "../lib/ipc";
 import { SettingsProvider } from "../settings/useSettings";
+import { AnonymousBookmark, SavedItems } from "../features/DiscoveryPreferences";
 import { DeveloperTools as App } from "./DeveloperTools";
 
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: vi.fn() }));
@@ -14,7 +15,7 @@ vi.mock("../lib/ipc", () => ({
   api: {
     playbackSettings: vi.fn(), diagnostics: vi.fn(), authStatus: vi.fn(), sessions: vi.fn(),
     login: vi.fn(), stop: vi.fn(), probe: vi.fn(), launch: vi.fn(),
-    account: vi.fn(), cancel: vi.fn(), logout: vi.fn(), validate: vi.fn(), refresh: vi.fn(),
+    account: vi.fn(), cancel: vi.fn(), logout: vi.fn(), validate: vi.fn(), refresh: vi.fn(), modifyDiscovery: vi.fn(),
   },
 }));
 
@@ -165,4 +166,28 @@ test("account retrieval recovers after a temporary failure with bounded retries"
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
   expect(api.account).toHaveBeenCalledTimes(2);
   expect(container.textContent).toContain("Example Account");
+});
+
+test.each([
+  ["kick_channel", "EXAMPLE-1", "example-1"],
+  ["youtube", "@Example", "@example"],
+  ["youtube", "aBc-_123XyZ", "aBc-_123XyZ"],
+  ["youtube", "UCaBcDeFgHiJkLmNoPqRsT_-", "UCaBcDeFgHiJkLmNoPqRsT_-"],
+] as const)("%s bookmark toggles use canonical identity and restore focus after removal", async (kind, locator, id) => {
+  await act(async () => root.unmount()); root = createRoot(container);
+  const initial = await api.playbackSettings();
+  vi.mocked(api.modifyDiscovery).mockImplementation(async ({ present, item }) => ({
+    ...initial, discovery: { hidden: [], bookmarks: present ? [item] : [] },
+  }));
+  const watch = vi.fn();
+  await act(async () => { root.render(<SettingsProvider><AnonymousBookmark kind={kind} locator={locator} /><SavedItems list="bookmarks" watchKick={watch} watchYoutube={watch} /></SettingsProvider>); });
+  await act(async () => button("Add bookmark").click());
+  expect(api.modifyDiscovery).toHaveBeenLastCalledWith({ list: "bookmarks", item: { kind, id, name: id }, present: true });
+  expect(button("Remove bookmark").getAttribute("aria-pressed")).toBe("true");
+  const remove = container.querySelector<HTMLButtonElement>(`.saved-item button[aria-label]`)!;
+  remove.focus(); await act(async () => remove.click());
+  expect(api.modifyDiscovery).toHaveBeenLastCalledWith({ list: "bookmarks", item: { kind, id, name: id }, present: false });
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Local bookmarks");
+  expect(button("Add bookmark").getAttribute("aria-pressed")).toBe("false");
+  expect(watch).not.toHaveBeenCalled();
 });

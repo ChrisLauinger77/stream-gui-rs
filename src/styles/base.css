@@ -143,6 +143,7 @@ summary { cursor:pointer; font-size:0.75rem; padding:6px 0; color:var(--muted); 
 .session-heading strong { font-size:0.75rem; color:var(--accent); font-weight:500; }
 .session-title { font-size:0.75rem; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .session-actions { display:flex; align-items:end; gap:8px; flex-wrap:wrap; }
+.exact-lookup .session-actions { align-items:flex-start; }
 .session-actions label { font-size:0.6875rem; gap:3px; }
 .session-diagnostics { margin-top:8px; }
 .playback-feedback { flex:none; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 20px; font-size:0.75rem; }
@@ -216,7 +217,7 @@ button, select { max-width:100%; overflow-wrap:anywhere; }
 .local-item-actions, .saved-item { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .local-item-actions > p { flex-basis: 100%; margin: 0; }
 .saved-items { display: grid; gap: .65rem; }
-.saved-item > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.saved-item > :first-child, .saved-item > .muted { min-width: 0; overflow-wrap: anywhere; }
 .saved-item > button:last-child { margin-left: auto; }
 
 .shortcut-editor { display: grid; gap: .5rem; }

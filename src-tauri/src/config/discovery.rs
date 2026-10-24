@@ -1,6 +1,7 @@
 //! Bounded local preferences. IDs are identity; labels are presentation only.
 use super::{SettingsStore, settings_error, validate_broadcaster_id};
 use crate::domain::Result;
+use crate::streamlink::playback::{KickSlug, YoutubeLocator};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -10,6 +11,8 @@ pub const MAX_SAVED_ITEMS: usize = 200;
 pub enum ItemKind {
     Channel,
     Category,
+    KickChannel,
+    Youtube,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -38,8 +41,20 @@ pub struct DiscoveryMutation {
     pub present: bool,
 }
 impl SavedItem {
+    fn canonical_id(&self) -> Result<String> {
+        match self.kind {
+            ItemKind::Channel | ItemKind::Category => {
+                validate_broadcaster_id(&self.id)?;
+                Ok(self.id.clone())
+            }
+            ItemKind::KickChannel => Ok(KickSlug::parse(&self.id)?.as_str().into()),
+            ItemKind::Youtube => Ok(YoutubeLocator::parse(&self.id)?.as_str().into()),
+        }
+    }
     fn validate(&self) -> Result<()> {
-        validate_broadcaster_id(&self.id)?;
+        if self.id != self.canonical_id()? {
+            return Err(settings_error("Saved item IDs must be canonical."));
+        }
         if self.name.is_empty()
             || self.name.trim() != self.name
             || self.name.len() > 256
@@ -57,6 +72,15 @@ impl SavedItem {
 }
 impl DiscoveryPreferences {
     pub fn validate(&self) -> Result<()> {
+        if self
+            .hidden
+            .iter()
+            .any(|item| matches!(item.kind, ItemKind::KickChannel | ItemKind::Youtube))
+        {
+            return Err(settings_error(
+                "Only Twitch items can be hidden from discovery.",
+            ));
+        }
         for list in [&self.bookmarks, &self.hidden] {
             if list.len() > MAX_SAVED_ITEMS {
                 return Err(settings_error(
@@ -75,7 +99,15 @@ impl DiscoveryPreferences {
     }
 }
 impl SettingsStore {
-    pub fn modify_discovery(&self, request: DiscoveryMutation) -> Result<super::Settings> {
+    pub fn modify_discovery(&self, mut request: DiscoveryMutation) -> Result<super::Settings> {
+        if matches!(request.list, DiscoveryList::Hidden)
+            && matches!(request.item.kind, ItemKind::KickChannel | ItemKind::Youtube)
+        {
+            return Err(settings_error(
+                "Only Twitch items can be hidden from discovery.",
+            ));
+        }
+        request.item.id = request.item.canonical_id()?;
         request.item.validate()?;
         let mut value = self.value.lock().expect("settings mutex poisoned");
         let mut next = value.clone();

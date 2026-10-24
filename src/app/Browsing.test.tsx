@@ -2546,3 +2546,94 @@ test("local bookmarks, hides and shortcuts survive logout while navigation histo
   await click("Settings"); await click("Shortcuts", ".settings-nav");
   expect(container.querySelector('[aria-label="Focus Search binding: Unassigned"]')).not.toBeNull();
 });
+
+test.each(["signed_in", "signed_out"] as const)("Open channel bookmarks persist and play with Twitch %s", async phase => {
+  const saved = localPreferences();
+  if (phase === "signed_out") vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  vi.mocked(api.launchKick).mockResolvedValue(kickPlaying());
+  vi.mocked(api.launchYoutube).mockResolvedValue(youtubePlaying());
+  await render(); await click("Open channel");
+  await editControl("Service", "kick", "select"); await editControl("Kick channel name", "Example-1");
+  await click("Add bookmark", ".exact-lookup");
+  expect(saved().discovery.bookmarks).toEqual([{ kind: "kick_channel", id: "example-1", name: "example-1" }]);
+  expect(button("Remove bookmark", ".exact-lookup").getAttribute("aria-pressed")).toBe("true");
+  expect(container.querySelector(".exact-lookup")?.textContent).not.toContain("Hide");
+  await editControl("Service", "youtube", "select");
+  expect(container.querySelector('.anonymous-bookmark [role="status"]')?.textContent).toBe("");
+  await editControl("YouTube video ID, @handle or channel ID", "@Example"); await click("Add bookmark", ".exact-lookup");
+  expect(saved().discovery.bookmarks[1]).toEqual({ kind: "youtube", id: "@example", name: "@example" });
+  expect(api.launchKick).not.toHaveBeenCalled(); expect(api.launchYoutube).not.toHaveBeenCalled();
+  await act(async () => root.unmount()); root = createRoot(container); await render();
+  await click("Bookmarks");
+  expect(container.querySelectorAll(".saved-item")).toHaveLength(2);
+  expect(container.querySelector(".saved-items")?.textContent).toContain("no live status");
+  expect(container.querySelector(".saved-items")?.textContent).toContain("stops working when that stream ends");
+  await click("Play Kick channel", ".saved-items");
+  expect(api.launchKick).toHaveBeenCalledExactlyOnceWith({ slug: "example-1", quality: null });
+  await click("Close Watching"); await click("Play YouTube stream", ".saved-items");
+  expect(api.launchYoutube).toHaveBeenCalledExactlyOnceWith({ locator: "@example", quality: null });
+  expect(api.launch).not.toHaveBeenCalled(); expect(api.lookupChannel).not.toHaveBeenCalled(); expect(api.channel).not.toHaveBeenCalled();
+  if (phase === "signed_out") expect(api.followedStreams).not.toHaveBeenCalled();
+});
+
+test.each([signedIn, signedOut])("bookmark rows offer browser chat only for supported locators with auth $phase", async auth => {
+  localPreferences({ ...playbackSettings, discovery: { hidden: [], bookmarks: [
+    { kind: "kick_channel", id: "example-1", name: "example-1" },
+    { kind: "youtube", id: "@example", name: "@example" },
+    { kind: "youtube", id: "UCaBcDeFgHiJkLmNoPqRsT_-", name: "UCaBcDeFgHiJkLmNoPqRsT_-" },
+    { kind: "youtube", id: "aBc-_123XyZ", name: "aBc-_123XyZ" },
+  ] } });
+  vi.mocked(api.authStatus).mockResolvedValue(auth);
+  vi.mocked(api.openKickBrowserChat).mockResolvedValue(null);
+  vi.mocked(api.openYoutubeBrowserChat).mockResolvedValue(null);
+  await render(); await click("Bookmarks");
+  const rows = container.querySelectorAll(".saved-item");
+  expect(rows[1].textContent).not.toContain("chat"); expect(rows[2].textContent).not.toContain("chat");
+  expect([...rows[3].querySelectorAll("button")].filter(b => b.textContent === "Open YouTube browser chat")).toHaveLength(1);
+  await click("Open Kick browser chat", ".saved-items"); await click("Open YouTube browser chat", ".saved-items");
+  expect(api.openKickBrowserChat).toHaveBeenCalledExactlyOnceWith({ slug: "example-1" });
+  expect(api.openYoutubeBrowserChat).toHaveBeenCalledExactlyOnceWith({ locator: "aBc-_123XyZ" });
+  expect(api.openChat).not.toHaveBeenCalled(); expect(api.launchKick).not.toHaveBeenCalled();
+});
+
+test("signed-out Bookmarks shortcut focuses the list and Twitch entries require sign-in", async () => {
+  const saved = localPreferences({ ...playbackSettings, discovery: { hidden: [], bookmarks: [
+    { kind: "channel", id: "123", name: "Twitch channel" },
+    { kind: "category", id: "456", name: "Twitch category" },
+    { kind: "kick_channel", id: "example", name: "example" },
+  ] } });
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  await render();
+  await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "6", ctrlKey: true, bubbles: true })); });
+  expect(document.activeElement?.textContent).toBe("Bookmarks");
+  expect(container.querySelectorAll(".saved-item")[0].textContent).toContain("Sign in to Twitch");
+  expect(container.querySelectorAll(".saved-item")[1].textContent).toContain("Sign in to Twitch");
+  button("Remove bookmark example").focus(); await click("Remove bookmark example");
+  expect(saved().discovery.bookmarks).toHaveLength(2);
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Local bookmarks");
+  expect(api.channel).not.toHaveBeenCalled(); expect(api.category).not.toHaveBeenCalled(); expect(api.launchKick).not.toHaveBeenCalled();
+});
+
+test.each([
+  ["kick", "Kick channel name", "invalid_kick_slug", "Enter 1–100"],
+  ["youtube", "YouTube video ID, @handle or channel ID", "invalid_youtube_locator", "Enter an 11-character video ID"],
+] as const)("invalid %s bookmark shows only the fixed locator error", async (service, label, code, message) => {
+  localPreferences(); vi.mocked(api.modifyDiscovery).mockRejectedValue({ code, message: "PRIVATE locator error" });
+  await render(); await click("Open channel"); await editControl("Service", service, "select");
+  await editControl(label, "https://evil.example"); await click("Add bookmark");
+  expect(container.querySelector('.anonymous-bookmark [role="alert"]')?.textContent).toContain(message);
+  expect(text()).not.toContain("PRIVATE"); expect(api.launchKick).not.toHaveBeenCalled(); expect(api.launchYoutube).not.toHaveBeenCalled();
+});
+
+test("a pending anonymous bookmark save survives navigation without starting playback", async () => {
+  const saved = localPreferences(); const pending = deferred<Settings>();
+  vi.mocked(api.modifyDiscovery).mockReturnValueOnce(pending.promise);
+  await render(); await click("Open channel"); await editControl("Service", "kick", "select");
+  await editControl("Kick channel name", "example");
+  await act(async () => { button("Add bookmark").click(); button("Add bookmark").click(); });
+  expect(api.modifyDiscovery).toHaveBeenCalledOnce();
+  await click("Bookmarks");
+  await act(async () => pending.resolve({ ...saved(), discovery: { hidden: [], bookmarks: [{ kind: "kick_channel", id: "example", name: "example" }] } }));
+  expect(container.querySelector(".saved-item")?.textContent).toContain("example");
+  expect(api.launchKick).not.toHaveBeenCalled();
+});

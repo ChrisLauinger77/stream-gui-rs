@@ -14,6 +14,10 @@ Rust now owns authentication, Helix/cache/rate limits, settings, native integrat
 
 Exact Kick live-channel playback and explicit browser chat are implemented through Streamlink and the existing playback services; official Kick discovery remains deferred as described below. Exact YouTube live playback follows the same Stage 1 model, described below. Advanced transports, more chat clients, legacy configuration import, an embedded player, automatic updating, a separate automation CLI and further streaming services remain deferred. None is a prerequisite for 1.0; revisit them only for a demonstrated user workflow and a viable cross-platform maintenance plan.
 
+## Local Kick and YouTube bookmarks
+
+Open channel can save canonical Kick slugs and YouTube video IDs, `@handles` or `UC…` channel IDs as local bookmarks. Bookmarks are reachable while signed out of Twitch and require an explicit Play action. This adds no discovery, live-status request, scraping, undocumented endpoint or Streamlink probe. A failed launch does not establish offline status. Video-ID bookmarks stop working when that stream ends; handles/channel IDs target current live streams but cannot identify chat. Hidden lists, external navigation and support reporting keep their existing boundaries.
+
 ## Kick discovery (Stage 2): deferred
 
 **Decision B, revalidated 2026-10-03.** Kick Stage 2 remains deferred because the official discovery APIs still require authenticated tokens that cannot currently be obtained safely by a distributed desktop application without a confidential client secret or backend. The short revalidation found no material change to the access constraints established by the feasibility research earlier that day. Stage 1 playback and explicit browser chat remain available independently of Kick authentication.
@@ -44,7 +48,7 @@ The last operation requires known IDs; it does not return a viewer's Following l
 
 YouTube is approved for the same anonymous playback-only scope as Kick Stage 1: users who already know a live stream can open it by video ID, `@handle` or `UC…` channel ID without leaving the app's player workflow. Streamlink's bundled YouTube plugin supplies media; Rust validates the locator and constructs fixed `www.youtube.com` destinations. Explicit browser chat uses the fixed live-chat popout and is available only for video IDs, because a handle or channel ID does not identify a chat without an API lookup.
 
-There is no Google account, OAuth, YouTube Data API client, cookie or browser-profile import, per-channel YouTube preference or settings schema change. Global and player-profile settings apply; automatic chat and Chatterino are disabled. Streamlink has no YouTube low-latency option, so the preference is ignored for YouTube rather than replaced with transport tuning.
+There is no Google account, OAuth, YouTube Data API client, cookie import, browser-profile import or per-channel YouTube playback preference. Local locator bookmarks use settings version 10 with a no-op migration from version 9. Global and player-profile settings apply; automatic chat and Chatterino are disabled. Streamlink has no YouTube low-latency option, so the preference is ignored for YouTube rather than replaced with transport tuning.
 
 Playback is best-effort: YouTube regularly changes its pages and may present consent or bot checks that the installed Streamlink version cannot pass. Such failures are reported as ordinary process failures, never as offline status. Discovery, following and notifications remain deferred: the Data API's Google OAuth verification and daily quota make polling followed channels impractical for a distributed desktop client.
 

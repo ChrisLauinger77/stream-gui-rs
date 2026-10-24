@@ -11,6 +11,7 @@ import type { Account, AuthStatus } from "../lib/generated";
 import { SettingsProvider } from "../settings/useSettings";
 import { I18nProvider } from "../i18n";
 import { usePlayback } from "../playback/usePlayback";
+import { SavedItems } from "../features/DiscoveryPreferences";
 import { About } from "../features/About";
 import { SupportReport } from "../features/SupportReport";
 import { Playback } from "../features/Playback";
@@ -46,6 +47,8 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const [watching, setWatching] = useState(false);
   const [openChannel, setOpenChannel] = useState(false);
   const [lookup, setLookup] = useState<OpenChannelDraft>({ service: "kick", twitchLogin: "", kickSlug: "", youtubeLocator: "" });
+  const [signedOutSection, setSignedOutSection] = useState<"lookup" | "bookmarks">("lookup");
+  const bookmarksHeading = useRef<HTMLHeadingElement>(null);
   const openChannelPanel = useRef<HTMLElement>(null);
   const openChannelButton = useRef<HTMLButtonElement>(null);
   const [navigationFocus, setNavigationFocus] = useState<{ id: string; target: "channel" | "watching" | "test" } | null>(null);
@@ -121,11 +124,14 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   useEffect(() => { if (notificationTest) testHeading.current?.focus(); }, [notificationTest]);
   useEffect(() => { if (settings) settingsHeading.current?.focus(); }, [settings]);
   useEffect(() => { if (watching) watchingPanel.current?.querySelector<HTMLElement>("h2")?.focus(); }, [watching]);
-  useEffect(() => { if (openChannel && !auth.sessionId) openChannelPanel.current?.querySelector<HTMLElement>("h1")?.focus(); }, [openChannel, auth.sessionId]);
+  useEffect(() => { if (openChannel && !auth.sessionId) (signedOutSection === "bookmarks" ? bookmarksHeading.current : openChannelPanel.current?.querySelector<HTMLElement>("h1"))?.focus(); }, [openChannel, auth.sessionId, signedOutSection]);
   const closeOpenChannel = () => { setOpenChannel(false); openChannelButton.current?.focus(); };
   const navigate = (section: "search" | "following" | "live" | "categories" | "lookup" | "bookmarks") => {
     setSettings(false); setWatching(false);
-    if (section === "lookup" && !auth.sessionId) setOpenChannel(true);
+    if ((section === "lookup" || section === "bookmarks") && !auth.sessionId) {
+      setSignedOutSection(section); setOpenChannel(true);
+      (section === "bookmarks" ? bookmarksHeading.current : openChannelPanel.current?.querySelector<HTMLElement>("h1"))?.focus();
+    }
     else workspace.current?.navigate(section);
   };
   useShortcuts({
@@ -155,6 +161,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
     <span>{auth.account?.displayName ?? auth.status?.user?.login ?? t("app.notConnected")}</span>
     {auth.sessionId && <button className="quiet" disabled={auth.busy === "logout"} onClick={() => { void auth.run("logout"); }}>{t("app.signOut")}</button>}
     {!auth.sessionId && <button ref={openChannelButton} className="quiet" aria-expanded={openChannel} onClick={() => { if (openChannel) closeOpenChannel(); else navigate("lookup"); }}>{t("browse.openChannel")}</button>}
+    {!auth.sessionId && <button className="quiet" onClick={() => navigate("bookmarks")}>{t("browse.bookmarks")}</button>}
     <button ref={watchingButton} className="quiet" aria-label={t("app.watching")} title={t("app.watchingShortcut", { shortcut: shortcuts.watching })} aria-expanded={watching} onClick={event => { if (watching) closeWatching(); else { capture("watching", event.currentTarget); setWatching(true); setSettings(false); } }}>{activeCount > 0 ? t("app.watchingCount", { count: activeCount }) : t("app.watching")}</button>
     <button ref={settingsButton} className="quiet" title={t("app.settingsShortcut", { shortcut: shortcuts.settings })} aria-expanded={settings} onClick={event => { if (settings) closeSettings(); else { capture("settings", event.currentTarget); setSettings(true); setWatching(false); } }}>{t("app.settings")}</button>
   </div>;
@@ -178,7 +185,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       <button onClick={() => setNotificationTest(false)}>{t("app.backToBrowsing2")}</button>
       <button onClick={developer}>{t("app.developerTools")}</button>
     </main> : auth.sessionId ? <BrowserWorkspace preferences={playback.settings} saveLanguage={playback.saveLanguage} actionsRef={workspace} key={auth.sessionId} sessionId={auth.sessionId} onAuthLost={auth.lost} watch={watch} watchKick={watchKick} watchYoutube={watchYoutube} pending={playback.pending} /> : openChannel ?
-      <main className="browse-content signed-out-channel" ref={openChannelPanel}><h1 tabIndex={-1}>{t("browse.openChannel")}</h1><OpenChannel sessionId={null} draft={lookup} change={setLookup} open={() => {}} onAuthLost={auth.lost} watchKick={watchKick} watchYoutube={watchYoutube} /><button className="quiet" onClick={closeOpenChannel}>{t("openChannel.backToSignIn")}</button></main> :
+      <main className="browse-content signed-out-channel" ref={openChannelPanel}><h1 tabIndex={-1}>{t("browse.openChannel")}</h1><OpenChannel sessionId={null} draft={lookup} change={setLookup} open={() => {}} onAuthLost={auth.lost} watchKick={watchKick} watchYoutube={watchYoutube} /><h2 ref={bookmarksHeading} tabIndex={-1}>{t("browse.bookmarks")}</h2><SavedItems list="bookmarks" watchKick={watchKick} watchYoutube={watchYoutube} /><button className="quiet" onClick={closeOpenChannel}>{t("openChannel.backToSignIn")}</button></main> :
       <SignIn status={auth.status} account={auth.account} busy={auth.busy} run={auth.run} />}
     {about && <About activation={about} close={() => setAbout(null)} />}
     {support && <SupportReport close={() => setSupport(false)} />}

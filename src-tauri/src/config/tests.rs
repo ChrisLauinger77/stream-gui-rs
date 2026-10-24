@@ -19,13 +19,13 @@ fn settings_version_and_round_trip() {
         SettingsDocument::from_json(&serde_json::to_string(&value).unwrap()).unwrap(),
         value
     );
-    assert_eq!(value.version, 9);
+    assert_eq!(value.version, 10);
     assert_eq!(value.settings.theme, Theme::System);
     assert_eq!(value.settings.theme_palette, ThemePalette::Default);
     assert_eq!(value.settings.ui_language, UiLanguage::System);
     assert!(!value.settings.automatic_chat);
     assert_eq!(value.settings.default_quality, QualityPolicy::Source);
-    for text in ["{}", r#"{"version":10}"#, r#"{"version":0}"#] {
+    for text in ["{}", r#"{"version":11}"#, r#"{"version":0}"#] {
         assert_eq!(
             SettingsDocument::from_json(text).unwrap_err().code,
             ErrorCode::SettingsVersion
@@ -58,7 +58,7 @@ fn version_eight_theme_migration_preserves_mode_and_other_settings_until_save() 
     store.update(selected).unwrap();
     let saved: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(saved["version"], 9);
+    assert_eq!(saved["version"], 10);
     assert_eq!(saved["settings"]["theme"], "light");
     assert_eq!(saved["settings"]["themePalette"], "custom");
     assert_eq!(
@@ -147,7 +147,7 @@ fn version_two_migration_preserves_every_playback_preference_without_rewriting()
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 9);
+    assert_eq!(persisted["version"], 10);
     assert_eq!(persisted["channelOverrides"], serde_json::json!({}));
 }
 
@@ -410,7 +410,7 @@ fn phase_five_migration_is_strict_preserves_channel_preferences_and_defaults_off
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 9);
+    assert_eq!(persisted["version"], 10);
     let reopened = SettingsStore::open(root.path()).unwrap();
     assert_eq!(reopened.snapshot(), expected);
     for id in ["123", "456"] {
@@ -548,7 +548,7 @@ fn version_four_migration_preserves_released_preferences_and_defaults_phase_six(
     check_channels(&reopened);
     let saved: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(saved["version"], 9);
+    assert_eq!(saved["version"], 10);
     assert!(saved["settings"]["discoveryLanguage"].is_null());
     assert_eq!(saved["settings"]["lowLatency"], false);
     assert_eq!(saved["settings"]["textScale"], "100");
@@ -746,7 +746,7 @@ fn released_schema_five_migration_preserves_all_values_and_starts_without_profil
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
     assert_eq!(persisted["channelOverrides"], old["channelOverrides"]);
-    assert_eq!(persisted["version"], 9);
+    assert_eq!(persisted["version"], 10);
     let mut hostile = old;
     hostile["settings"]["profiles"] = serde_json::json!([]);
     assert!(SettingsDocument::from_json(&hostile.to_string()).is_err());
@@ -1037,7 +1037,7 @@ fn version_six_migrates_in_memory_and_rejects_smuggled_phase_eight_fields() {
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&fs::read_to_string(store.path()).unwrap())
             .unwrap()["version"],
-        9
+        10
     );
 }
 
@@ -1082,7 +1082,7 @@ fn version_seven_migrates_language_without_changing_existing_settings() {
     store.update(stale).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 9);
+    assert_eq!(persisted["version"], 10);
     assert_eq!(persisted["settings"]["uiLanguage"], "fr");
     assert_eq!(
         SettingsStore::open(dir.path())
@@ -1422,4 +1422,197 @@ fn discovery_shortcuts_profiles_and_channel_mutations_preserve_each_other() {
         restored.channel("123").unwrap().overrides.low_latency,
         Some(true)
     );
+}
+
+#[test]
+fn version_nine_migrates_without_rewriting_until_a_successful_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut old = serde_json::to_value(SettingsDocument::default()).unwrap();
+    old["version"] = 9.into();
+    old["settings"]["discovery"]["bookmarks"] = serde_json::json!([
+        {"kind":"channel","id":"123","name":"Synthetic channel"},
+        {"kind":"category","id":"456","name":"Synthetic category"}
+    ]);
+    let bytes = old.to_string();
+    let path = dir.path().join("settings.json");
+    fs::write(&path, &bytes).unwrap();
+    let store = SettingsStore::open(dir.path()).unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), bytes);
+    assert_eq!(
+        serde_json::to_value(store.snapshot()).unwrap(),
+        old["settings"]
+    );
+    store.update(store.snapshot()).unwrap();
+    let saved: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(saved["version"], 10);
+    assert_eq!(saved["settings"], old["settings"]);
+}
+
+#[test]
+fn anonymous_bookmarks_canonicalize_deduplicate_and_survive_stale_saves() {
+    use discovery::*;
+    let dir = tempfile::tempdir().unwrap();
+    let store = SettingsStore::open(dir.path()).unwrap();
+    let stale = store.snapshot();
+    for (kind, input, canonical) in [
+        (ItemKind::KickChannel, "Example-1", "example-1"),
+        (ItemKind::Youtube, "@Example", "@example"),
+        (
+            ItemKind::Youtube,
+            "UCaBcDeFgHiJkLmNoPqRsT_-",
+            "UCaBcDeFgHiJkLmNoPqRsT_-",
+        ),
+        (ItemKind::Youtube, "aBc-_123XyZ", "aBc-_123XyZ"),
+        (ItemKind::Youtube, "abc-_123xyz", "abc-_123xyz"),
+    ] {
+        for id in [input, canonical] {
+            store
+                .modify_discovery(DiscoveryMutation {
+                    list: DiscoveryList::Bookmarks,
+                    item: SavedItem {
+                        kind,
+                        id: id.into(),
+                        name: canonical.into(),
+                    },
+                    present: true,
+                })
+                .unwrap();
+        }
+    }
+    store.update(stale).unwrap();
+    let items = store.snapshot().discovery.bookmarks;
+    assert_eq!(items.len(), 5);
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "example-1",
+            "@example",
+            "UCaBcDeFgHiJkLmNoPqRsT_-",
+            "aBc-_123XyZ",
+            "abc-_123xyz"
+        ]
+    );
+    assert_eq!(
+        SettingsStore::open(dir.path())
+            .unwrap()
+            .snapshot()
+            .discovery
+            .bookmarks,
+        items
+    );
+    store
+        .modify_discovery(DiscoveryMutation {
+            list: DiscoveryList::Bookmarks,
+            item: SavedItem {
+                kind: ItemKind::KickChannel,
+                id: "EXAMPLE-1".into(),
+                name: "example-1".into(),
+            },
+            present: false,
+        })
+        .unwrap();
+    assert_eq!(store.snapshot().discovery.bookmarks.len(), 4);
+}
+
+#[test]
+fn invalid_anonymous_saved_items_and_hidden_locators_preserve_the_file() {
+    use discovery::*;
+    let dir = tempfile::tempdir().unwrap();
+    let store = SettingsStore::open(dir.path()).unwrap();
+    store.update(store.snapshot()).unwrap();
+    let bytes = fs::read(store.path()).unwrap();
+    for (kind, id, code) in [
+        (
+            ItemKind::KickChannel,
+            "https://kick.com/example",
+            ErrorCode::InvalidKickSlug,
+        ),
+        (
+            ItemKind::KickChannel,
+            "bad slug",
+            ErrorCode::InvalidKickSlug,
+        ),
+        (ItemKind::Youtube, "@ab", ErrorCode::InvalidYoutubeLocator),
+        (
+            ItemKind::Youtube,
+            "https://youtube.com/@example",
+            ErrorCode::InvalidYoutubeLocator,
+        ),
+        (ItemKind::Channel, "example", ErrorCode::InvalidInput),
+        (ItemKind::Category, "@example", ErrorCode::InvalidInput),
+        (ItemKind::Channel, "0123", ErrorCode::InvalidInput),
+    ] {
+        assert_eq!(
+            store
+                .modify_discovery(DiscoveryMutation {
+                    list: DiscoveryList::Bookmarks,
+                    item: SavedItem {
+                        kind,
+                        id: id.into(),
+                        name: "Synthetic".into()
+                    },
+                    present: true,
+                })
+                .unwrap_err()
+                .code,
+            code
+        );
+        assert_eq!(fs::read(store.path()).unwrap(), bytes);
+    }
+    for (kind, id) in [
+        (ItemKind::KickChannel, "example"),
+        (ItemKind::Youtube, "@example"),
+    ] {
+        let item = SavedItem {
+            kind,
+            id: id.into(),
+            name: id.into(),
+        };
+        assert!(
+            store
+                .modify_discovery(DiscoveryMutation {
+                    list: DiscoveryList::Hidden,
+                    item: item.clone(),
+                    present: true,
+                })
+                .is_err()
+        );
+        assert_eq!(fs::read(store.path()).unwrap(), bytes);
+        assert!(
+            DiscoveryPreferences {
+                bookmarks: vec![],
+                hidden: vec![item]
+            }
+            .validate()
+            .is_err()
+        );
+    }
+    for (kind, id) in [
+        (ItemKind::KickChannel, "Example"),
+        (ItemKind::Youtube, "@Example"),
+    ] {
+        assert!(
+            DiscoveryPreferences {
+                bookmarks: vec![SavedItem {
+                    kind,
+                    id: id.into(),
+                    name: id.into()
+                }],
+                hidden: vec![]
+            }
+            .validate()
+            .is_err()
+        );
+    }
+    let mut unknown: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    unknown["settings"]["discovery"]["bookmarks"] = serde_json::json!([
+        {"kind":"unknown_service","id":"example","name":"Synthetic"}
+    ]);
+    let unknown_bytes = unknown.to_string();
+    fs::write(store.path(), &unknown_bytes).unwrap();
+    assert!(SettingsStore::open(dir.path()).is_err());
+    assert_eq!(fs::read_to_string(store.path()).unwrap(), unknown_bytes);
 }
