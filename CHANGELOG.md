@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.7.0 - 2026-10-24
+
+### Added
+
+- Local bookmarks for Kick and YouTube locators from Open channel, with explicit Play, browser chat and Remove actions, and Bookmarks access while signed out of Twitch.
+
 ## 1.6.0 - 2026-10-22
 
 ### Added

@@ -1,26 +1,22 @@
-# Stream GUI RS 1.6.0
+# Stream GUI RS 1.7.0
 
-Changes since Stream GUI RS 1.5.5.
+Changes since Stream GUI RS 1.6.0.
 
-This feature release adds best-effort YouTube live playback alongside Twitch and Kick, and refreshes the desktop runtime and locked dependencies.
+This feature release lets you bookmark Kick and YouTube channels locally and reach Bookmarks while signed out of Twitch.
 
 ## Features
 
-- Added YouTube live playback ([#76](https://github.com/ChrisLauinger77/stream-gui-rs/pull/76)). Open channel accepts an 11-character video ID, an `@handle` or a `UC…` channel ID; URLs are not accepted. Playback works while signed out of Twitch and uses no Google account, cookies or YouTube API.
-- YouTube sessions reuse the global and player-profile settings and quality policies, appear in Watching with a service label and have independent Stop/Restart controls. Streamlink has no YouTube low-latency option, so Watching shows it as not available. Audio does not fall back to video.
-- An explicit **Open YouTube browser chat** action opens the live chat popout in the browser for video IDs. Automatic chat and Chatterino are not used for YouTube.
-- YouTube playback is best-effort: YouTube consent or bot checks can prevent Streamlink from starting a stream, and a failure does not mean the stream is offline. Live status and channel details are not checked before launch.
-- The support report identifies YouTube sessions by service only.
+- Added local Kick and YouTube bookmarks ([#90](https://github.com/ChrisLauinger77/stream-gui-rs/pull/90)). Open channel has a bookmark toggle for Kick channel slugs and YouTube video IDs, `@handle`s and `UC…` channel IDs. Bookmarks store the canonical locator only, never a URL.
+- Saved Kick and YouTube rows have explicit **Play**, browser chat (where supported) and **Remove** actions. Playback starts only when you choose Play; no live status is looked up beforehand.
+- Bookmarks is available while signed out of Twitch from the top bar or its keyboard shortcut. Twitch bookmarks remain visible with sign-in guidance.
+- Hidden items remain Twitch-only, and the existing bookmark limits are unchanged.
 
-## Dependencies
+## Fixes
 
-- Updated Tauri to 2.12.5, tauri-build to 2.7.4 and the Tauri JavaScript API and CLI to 2.12.4 ([#81](https://github.com/ChrisLauinger77/stream-gui-rs/pull/81), [#87](https://github.com/ChrisLauinger77/stream-gui-rs/pull/87)).
-- Refreshed locked Rust dependencies, including Tokio 1.54.1, rustls-webpki 0.103.16, webpki-root-certs 1.0.10, libc 0.2.191 and the ICU 2.4 crates ([#82](https://github.com/ChrisLauinger77/stream-gui-rs/pull/82), [#83](https://github.com/ChrisLauinger77/stream-gui-rs/pull/83), [#85](https://github.com/ChrisLauinger77/stream-gui-rs/pull/85), [#89](https://github.com/ChrisLauinger77/stream-gui-rs/pull/89)).
-- Updated React to 19.3.1, Vite to 8.3.5, Vitest to 5.0.5 and jsdom to 30.1.3 ([#77](https://github.com/ChrisLauinger77/stream-gui-rs/pull/77), [#88](https://github.com/ChrisLauinger77/stream-gui-rs/pull/88), [#80](https://github.com/ChrisLauinger77/stream-gui-rs/pull/80), [#79](https://github.com/ChrisLauinger77/stream-gui-rs/pull/79)).
-- Updated the pinned Rust toolchain and Claude review workflow actions ([#78](https://github.com/ChrisLauinger77/stream-gui-rs/pull/78), [#84](https://github.com/ChrisLauinger77/stream-gui-rs/pull/84), [#86](https://github.com/ChrisLauinger77/stream-gui-rs/pull/86)).
+- Aligned the Open channel action buttons, including in longer translations ([#90](https://github.com/ChrisLauinger77/stream-gui-rs/pull/90)).
 
 ## Upgrade and platform support
 
-Settings remain at schema 9. Upgrade without signing out or clearing settings.
+Settings move from schema 9 to schema 10 without changing existing values. Upgrade without signing out or clearing settings. Older versions reject the schema 10 settings file without overwriting it.
 
 Streamlink 8.0+ and a separately installed player remain required. Package formats remain Windows x86_64 installer and portable/Scoop ZIP; Linux x86_64 AppImage, DEB and RPM; and a universal macOS DMG for Apple Silicon and Intel requiring macOS 11.0 or later. Verify downloads against the accompanying SHA-256 files.
