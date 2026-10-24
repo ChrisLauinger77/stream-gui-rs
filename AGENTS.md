@@ -317,8 +317,9 @@ cross-compilation or process status does not prove native behavior.
 - A user request to `create release X.Y.Z` authorizes the complete documented release sequence: update every
   version location with `npm run release:version -- X.Y.Z`, validate and review the focused metadata/release
   preparation, commit and push it to `main`, wait for fresh Desktop checks and CodeQL on that commit, audit a
-  manual candidate and complete release-specific exact-package smoke, then create and push the annotated
-  `vX.Y.Z` tag on the accepted preparation commit with its approved `Candidate-Run` trailer. Metadata-only
+  manual candidate and complete release-specific exact-package smoke, then approve that run's `release`
+  environment deployment, which tags the accepted preparation commit with an annotated `vX.Y.Z` tag carrying
+  its `Candidate-Run` trailer and publishes the same run's files. Metadata-only
   preparation preserves the merged branch's native feature acceptance; repeat full native acceptance when
   runtime/native/package behavior changes after it. Do not request separate permission for already
   authorized steps. A hardening-only request that forbids tagging/publication stops before that final step.

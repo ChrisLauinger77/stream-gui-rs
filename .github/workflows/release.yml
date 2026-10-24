@@ -2,9 +2,6 @@ name: Release
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*.*.*"
 
 permissions:
   contents: read
@@ -19,11 +16,11 @@ concurrency:
 
 jobs:
   prepare:
-    name: Validate candidate or release tag
+    name: Validate release candidate
     runs-on: ubuntu-26.04
     outputs:
       version: ${{ steps.metadata.outputs.version }}
-      candidate-run: ${{ steps.metadata.outputs.candidate-run }}
+      sha: ${{ steps.metadata.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -32,46 +29,24 @@ jobs:
       - name: Verify source, version and candidate identity
         id: metadata
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
-            test "$GITHUB_REF" = refs/heads/main
-            test "$GITHUB_RUN_ATTEMPT" = 1
-            version=$(node -p 'require("./package.json").version')
-            candidate_run=$GITHUB_RUN_ID
-          else
-            [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]
-            version=${BASH_REMATCH[1]}
-            test "$(git cat-file -t "$GITHUB_REF")" = tag
-            test "$(git rev-list -n 1 "$GITHUB_REF")" = "$GITHUB_SHA"
-            candidate_run=$(git for-each-ref --format='%(contents:trailers:key=Candidate-Run,valueonly)' "$GITHUB_REF")
-            [[ "$candidate_run" =~ ^[0-9]+$ ]]
-            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$candidate_run" > candidate-run.json
-            node scripts/verify-release-candidate.mjs candidate-run.json "$GITHUB_SHA"
-          fi
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          version=$(node -p 'require("./package.json").version')
           node scripts/set-version.mjs --check "$version"
           test -f docs/release-notes.md
           test "$(head -n 1 docs/release-notes.md)" = "# Stream GUI RS $version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "candidate-run=$candidate_run" >> "$GITHUB_OUTPUT"
-          echo "Source: $GITHUB_SHA; version: $version; candidate run: $candidate_run" >> "$GITHUB_STEP_SUMMARY"
-          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
-            {
-              printf '\nAfter this candidate succeeds and the release gate passes, run:\n\n'
-              printf '%s\n' '```bash' \
-                "git tag -a v$version $GITHUB_SHA \\" \
-                "  -m \"Stream GUI RS $version\" \\" \
-                "  -m \"Candidate-Run: $candidate_run\"" \
-                "git push origin v$version" \
-                '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
+          echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "Source: $GITHUB_SHA; version: $version; candidate run: $GITHUB_RUN_ID"
+            printf '\nAfter the builds and artifact verification succeed, this run waits for the `release` environment.\n'
+            printf 'Download and test the artifacts, then approve the deployment to create the annotated `v%s` tag on this commit and publish these exact files.\n' "$version"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   linux-x86_64:
     name: Linux x86_64 packages
-    if: github.event_name == 'workflow_dispatch'
     needs: prepare
     runs-on: ubuntu-26.04
     timeout-minutes: 45
@@ -130,7 +105,6 @@ jobs:
 
   windows-x86_64:
     name: Windows x86_64 packages
-    if: github.event_name == 'workflow_dispatch'
     needs: prepare
     runs-on: windows-2025
     timeout-minutes: 45
@@ -211,7 +185,6 @@ jobs:
 
   macos-universal:
     name: macOS universal disk image
-    if: github.event_name == 'workflow_dispatch'
     needs: prepare
     runs-on: macos-26
     timeout-minutes: 45
@@ -277,12 +250,6 @@ jobs:
 
   verify-artifacts:
     name: Verify complete candidate artifact set
-    if: >-
-      always() && needs.prepare.result == 'success' &&
-      (github.event_name == 'push' ||
-       (needs.linux-x86_64.result == 'success' &&
-        needs.windows-x86_64.result == 'success' &&
-        needs.macos-universal.result == 'success'))
     needs: [prepare, linux-x86_64, windows-x86_64, macos-universal]
     runs-on: ubuntu-26.04
     permissions:
@@ -292,12 +259,15 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      # Re-running a build job also re-runs this job. Reject that: the run ID stays
+      # the same while the rebuilt bytes may differ from the tested candidate.
+      # Re-running only publication after approval keeps these verified files.
+      - name: Reject rebuilt candidates
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: release
           merge-multiple: true
-          run-id: ${{ needs.prepare.outputs.candidate-run }}
-          github-token: ${{ github.token }}
           pattern: Stream-GUI-RS_${{ needs.prepare.outputs.version }}_*
       - name: Verify complete release set
         shell: bash
@@ -324,18 +294,60 @@ jobs:
           manifest_hash=$(jq -r '.architecture["64bit"].hash' stream-gui-rs.json)
           test "$zip_hash" = "$manifest_hash"
 
+  approve-and-tag:
+    name: Approve candidate and create release tag
+    needs: [prepare, verify-artifacts]
+    runs-on: ubuntu-26.04
+    # Required reviewers on this environment pause the run until the downloaded
+    # candidate has passed the release gate.
+    environment: release
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      SOURCE_SHA: ${{ needs.prepare.outputs.sha }}
+      CANDIDATE_RUN: ${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Create and push annotated release tag
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          tag="v$VERSION"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::Tag $tag already exists locally; dispatch a candidate for a new version."
+            exit 1
+          fi
+          remote_status=0
+          git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null || remote_status=$?
+          if [[ "$remote_status" -eq 0 ]]; then
+            echo "::error::Tag $tag already exists on origin; dispatch a candidate for a new version."
+            exit 1
+          elif [[ "$remote_status" -ne 2 ]]; then
+            echo "::error::Could not query origin for tag $tag."
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$tag" "$SOURCE_SHA" \
+            -m "Stream GUI RS $VERSION" \
+            -m "Candidate-Run: $CANDIDATE_RUN"
+          # GITHUB_TOKEN pushes do not trigger workflows, so publication continues below.
+          git push origin "refs/tags/$tag"
+          echo "Created annotated tag $tag on $SOURCE_SHA for candidate run $CANDIDATE_RUN." >> "$GITHUB_STEP_SUMMARY"
+
   publish:
     name: Publish tested candidate without rebuilding
-    if: >-
-      !cancelled() && github.event_name == 'push' &&
-      needs.prepare.result == 'success' && needs.verify-artifacts.result == 'success'
-    needs: [prepare, verify-artifacts]
+    needs: [prepare, verify-artifacts, approve-and-tag]
     runs-on: ubuntu-26.04
     permissions:
       actions: read
       contents: write
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
+      TAG: v${{ needs.prepare.outputs.version }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -345,37 +357,33 @@ jobs:
         with:
           path: release
           merge-multiple: true
-          run-id: ${{ needs.prepare.outputs.candidate-run }}
-          github-token: ${{ github.token }}
           pattern: Stream-GUI-RS_${{ needs.prepare.outputs.version }}_*
       - name: Create or resume draft release
         shell: bash
         run: |
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
           else
-            gh release create "$GITHUB_REF_NAME" \
+            gh release create "$TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --verify-tag \
               --draft \
               --title "Stream GUI RS ${VERSION}" \
               --notes-file docs/release-notes.md
           fi
-          gh release upload "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" release/* --repo "$GITHUB_REPOSITORY" --clobber
       - name: Verify uploaded assets and publish
         shell: bash
         run: |
           find release -maxdepth 1 -type f -printf '%f\n' | sort > /tmp/expected-assets
-          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort > /tmp/uploaded-assets
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort > /tmp/uploaded-assets
           diff -u /tmp/expected-assets /tmp/uploaded-assets
-          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir uploaded
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir uploaded
           diff -qr release uploaded
-          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
 
   update-package-repositories:
     name: Request package repository updates
-    # Promotion intentionally skips builds; do not inherit their skipped status.
-    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     needs: publish
     runs-on: ubuntu-26.04
     env:
@@ -393,9 +401,7 @@ jobs:
 
   publish-winget:
     name: Request WinGet manifest update
-    # Promotion intentionally skips builds; do not inherit their skipped status.
-    if: ${{ !cancelled() && needs.publish.result == 'success' }}
-    needs: publish
+    needs: [prepare, publish]
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -410,6 +416,6 @@ jobs:
         uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
         with:
           identifier: ChrisLauinger77.Stream-GUI-RS
-          release-tag: ${{ github.ref_name }}
+          release-tag: v${{ needs.prepare.outputs.version }}
           installers-regex: '^Stream-GUI-RS_[0-9]+\.[0-9]+\.[0-9]+_windows_x86_64-setup\.exe$'
           token: ${{ env.WINGET_TOKEN }}
