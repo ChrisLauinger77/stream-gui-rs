@@ -311,32 +311,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - name: Create and push annotated release tag
+      - name: Create or resume annotated release tag
         shell: bash
-        run: |
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
-          tag="v$VERSION"
-          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-            echo "::error::Tag $tag already exists locally; dispatch a candidate for a new version."
-            exit 1
-          fi
-          remote_status=0
-          git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null || remote_status=$?
-          if [[ "$remote_status" -eq 0 ]]; then
-            echo "::error::Tag $tag already exists on origin; dispatch a candidate for a new version."
-            exit 1
-          elif [[ "$remote_status" -ne 2 ]]; then
-            echo "::error::Could not query origin for tag $tag."
-            exit 1
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
-          git tag -a "$tag" "$SOURCE_SHA" \
-            -m "Stream GUI RS $VERSION" \
-            -m "Candidate-Run: $CANDIDATE_RUN"
-          # GITHUB_TOKEN pushes do not trigger workflows, so publication continues below.
-          git push origin "refs/tags/$tag"
-          echo "Created annotated tag $tag on $SOURCE_SHA for candidate run $CANDIDATE_RUN." >> "$GITHUB_STEP_SUMMARY"
+        run: bash scripts/create-release-tag.sh
 
   publish:
     name: Publish tested candidate without rebuilding
