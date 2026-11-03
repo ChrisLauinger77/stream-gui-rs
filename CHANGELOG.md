@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.7.1 - 2026-11-03
+
+### Fixed
+
+- Streamlink detection and playback from the Linux AppImage with a host Python Streamlink; Streamlink and the player no longer inherit the AppImage launcher's bundle environment.
+
+### Improved
+
+- Updated tauri-plugin-single-instance to 2.5.5, tao to 0.37.2, wry to 0.57.1, uuid to 1.29.0, webbrowser to 1.2.5 and other locked Rust and npm dependencies.
+
 ## 1.7.0 - 2026-10-24
 
 ### Added
