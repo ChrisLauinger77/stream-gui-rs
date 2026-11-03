@@ -24,6 +24,86 @@ fn main() {
             "Streamlink child unexpectedly has a console window"
         );
     }
+    if name.contains("pythonhost") {
+        // A host CPython Streamlink: a foreign inherited PYTHONHOME aborts
+        // interpreter startup before any Streamlink code can run.
+        if std::env::var_os("PYTHONHOME").is_some() {
+            eprintln!("Fatal Python error: init_fs_encoding: No module named 'encodings'");
+            std::process::exit(1);
+        }
+        let observed: std::collections::BTreeMap<_, _> = [
+            "APPDIR",
+            "APPIMAGE",
+            "GDK_PIXBUF_MODULE_FILE",
+            "LD_LIBRARY_PATH",
+            "PATH",
+            "PYTHONPATH",
+            "STREAM_GUI_RS_HOST_SETTING",
+            "XDG_DATA_DIRS",
+        ]
+        .into_iter()
+        .map(|key| (key, std::env::var(key).ok()))
+        .collect();
+        let probe = args == ["--version"];
+        std::fs::write(
+            executable.with_extension(if probe { "probe.json" } else { "launch.json" }),
+            serde_json::to_vec(&observed).unwrap(),
+        )
+        .unwrap();
+        if probe {
+            println!("streamlink 8.6.1");
+        }
+        return;
+    }
+    if args.first().is_some_and(|arg| arg == "--appimage-parent") {
+        // Runs the real probe and supervisor from wherever this copy lives.
+        let streamlink = std::path::PathBuf::from(&args[1]);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let (probe, launch) = runtime.block_on(async {
+            let probe =
+                match stream_gui_rs::streamlink::probe(streamlink.to_str(), Duration::from_secs(5))
+                    .await
+                {
+                    Ok(result) => serde_json::json!(result.version),
+                    Err(error) => serde_json::json!(error.code),
+                };
+            let supervisor = stream_gui_rs::streamlink::Supervisor::default();
+            let request = stream_gui_rs::domain::LaunchRequest {
+                url: "https://www.twitch.tv/environment".into(),
+                quality: "best".into(),
+            };
+            let id = supervisor.launch(&streamlink, request).await.unwrap().id;
+            let launch = tokio::time::timeout(Duration::from_secs(10), async {
+                loop {
+                    let session = supervisor
+                        .sessions()
+                        .await
+                        .into_iter()
+                        .find(|session| session.id == id)
+                        .unwrap();
+                    if matches!(
+                        session.phase,
+                        stream_gui_rs::streamlink::SessionPhase::Exited
+                            | stream_gui_rs::streamlink::SessionPhase::Failed
+                    ) {
+                        return session.exit_code;
+                    }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap();
+            (probe, launch)
+        });
+        println!(
+            "{}",
+            serde_json::json!({ "probe": probe, "launchExit": launch })
+        );
+        return;
+    }
     if args.first().is_some_and(|arg| arg == "--chatterino-parent") {
         let chat = stream_gui_rs::chatterino::Chatterino::default();
         chat.open(Some(&args[1]), "short").unwrap();

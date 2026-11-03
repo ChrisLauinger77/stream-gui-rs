@@ -79,6 +79,91 @@ async fn probe_success_invalid_version_nonzero_and_timeout() {
     }
 }
 
+/// Issue #97: Tauri's AppImage launcher exports PYTHONHOME, PYTHONPATH and
+/// loader/toolkit paths into its mount. A host Python Streamlink inherited them,
+/// so `--version` failed and playback could not start.
+#[cfg(target_os = "linux")]
+#[test]
+fn appimage_children_receive_the_host_environment() {
+    use std::collections::BTreeMap;
+    let directory = helper_directory();
+    let app_dir = directory.path().join("Stream GUI RS.AppDir");
+    std::fs::create_dir_all(app_dir.join("usr/bin")).unwrap();
+    std::fs::write(app_dir.join("AppRun"), "").unwrap();
+    let bundled = app_dir.join("usr/bin/stream-gui-rs");
+    std::fs::hard_link(helper(), &bundled).unwrap();
+    let unbundled = renamed_helper(directory.path(), "stream-gui-rs");
+    let streamlink = renamed_helper(directory.path(), "pythonhost");
+    let root = app_dir.to_str().unwrap();
+    let launcher = [
+        ("APPDIR", root.to_owned()),
+        ("APPIMAGE", format!("{root}.AppImage")),
+        ("ARGV0", "Stream-GUI-RS.AppImage".into()),
+        (
+            "PATH",
+            format!("{root}/usr/bin/:{root}/usr/sbin/:/usr/bin:/bin"),
+        ),
+        (
+            "LD_LIBRARY_PATH",
+            format!("{root}/usr/lib/:{root}/lib64/:/opt/host/lib"),
+        ),
+        ("PYTHONHOME", format!("{root}/usr/")),
+        ("PYTHONPATH", format!("{root}/usr/share/pyshared/:")),
+        (
+            "XDG_DATA_DIRS",
+            format!("{root}/usr/share:/usr/share:/opt/host/share"),
+        ),
+        (
+            "GDK_PIXBUF_MODULE_FILE",
+            format!("{root}//usr/lib/loaders.cache"),
+        ),
+        ("STREAM_GUI_RS_HOST_SETTING", "kept".into()),
+    ];
+    let run = |parent: &Path| -> serde_json::Value {
+        let output = std::process::Command::new(parent)
+            .args(["--appimage-parent", streamlink.to_str().unwrap()])
+            .envs(launcher.clone())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice(&output.stdout).unwrap()
+    };
+
+    // Control: the same variables outside an AppDir are not reinterpreted, and
+    // the Python-like Streamlink fails exactly as reported.
+    let outside = run(&unbundled);
+    assert_eq!(outside["probe"], "probe_failed");
+    assert_eq!(outside["launchExit"], 1);
+
+    let inside = run(&bundled);
+    assert_eq!(inside["probe"], "8.6.1");
+    assert_eq!(inside["launchExit"], 0);
+    let host: BTreeMap<&str, Option<&str>> = BTreeMap::from([
+        ("APPDIR", None),
+        ("APPIMAGE", None),
+        ("GDK_PIXBUF_MODULE_FILE", None),
+        ("LD_LIBRARY_PATH", Some("/opt/host/lib")),
+        ("PATH", Some("/usr/bin:/bin")),
+        ("PYTHONPATH", None),
+        ("STREAM_GUI_RS_HOST_SETTING", Some("kept")),
+        ("XDG_DATA_DIRS", Some("/usr/share:/opt/host/share")),
+    ]);
+    for record in ["probe.json", "launch.json"] {
+        let observed: BTreeMap<String, Option<String>> =
+            serde_json::from_slice(&std::fs::read(streamlink.with_extension(record)).unwrap())
+                .unwrap();
+        let observed: BTreeMap<&str, Option<&str>> = observed
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_deref()))
+            .collect();
+        assert_eq!(observed, host, "{record}");
+    }
+}
+
 #[tokio::test]
 async fn spawn_failure_does_not_create_a_session() {
     let supervisor = Supervisor::default();

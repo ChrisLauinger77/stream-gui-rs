@@ -1,6 +1,8 @@
 //! Platform-specific process ownership, independent of Tauri.
 use std::io;
 use tokio::process::{Child, Command};
+#[cfg(target_os = "linux")]
+mod appimage;
 #[cfg(windows)]
 mod windows;
 
@@ -8,6 +10,10 @@ pub fn configure_process(command: &mut Command) {
     command.kill_on_drop(true);
     #[cfg(unix)]
     command.process_group(0);
+    // Owned children are host programs; an AppImage launcher's bundle-only
+    // Python/loader/toolkit variables would break them.
+    #[cfg(target_os = "linux")]
+    appimage::restore_host_environment(command);
     #[cfg(windows)]
     command.creation_flags(
         windows_sys::Win32::System::Threading::CREATE_NO_WINDOW
