@@ -271,11 +271,14 @@ Documentation-only changes need path/command/claim review and `git diff --check`
 Full validation for application changes follows `.github/workflows/ci.yml`:
 
 ```sh
+node --test scripts/create-release-tag.tests.mjs
 npm run build
 npm test
 cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features test-support
 cargo check --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support
+cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --features test-support desktop::
+cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --features test-support,notification-acceptance desktop::
 cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support -- -D warnings
 TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --debug --no-bundle --features custom-protocol --ci
 git diff --check
@@ -336,6 +339,8 @@ cross-compilation or process status does not prove native behavior.
 - `docs/releasing.md`: version preparation, exact candidate, tagging and publication gates.
 - `docs/road-to-1.0.md`: released milestones, deferred ideas and current goals.
 - `docs/notification-acceptance.md`: specialized debug-package procedure for native notification changes.
+- `docs/translations.md`: catalog keys, placeholders, locale additions and translation review.
+- `docs/release-notes.md`: notes for the latest release only, replaced during release preparation.
 
 Preserve quiet monitor baselines on startup, resume and recovery, session cancellation, bounded stream-ID
 deduplication and foreground rate priority. Advanced transports, other chat clients, legacy import and

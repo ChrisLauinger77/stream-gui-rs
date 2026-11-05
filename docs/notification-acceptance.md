@@ -6,7 +6,7 @@ Each **Send test notification** queues fixed, clearly labeled test content throu
 
 ## CI package checks
 
-**CI** runs on pull requests targeting `main`, including pushes to an open PR branch, and manual dispatch. It does not run automatically on pushes to `main` and does not upload artifacts. Same-repository pull requests (except Dependabot) and manual runs validate debug acceptance packaging with the repository's registered public client ID. Fork and Dependabot pull requests retain compilation checks without packaging secrets.
+**CI** runs on pull requests targeting `main`, including pushes to an open PR branch, manual dispatch and a monthly schedule. It does not run automatically on pushes to `main` and does not upload artifacts. Same-repository pull requests (except Dependabot) and manual runs validate debug acceptance packaging with the repository's registered public client ID. Fork and Dependabot pull requests retain compilation checks without packaging secrets.
 
 For native acceptance, build the reviewed revision on each affected platform using the commands below. Record the source commit, build command and About version/commit when reporting results. CI packaging and signature checks do not prove notification behavior on the target desktop.
 

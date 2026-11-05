@@ -307,11 +307,14 @@ Builds embed a seven-character lowercase Git commit in About, backend diagnostic
 Run the project checks from the repository root:
 
 ```sh
+node --test scripts/create-release-tag.tests.mjs
 npm run build
 npm test
 cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features test-support
 cargo check --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support
+cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --features test-support desktop::
+cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --features test-support,notification-acceptance desktop::
 cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --features test-support -- -D warnings
 TWITCH_CLIENT_ID_BUILD=ciCompileOnlyPublicClient123 npm run tauri build -- --debug --no-bundle --features custom-protocol --ci
 git diff --check
