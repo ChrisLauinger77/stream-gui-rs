@@ -90,7 +90,7 @@ pub fn support_report(
 mod tests {
     use super::*;
     use crate::{
-        config::{EffectivePlaybackSettings, Settings},
+        config::{EffectivePlaybackSettings, Settings, TwitchCodecs},
         domain::ErrorCode,
         streamlink::{
             LogEntry, LogSource, SessionPhase,
@@ -128,6 +128,10 @@ mod tests {
                 automatic_chat: true,
                 low_latency: true,
                 mpv_stream_title: true,
+                twitch_codecs: TwitchCodecs {
+                    hevc: true,
+                    av1: true,
+                },
             }),
             chat_error: None,
             started_at: u64::MAX,
@@ -170,6 +174,8 @@ mod tests {
             "arbitrary",
             "18446744073709551615",
             "4294967295",
+            "h265",
+            "av1",
         ] {
             assert!(!report.contains(forbidden), "leaked {forbidden}");
         }

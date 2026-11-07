@@ -23,7 +23,7 @@ use std::{
 };
 use ts_rs::TS;
 
-pub const SETTINGS_VERSION: u32 = 11;
+pub const SETTINGS_VERSION: u32 = 12;
 const MAX_SETTINGS_BYTES: u64 = 256 * 1024;
 const MAX_CHANNEL_OVERRIDES: usize = 1000;
 
@@ -133,6 +133,26 @@ pub enum ChatProvider {
     Chatterino,
 }
 
+/// Extra codecs advertised to Twitch in addition to H.264, which is always requested.
+/// A closed pair of flags keeps arbitrary codec strings out of settings and argv.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TwitchCodecs {
+    pub hevc: bool,
+    pub av1: bool,
+}
+impl TwitchCodecs {
+    /// The `--twitch-supported-codecs` value, or `None` for Streamlink's H.264-only default.
+    pub fn streamlink_value(self) -> Option<&'static str> {
+        match (self.hevc, self.av1) {
+            (false, false) => None,
+            (true, false) => Some("h264,h265"),
+            (false, true) => Some("h264,av1"),
+            (true, true) => Some("h264,h265,av1"),
+        }
+    }
+}
+
 /// Global preferences only. Channel records have their own narrow update operation.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -143,6 +163,7 @@ pub struct Settings {
     pub player: PlayerSettings,
     pub default_quality: QualityPolicy,
     pub mpv_stream_title: bool,
+    pub twitch_codecs: TwitchCodecs,
     pub automatic_chat: bool,
     pub theme: Theme,
     pub theme_palette: ThemePalette,
@@ -213,6 +234,7 @@ pub struct EffectivePlaybackSettings {
     pub player: PlayerSettings,
     pub quality: QualityPolicy,
     pub mpv_stream_title: bool,
+    pub twitch_codecs: TwitchCodecs,
     pub automatic_chat: bool,
     pub low_latency: bool,
 }
@@ -281,13 +303,24 @@ impl SettingsDocument {
         })?;
         // Migrate only this application's schemas, in memory until the next save.
         let version = value.get("version").and_then(|v| v.as_u64());
-        if let Some(6..=10) = version {
+        if let Some(6..=11) = version {
             let fields = value
                 .get_mut("settings")
                 .and_then(|settings| settings.as_object_mut())
                 .ok_or_else(|| settings_error("Invalid legacy settings."))?;
+            // Old schemas must not smuggle in fields introduced by later versions.
+            if version.is_some_and(|v| v <= 10)
+                && fields
+                    .insert("mpvStreamTitle".into(), false.into())
+                    .is_some()
+            {
+                return Err(settings_error("Invalid legacy settings."));
+            }
             if fields
-                .insert("mpvStreamTitle".into(), false.into())
+                .insert(
+                    "twitchCodecs".into(),
+                    serde_json::to_value(TwitchCodecs::default()).expect("codec defaults"),
+                )
                 .is_some()
             {
                 return Err(settings_error("Invalid legacy settings."));
@@ -539,7 +572,7 @@ impl SettingsDocument {
                 serde_json::from_value(value)
                     .map_err(|_| settings_error("Invalid version 8 settings."))?
             }
-            Some(9..=10) => {
+            Some(9..=11) => {
                 let mut value = value;
                 value["version"] = SETTINGS_VERSION.into();
                 serde_json::from_value(value)
@@ -588,6 +621,7 @@ impl SettingsDocument {
                 .or(profile.and_then(|p| p.quality))
                 .unwrap_or(self.settings.default_quality),
             mpv_stream_title: self.settings.mpv_stream_title,
+            twitch_codecs: self.settings.twitch_codecs,
             low_latency: overrides
                 .low_latency
                 .or(profile.and_then(|p| p.low_latency))

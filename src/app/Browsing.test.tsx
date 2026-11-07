@@ -54,8 +54,8 @@ beforeEach(() => {
   vi.mocked(api.customTheme).mockResolvedValue(null);
   vi.mocked(api.systemUiLanguage).mockResolvedValue("en");
   vi.mocked(api.acknowledgeDesktopAction).mockResolvedValue(null);
-  vi.mocked(api.playbackSettings).mockResolvedValue({ chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, mpvStreamTitle: false, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", themePalette: "default", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
-  vi.mocked(api.channelSettings).mockImplementation(async broadcasterId => ({ broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: "source", defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false, effective: { profileId: null, mpvStreamTitle: false, chatProvider: "browser" as const, chatterinoPath: null, lowLatency: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, quality: "source", automaticChat: false } }));
+  vi.mocked(api.playbackSettings).mockResolvedValue({ chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, mpvStreamTitle: false, twitchCodecs: { hevc: false, av1: false }, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", themePalette: "default", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
+  vi.mocked(api.channelSettings).mockImplementation(async broadcasterId => ({ broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: "source", defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false, effective: { profileId: null, mpvStreamTitle: false, twitchCodecs: { hevc: false, av1: false }, chatProvider: "browser" as const, chatterinoPath: null, lowLatency: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, quality: "source", automaticChat: false } }));
   vi.mocked(api.authStatus).mockResolvedValue(signedIn);
   vi.mocked(api.account).mockResolvedValue({ id: "viewer", login: "viewer", displayName: "Viewer", profileImageUrl: null });
   vi.mocked(api.followedStreams).mockResolvedValue(page([])); vi.mocked(api.streams).mockResolvedValue(page([stream]));
@@ -416,7 +416,7 @@ const playing = (id = "play-one", broadcasterId = "channel-one"): import("../lib
   url: "https://www.twitch.tv/example", quality: "best", exitCode: null, stopRequested: false,
   logs: [{ sequence: 1, source: "stderr", text: "Synthetic diagnostic warning" }], droppedLogEntries: 5,
 });
-const playbackSettings: import("../lib/generated").Settings = { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, mpvStreamTitle: false, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", themePalette: "default", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
+const playbackSettings: import("../lib/generated").Settings = { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, mpvStreamTitle: false, twitchCodecs: { hevc: false, av1: false }, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", themePalette: "default", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
 async function editControl(label: string, value: string, kind: "input" | "select" = "input") {
   const control = [...container.querySelectorAll<HTMLInputElement | HTMLSelectElement>(kind)].find(el => el.labels?.[0]?.textContent?.startsWith(label));
   if (!control) throw new Error(`Missing control: ${label}`);
@@ -529,7 +529,7 @@ test("YouTube launch works signed out and chat waits for a video ID", async () =
   await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
   expect(api.launchYoutube).toHaveBeenCalledExactlyOnceWith({ locator: "@Example", quality: null });
   expect(button("Play YouTube stream").disabled).toBe(true);
-  await act(async () => { launch.resolve({ ...youtubePlaying(), effectiveSettings: { profileId: null, mpvStreamTitle: false, chatProvider: "browser", chatterinoPath: null, streamlinkPath: null, player: playbackSettings.player, quality: "source", automaticChat: false, lowLatency: true } }); });
+  await act(async () => { launch.resolve({ ...youtubePlaying(), effectiveSettings: { profileId: null, mpvStreamTitle: false, twitchCodecs: { hevc: false, av1: false }, chatProvider: "browser", chatterinoPath: null, streamlinkPath: null, player: playbackSettings.player, quality: "source", automaticChat: false, lowLatency: true } }); });
   expect(container.querySelector(".service-badge")?.textContent).toBe("YouTube");
   expect(container.querySelector(".session h3")?.textContent).toBe("@example");
   expect(container.querySelector(".session")?.textContent).toContain("Low latency: not available");
@@ -771,7 +771,7 @@ test("settings loading waits for the backend and duplicate saves are guarded", a
 
 function channelPreferences(broadcasterId = "channel-one", quality: "source" | "high" | "low" = "source") {
   return { broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: quality, defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false,
-    effective: { profileId: null, mpvStreamTitle: false, chatProvider: "browser" as const, chatterinoPath: null, lowLatency: false, streamlinkPath: null, player: playbackSettings.player, quality, automaticChat: false } };
+    effective: { profileId: null, mpvStreamTitle: false, twitchCodecs: { hevc: false, av1: false }, chatProvider: "browser" as const, chatterinoPath: null, lowLatency: false, streamlinkPath: null, player: playbackSettings.player, quality, automaticChat: false } };
 }
 
 test("global save must not forget a pending accepted channel override", async () => {

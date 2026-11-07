@@ -579,6 +579,7 @@ fn production_spec(channel: &str) -> LaunchSpec {
             chatterino_path: None,
             low_latency: false,
             mpv_stream_title: false,
+            twitch_codecs: Default::default(),
             streamlink_path: None,
             player: PlayerSettings::default(),
             quality: QualityPolicy::Source,
@@ -1287,6 +1288,7 @@ async fn restart_failure_retains_the_session_and_diagnostics_without_a_child() {
 
 #[tokio::test]
 async fn service_restart_uses_current_settings_and_survives_a_dropped_caller() {
+    use stream_gui_rs::config::TwitchCodecs;
     let root = tempfile::tempdir().unwrap();
     let mut services = Services::new(root.path(), None).unwrap();
     services.auth = std::sync::Arc::new(stream_gui_rs::twitch::AuthService::new(
@@ -1307,14 +1309,14 @@ async fn service_restart_uses_current_settings_and_survives_a_dropped_caller() {
     let mut settings = services.settings.snapshot();
     settings.default_quality = QualityPolicy::Low;
     settings.mpv_stream_title = true;
+    settings.twitch_codecs.hevc = true;
     services.settings.update(settings).unwrap();
-    assert!(
-        !services.sessions.sessions().await[0]
-            .effective_settings
-            .as_ref()
-            .unwrap()
-            .mpv_stream_title
-    );
+    let running = services.sessions.sessions().await[0]
+        .effective_settings
+        .clone()
+        .unwrap();
+    assert!(!running.mpv_stream_title);
+    assert_eq!(running.twitch_codecs, TwitchCodecs::default());
     let caller = {
         let services = services.clone();
         let id = first.id.clone();
@@ -1335,7 +1337,15 @@ async fn service_restart_uses_current_settings_and_survives_a_dropped_caller() {
             let state = services.sessions.sessions().await.pop().unwrap();
             if state.generation == 2 && state.phase == SessionPhase::Running && !state.restarting {
                 assert_eq!(state.quality_policy, Some(QualityPolicy::Low));
-                assert!(state.effective_settings.unwrap().mpv_stream_title);
+                let effective = state.effective_settings.unwrap();
+                assert!(effective.mpv_stream_title);
+                assert_eq!(
+                    effective.twitch_codecs,
+                    TwitchCodecs {
+                        hevc: true,
+                        av1: false
+                    }
+                );
                 break;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;

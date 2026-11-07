@@ -167,6 +167,7 @@ pub fn typescript_bindings() -> String {
         crate::updates::UpdatePhase::decl(&config),
         crate::updates::UpdateStatus::decl(&config),
         BackgroundSettings::decl(&config),
+        crate::config::TwitchCodecs::decl(&config),
         crate::monitor::MonitorPhase::decl(&config),
         crate::monitor::MonitorStatus::decl(&config),
         Theme::decl(&config),

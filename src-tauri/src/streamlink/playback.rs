@@ -313,6 +313,15 @@ pub fn build_command(spec: LaunchSpec) -> Result<CommandSpec> {
     {
         arguments.extend(["--title".into(), "{author} - {category} - {title}".into()]);
     }
+    // Twitch-only: H.264 always stays first so the usher keeps its default rendition set.
+    if let Some(codecs) = spec
+        .settings
+        .twitch_codecs
+        .streamlink_value()
+        .filter(|_| spec.stream.service() == StreamingService::Twitch)
+    {
+        arguments.extend(["--twitch-supported-codecs".into(), codecs.into()]);
+    }
     if let Some(player) = spec.player {
         let path = player.to_str().ok_or_else(|| {
             AppError::new(
@@ -381,6 +390,7 @@ mod tests {
                 chatterino_path: None,
                 low_latency: false,
                 mpv_stream_title: false,
+                twitch_codecs: crate::config::TwitchCodecs::default(),
                 streamlink_path: None,
                 automatic_chat: false,
                 quality,
@@ -772,6 +782,93 @@ mod tests {
                 launch.stream = stream.clone();
                 let arguments = build_command(launch).unwrap().arguments;
                 assert!(!arguments.iter().any(|arg| arg == "--title"));
+            }
+        }
+    }
+
+    const CODEC_COMBINATIONS: [(bool, bool, Option<&str>); 4] = [
+        (false, false, None),
+        (true, false, Some("h264,h265")),
+        (false, true, Some("h264,av1")),
+        (true, true, Some("h264,h265,av1")),
+    ];
+
+    #[test]
+    fn twitch_codecs_emit_one_fixed_value_before_the_boundary_and_nothing_by_default() {
+        let base = [
+            "--no-config",
+            "--no-plugin-sideloading",
+            "--loglevel",
+            "info",
+            "--player-verbose",
+            "--",
+            "https://www.twitch.tv/example_1",
+            "best",
+        ];
+        for (hevc, av1, value) in CODEC_COMBINATIONS {
+            let mut launch = spec(QualityPolicy::Source, PlayerMode::Default);
+            launch.settings.twitch_codecs = crate::config::TwitchCodecs { hevc, av1 };
+            let mut expected = base.to_vec();
+            if let Some(value) = value {
+                expected.splice(5..5, ["--twitch-supported-codecs", value]);
+            }
+            assert_eq!(build_command(launch).unwrap().arguments, expected);
+        }
+
+        // Combined with the other Twitch-only options, the order stays fixed and
+        // every option precedes the `--` boundary.
+        let mut launch = spec(QualityPolicy::High, PlayerMode::Mpv);
+        launch.settings.low_latency = true;
+        launch.settings.mpv_stream_title = true;
+        launch.settings.twitch_codecs = crate::config::TwitchCodecs {
+            hevc: true,
+            av1: true,
+        };
+        let arguments = build_command(launch).unwrap().arguments;
+        let position = |needle: &str| arguments.iter().position(|arg| arg == needle).unwrap();
+        assert_eq!(
+            arguments[position("--twitch-supported-codecs") + 1],
+            "h264,h265,av1"
+        );
+        assert_eq!(
+            arguments
+                .iter()
+                .filter(|arg| arg.as_str() == "--twitch-supported-codecs")
+                .count(),
+            1
+        );
+        assert!(position("--twitch-low-latency") < position("--title"));
+        assert!(position("--title") < position("--twitch-supported-codecs"));
+        assert!(position("--twitch-supported-codecs") < position("--player"));
+        assert!(position("--twitch-supported-codecs") < position("--"));
+    }
+
+    #[test]
+    fn twitch_codecs_leave_kick_and_youtube_argv_unchanged() {
+        let streams = [
+            PlaybackStream::Kick {
+                slug: KickSlug::parse("example").unwrap(),
+            },
+            PlaybackStream::Youtube {
+                locator: YoutubeLocator::parse("dQw4w9WgXcQ").unwrap(),
+            },
+        ];
+        for stream in streams {
+            for mode in [PlayerMode::Default, PlayerMode::Mpv, PlayerMode::Vlc] {
+                for low_latency in [false, true] {
+                    let build = |hevc, av1| {
+                        let mut launch = spec(QualityPolicy::Source, mode);
+                        launch.stream = stream.clone();
+                        launch.settings.low_latency = low_latency;
+                        launch.settings.twitch_codecs = crate::config::TwitchCodecs { hevc, av1 };
+                        build_command(launch).unwrap().arguments
+                    };
+                    let baseline = build(false, false);
+                    for (hevc, av1, _) in CODEC_COMBINATIONS {
+                        assert_eq!(build(hevc, av1), baseline);
+                    }
+                    assert!(!baseline.iter().any(|arg| arg.contains("codecs")));
+                }
             }
         }
     }
