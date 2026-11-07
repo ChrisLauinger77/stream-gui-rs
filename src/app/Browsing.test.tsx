@@ -720,6 +720,27 @@ test("mpv stream title is opt-in and saving leaves playback alone", async () => 
   expect(checkbox().checked).toBe(true);
   expect(api.launch).not.toHaveBeenCalled(); expect(api.restart).not.toHaveBeenCalled();
 });
+test("Twitch codecs are a closed opt-in group and saving leaves playback alone", async () => {
+  const checkbox = (label: string) => [...container.querySelectorAll("label")]
+    .find(node => node.textContent === label)!.querySelector<HTMLInputElement>("input")!;
+  vi.mocked(api.savePlaybackSettings).mockImplementation(async value => value);
+  await render(); await click("Settings");
+  const group = container.querySelector<HTMLElement>('[role="group"][aria-labelledby="twitch-codecs-heading"]')!;
+  expect(group.querySelector("h3")?.textContent).toBe("Twitch codecs");
+  expect(group.textContent).toContain("H.264 is always requested");
+  expect(checkbox("Also request HEVC (H.265)").checked).toBe(false);
+  expect(checkbox("Also request AV1").checked).toBe(false);
+  await toggleControl("Also request AV1");
+  expect(text()).toContain("Unsaved changes");
+  await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ twitchCodecs: { hevc: false, av1: true } }));
+  await toggleControl("Also request HEVC (H.265)"); await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenLastCalledWith(expect.objectContaining({ twitchCodecs: { hevc: true, av1: true } }));
+  await click("Settings"); await click("Settings");
+  expect(checkbox("Also request HEVC (H.265)").checked).toBe(true);
+  expect(checkbox("Also request AV1").checked).toBe(true);
+  expect(api.launch).not.toHaveBeenCalled(); expect(api.restart).not.toHaveBeenCalled();
+});
 test("settings probe reports native path and version, and player discovery reports missing players", async () => {
   vi.mocked(api.probe).mockResolvedValue({ executable: "/opt/homebrew/bin/streamlink", version: "8.6.1" });
   vi.mocked(api.discoverPlayers).mockResolvedValue({ mpv: "/opt/homebrew/bin/mpv", vlc: null });

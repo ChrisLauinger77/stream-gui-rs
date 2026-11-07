@@ -74,6 +74,12 @@ function SettingsForm({ saved, desktop, saving, commit, customThemeAvailable }: 
           <p className="muted">{t("settings.lowLatencyHelp")}</p>
           <label className="checkbox-label"><input type="checkbox" checked={draft.mpvStreamTitle} onChange={event => edit({ mpvStreamTitle: event.target.checked })} />{t("settings.mpvStreamTitle")}</label>
           <p className="muted">{t("settings.mpvStreamTitleHelp")}</p>
+          <div role="group" aria-labelledby="twitch-codecs-heading" className="setting-group">
+            <h3 id="twitch-codecs-heading">{t("settings.twitchCodecs")}</h3>
+            <label className="checkbox-label"><input type="checkbox" checked={draft.twitchCodecs.hevc} onChange={event => edit({ twitchCodecs: { ...draft.twitchCodecs, hevc: event.target.checked } })} />{t("settings.twitchCodecsHevc")}</label>
+            <label className="checkbox-label"><input type="checkbox" checked={draft.twitchCodecs.av1} onChange={event => edit({ twitchCodecs: { ...draft.twitchCodecs, av1: event.target.checked } })} />{t("settings.twitchCodecsAv1")}</label>
+            <p className="muted">{t("settings.twitchCodecsHelp")}</p>
+          </div>
           <label className="checkbox-label"><input type="checkbox" checked={draft.automaticChat} onChange={event => edit({ automaticChat: event.target.checked })} />{t("settings.automaticChat")}</label>
           <p className="muted">{t("settings.chatHelp")}</p>
           <label>{t("playbackSettings.chatApplication")}<select value={draft.chatProvider} onChange={event => edit({ chatProvider: event.target.value as ChatProvider })}><option value="browser">{t("playbackSettings.browser")}</option><option value="chatterino">Chatterino</option></select></label>
