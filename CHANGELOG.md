@@ -8,6 +8,10 @@
 
 - Optional **Twitch codecs** playback setting that also requests HEVC (H.265) and/or AV1 from Twitch; H.264 is always requested and the default is unchanged.
 
+### Improved
+
+- Updated Vite to 8.3.6, jsdom to 31.0.0 and other locked npm dependencies.
+
 ## 1.8.0 - 2026-11-07
 
 ### Added
