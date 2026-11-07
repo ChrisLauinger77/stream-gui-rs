@@ -169,6 +169,8 @@ Navigation, interface reload, and Twitch logout leave existing streams running s
 
 The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectively, with source fallback when the service does not offer a matching rendition. They are preferences rather than guaranteed resolution caps. Audio requests only `audio,audio_only`: if unavailable, playback fails without falling back to video.
 
+**Settings → Playback → Show stream details in mpv title** is off by default. With mpv selected, it shows the broadcaster, category and stream title for Twitch playback. Save the setting and select **Restart** in Watching to apply it to an existing session.
+
 ### Kick playback
 
 Choose **Open channel → Service → Kick**, enter the channel name and select **Play Kick channel**. Open channel is also available beside Watching while signed out of Twitch. Names accept 1–100 ASCII letters, digits, underscores or hyphens and are normalized to lowercase; enter a name, not a URL. This is a playback locator, not a verified account identity: the app does not check live status or retrieve viewer counts, titles or categories.

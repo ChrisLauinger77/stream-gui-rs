@@ -180,9 +180,9 @@ user.
 
 ## Settings and launch configuration
 
-- `SettingsStore` owns strict version 10 settings: global Streamlink/player/quality/low-latency/chat/theme/color-mode/background/discovery-language/UI-language/text-scale preferences
+- `SettingsStore` owns strict version 11 settings: global Streamlink/player/quality/low-latency/mpv title/chat/theme/color-mode/background/discovery-language/UI-language/text-scale preferences
   and sparse channel overrides, under Tauri's app config directory. Preserve atomic replacement, in-memory
-  migrations from this app's versions 1, 2, 3, 4, 5, 6, 7, 8 and 9, and rejection of malformed/unknown schemas without overwrite.
+  migrations from this app's versions 1–10 and rejection of malformed/unknown schemas without overwrite.
   Files are bounded to 256 KiB and channel overrides to 1,000 records.
 - Precedence is global defaults → selected player profile → optional channel overrides → optional request quality → immutable
   effective snapshot in `LaunchSpec` and the session. `quality: null` inherits; resolve only in Rust.

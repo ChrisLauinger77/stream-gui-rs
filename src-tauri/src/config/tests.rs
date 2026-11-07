@@ -19,13 +19,14 @@ fn settings_version_and_round_trip() {
         SettingsDocument::from_json(&serde_json::to_string(&value).unwrap()).unwrap(),
         value
     );
-    assert_eq!(value.version, 10);
+    assert_eq!(value.version, 11);
     assert_eq!(value.settings.theme, Theme::System);
     assert_eq!(value.settings.theme_palette, ThemePalette::Default);
     assert_eq!(value.settings.ui_language, UiLanguage::System);
     assert!(!value.settings.automatic_chat);
+    assert!(!value.settings.mpv_stream_title);
     assert_eq!(value.settings.default_quality, QualityPolicy::Source);
-    for text in ["{}", r#"{"version":11}"#, r#"{"version":0}"#] {
+    for text in ["{}", r#"{"version":12}"#, r#"{"version":0}"#] {
         assert_eq!(
             SettingsDocument::from_json(text).unwrap_err().code,
             ErrorCode::SettingsVersion
@@ -42,6 +43,10 @@ fn version_eight_theme_migration_preserves_mode_and_other_settings_until_save() 
     let root = tempfile::tempdir().unwrap();
     let mut old = serde_json::to_value(SettingsDocument::default()).unwrap();
     old["version"] = 8.into();
+    old["settings"]
+        .as_object_mut()
+        .unwrap()
+        .remove("mpvStreamTitle");
     old["settings"]["theme"] = "light".into();
     old["settings"]
         .as_object_mut()
@@ -58,7 +63,7 @@ fn version_eight_theme_migration_preserves_mode_and_other_settings_until_save() 
     store.update(selected).unwrap();
     let saved: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(saved["version"], 10);
+    assert_eq!(saved["version"], 11);
     assert_eq!(saved["settings"]["theme"], "light");
     assert_eq!(saved["settings"]["themePalette"], "custom");
     assert_eq!(
@@ -147,7 +152,7 @@ fn version_two_migration_preserves_every_playback_preference_without_rewriting()
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 10);
+    assert_eq!(persisted["version"], 11);
     assert_eq!(persisted["channelOverrides"], serde_json::json!({}));
 }
 
@@ -410,7 +415,7 @@ fn phase_five_migration_is_strict_preserves_channel_preferences_and_defaults_off
     store.update(store.snapshot()).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 10);
+    assert_eq!(persisted["version"], 11);
     let reopened = SettingsStore::open(root.path()).unwrap();
     assert_eq!(reopened.snapshot(), expected);
     for id in ["123", "456"] {
@@ -548,7 +553,7 @@ fn version_four_migration_preserves_released_preferences_and_defaults_phase_six(
     check_channels(&reopened);
     let saved: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(saved["version"], 10);
+    assert_eq!(saved["version"], 11);
     assert!(saved["settings"]["discoveryLanguage"].is_null());
     assert_eq!(saved["settings"]["lowLatency"], false);
     assert_eq!(saved["settings"]["textScale"], "100");
@@ -746,7 +751,7 @@ fn released_schema_five_migration_preserves_all_values_and_starts_without_profil
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
     assert_eq!(persisted["channelOverrides"], old["channelOverrides"]);
-    assert_eq!(persisted["version"], 10);
+    assert_eq!(persisted["version"], 11);
     let mut hostile = old;
     hostile["settings"]["profiles"] = serde_json::json!([]);
     assert!(SettingsDocument::from_json(&hostile.to_string()).is_err());
@@ -1014,6 +1019,7 @@ fn version_six_migrates_in_memory_and_rejects_smuggled_phase_eight_fields() {
     let mut old = serde_json::to_value(SettingsDocument::default()).unwrap();
     old["version"] = 6.into();
     let settings = old["settings"].as_object_mut().unwrap();
+    settings.remove("mpvStreamTitle");
     settings.remove("discovery");
     settings.remove("shortcuts");
     settings.remove("uiLanguage");
@@ -1037,7 +1043,7 @@ fn version_six_migrates_in_memory_and_rejects_smuggled_phase_eight_fields() {
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&fs::read_to_string(store.path()).unwrap())
             .unwrap()["version"],
-        10
+        11
     );
 }
 
@@ -1062,6 +1068,10 @@ fn version_seven_migrates_language_without_changing_existing_settings() {
     old["settings"]
         .as_object_mut()
         .unwrap()
+        .remove("mpvStreamTitle");
+    old["settings"]
+        .as_object_mut()
+        .unwrap()
         .remove("uiLanguage");
     old["settings"]
         .as_object_mut()
@@ -1082,7 +1092,7 @@ fn version_seven_migrates_language_without_changing_existing_settings() {
     store.update(stale).unwrap();
     let persisted: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(store.path()).unwrap()).unwrap();
-    assert_eq!(persisted["version"], 10);
+    assert_eq!(persisted["version"], 11);
     assert_eq!(persisted["settings"]["uiLanguage"], "fr");
     assert_eq!(
         SettingsStore::open(dir.path())
@@ -1306,6 +1316,10 @@ fn existing_shortcuts_expand_without_losing_custom_bindings() {
     version_seven["settings"]
         .as_object_mut()
         .unwrap()
+        .remove("mpvStreamTitle");
+    version_seven["settings"]
+        .as_object_mut()
+        .unwrap()
         .remove("uiLanguage");
     version_seven["settings"]
         .as_object_mut()
@@ -1429,6 +1443,10 @@ fn version_nine_migrates_without_rewriting_until_a_successful_save() {
     let dir = tempfile::tempdir().unwrap();
     let mut old = serde_json::to_value(SettingsDocument::default()).unwrap();
     old["version"] = 9.into();
+    old["settings"]
+        .as_object_mut()
+        .unwrap()
+        .remove("mpvStreamTitle");
     old["settings"]["discovery"]["bookmarks"] = serde_json::json!([
         {"kind":"channel","id":"123","name":"Synthetic channel"},
         {"kind":"category","id":"456","name":"Synthetic category"}
@@ -1438,14 +1456,56 @@ fn version_nine_migrates_without_rewriting_until_a_successful_save() {
     fs::write(&path, &bytes).unwrap();
     let store = SettingsStore::open(dir.path()).unwrap();
     assert_eq!(fs::read_to_string(&path).unwrap(), bytes);
+    old["settings"]["mpvStreamTitle"] = false.into();
     assert_eq!(
         serde_json::to_value(store.snapshot()).unwrap(),
         old["settings"]
     );
     store.update(store.snapshot()).unwrap();
     let saved: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    assert_eq!(saved["version"], 10);
+    assert_eq!(saved["version"], 11);
     assert_eq!(saved["settings"], old["settings"]);
+}
+
+#[test]
+fn version_ten_defaults_mpv_stream_title_off_and_persists_opt_in() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut previous = SettingsDocument::default();
+    previous.settings.default_quality = QualityPolicy::Low;
+    previous.channel_overrides.insert(
+        "123".into(),
+        ChannelOverrides {
+            low_latency: Some(true),
+            ..ChannelOverrides::default()
+        },
+    );
+    let mut old = serde_json::to_value(&previous).unwrap();
+    old["version"] = 10.into();
+    old["settings"]
+        .as_object_mut()
+        .unwrap()
+        .remove("mpvStreamTitle");
+    let bytes = old.to_string();
+    let path = dir.path().join("settings.json");
+    fs::write(&path, &bytes).unwrap();
+
+    let store = SettingsStore::open(dir.path()).unwrap();
+    assert_eq!(store.snapshot(), previous.settings);
+    assert_eq!(fs::read_to_string(&path).unwrap(), bytes);
+    assert!(!store.effective("123", None).unwrap().mpv_stream_title);
+    let mut enabled = store.snapshot();
+    enabled.mpv_stream_title = true;
+    store.update(enabled.clone()).unwrap();
+    let reopened = SettingsStore::open(dir.path()).unwrap();
+    assert_eq!(reopened.snapshot(), enabled);
+    assert_eq!(
+        reopened.channel("123").unwrap().overrides.low_latency,
+        Some(true)
+    );
+    assert!(reopened.effective("123", None).unwrap().mpv_stream_title);
+
+    old["settings"]["mpvStreamTitle"] = true.into();
+    assert!(SettingsDocument::from_json(&old.to_string()).is_err());
 }
 
 #[test]

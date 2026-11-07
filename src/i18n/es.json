@@ -443,6 +443,8 @@
   "settings.languageHint": "La opción Sistema sigue el idioma del sistema operativo. Los idiomas no compatibles utilizan el inglés.",
   "settings.languageSystem": "Sistema",
   "settings.lowLatencyHelp": "Puede reducir el retraso del stream, pero ofrece menos margen de búfer. El retraso real depende del stream, la red y el reproductor; no se garantiza una latencia concreta.",
+  "settings.mpvStreamTitle": "Mostrar los detalles del stream en el título de mpv",
+  "settings.mpvStreamTitleHelp": "Al iniciar o reiniciar un stream de Twitch en modo mpv, muestra el nombre del canal, la categoría y el título del stream.",
   "settings.notFound": "No encontrado",
   "settings.notTested": "Sin probar",
   "settings.qualityHelp": "Alta, Media y Baja prefieren la resolución indicada y, si hace falta, vuelven a Origen.",

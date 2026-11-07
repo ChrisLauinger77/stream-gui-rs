@@ -23,7 +23,7 @@ use std::{
 };
 use ts_rs::TS;
 
-pub const SETTINGS_VERSION: u32 = 10;
+pub const SETTINGS_VERSION: u32 = 11;
 const MAX_SETTINGS_BYTES: u64 = 256 * 1024;
 const MAX_CHANNEL_OVERRIDES: usize = 1000;
 
@@ -142,6 +142,7 @@ pub struct Settings {
     pub streamlink_path: Option<String>,
     pub player: PlayerSettings,
     pub default_quality: QualityPolicy,
+    pub mpv_stream_title: bool,
     pub automatic_chat: bool,
     pub theme: Theme,
     pub theme_palette: ThemePalette,
@@ -211,6 +212,7 @@ pub struct EffectivePlaybackSettings {
     pub streamlink_path: Option<String>,
     pub player: PlayerSettings,
     pub quality: QualityPolicy,
+    pub mpv_stream_title: bool,
     pub automatic_chat: bool,
     pub low_latency: bool,
 }
@@ -274,11 +276,24 @@ impl SettingsDocument {
         Ok(())
     }
     fn from_json(input: &str) -> Result<Self> {
-        let value: serde_json::Value = serde_json::from_str(input).map_err(|_| {
+        let mut value: serde_json::Value = serde_json::from_str(input).map_err(|_| {
             settings_error("Settings contain invalid JSON; the file was not changed.")
         })?;
         // Migrate only this application's schemas, in memory until the next save.
-        let mut result = match value.get("version").and_then(|v| v.as_u64()) {
+        let version = value.get("version").and_then(|v| v.as_u64());
+        if let Some(6..=10) = version {
+            let fields = value
+                .get_mut("settings")
+                .and_then(|settings| settings.as_object_mut())
+                .ok_or_else(|| settings_error("Invalid legacy settings."))?;
+            if fields
+                .insert("mpvStreamTitle".into(), false.into())
+                .is_some()
+            {
+                return Err(settings_error("Invalid legacy settings."));
+            }
+        }
+        let mut result = match version {
             Some(1) => {
                 #[derive(Deserialize)]
                 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -524,15 +539,17 @@ impl SettingsDocument {
                 serde_json::from_value(value)
                     .map_err(|_| settings_error("Invalid version 8 settings."))?
             }
-            Some(9) => {
+            Some(9..=10) => {
                 let mut value = value;
                 value["version"] = SETTINGS_VERSION.into();
                 serde_json::from_value(value)
-                    .map_err(|_| settings_error("Invalid version 9 settings."))?
+                    .map_err(|_| settings_error("Invalid legacy settings."))?
             }
-            Some(10) => serde_json::from_value(value).map_err(|_| {
-                settings_error("Settings schema is invalid; the file was not changed.")
-            })?,
+            Some(version) if version == u64::from(SETTINGS_VERSION) => {
+                serde_json::from_value(value).map_err(|_| {
+                    settings_error("Settings schema is invalid; the file was not changed.")
+                })?
+            }
             _ => {
                 return Err(AppError::new(
                     ErrorCode::SettingsVersion,
@@ -570,6 +587,7 @@ impl SettingsDocument {
                 .or(overrides.quality)
                 .or(profile.and_then(|p| p.quality))
                 .unwrap_or(self.settings.default_quality),
+            mpv_stream_title: self.settings.mpv_stream_title,
             low_latency: overrides
                 .low_latency
                 .or(profile.and_then(|p| p.low_latency))

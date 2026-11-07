@@ -578,6 +578,7 @@ fn production_spec(channel: &str) -> LaunchSpec {
             chat_provider: stream_gui_rs::config::ChatProvider::Browser,
             chatterino_path: None,
             low_latency: false,
+            mpv_stream_title: false,
             streamlink_path: None,
             player: PlayerSettings::default(),
             quality: QualityPolicy::Source,
@@ -1305,7 +1306,15 @@ async fn service_restart_uses_current_settings_and_survives_a_dropped_caller() {
         .unwrap();
     let mut settings = services.settings.snapshot();
     settings.default_quality = QualityPolicy::Low;
+    settings.mpv_stream_title = true;
     services.settings.update(settings).unwrap();
+    assert!(
+        !services.sessions.sessions().await[0]
+            .effective_settings
+            .as_ref()
+            .unwrap()
+            .mpv_stream_title
+    );
     let caller = {
         let services = services.clone();
         let id = first.id.clone();
@@ -1326,6 +1335,7 @@ async fn service_restart_uses_current_settings_and_survives_a_dropped_caller() {
             let state = services.sessions.sessions().await.pop().unwrap();
             if state.generation == 2 && state.phase == SessionPhase::Running && !state.restarting {
                 assert_eq!(state.quality_policy, Some(QualityPolicy::Low));
+                assert!(state.effective_settings.unwrap().mpv_stream_title);
                 break;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;

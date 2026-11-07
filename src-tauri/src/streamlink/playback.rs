@@ -307,6 +307,12 @@ pub fn build_command(spec: LaunchSpec) -> Result<CommandSpec> {
     if let Some(flag) = low_latency.filter(|_| spec.settings.low_latency) {
         arguments.push(flag.into());
     }
+    if spec.settings.mpv_stream_title
+        && spec.settings.player.mode == PlayerMode::Mpv
+        && spec.stream.service() == StreamingService::Twitch
+    {
+        arguments.extend(["--title".into(), "{author} - {category} - {title}".into()]);
+    }
     if let Some(player) = spec.player {
         let path = player.to_str().ok_or_else(|| {
             AppError::new(
@@ -374,6 +380,7 @@ mod tests {
                 chat_provider: crate::config::ChatProvider::Browser,
                 chatterino_path: None,
                 low_latency: false,
+                mpv_stream_title: false,
                 streamlink_path: None,
                 automatic_chat: false,
                 quality,
@@ -711,6 +718,64 @@ mod tests {
             assert_eq!(command.arguments, expected);
         }
     }
+    #[test]
+    fn mpv_stream_title_is_opt_in_and_uses_a_fixed_streamlink_template() {
+        let mut launch = spec(QualityPolicy::Source, PlayerMode::Mpv);
+        launch.settings.player.arguments = vec!["quotes '\" and {playerinput}".into()];
+        let template = ["--title", "{author} - {category} - {title}"];
+        let mut expected = vec![
+            "--no-config",
+            "--no-plugin-sideloading",
+            "--loglevel",
+            "info",
+            "--player-verbose",
+            "--player",
+            "/播放器 with spaces/player",
+            "--player-args",
+            "'--keep-open=no' '--quiet' 'quotes '\"'\"'\" and {{playerinput}}' {playerinput}",
+            "--",
+            "https://www.twitch.tv/example_1",
+            "best",
+        ];
+        assert_eq!(build_command(launch).unwrap().arguments, expected);
+
+        let mut launch = spec(QualityPolicy::Source, PlayerMode::Mpv);
+        launch.settings.player.arguments = vec!["quotes '\" and {playerinput}".into()];
+        launch.settings.mpv_stream_title = true;
+        expected.splice(5..5, template);
+        assert_eq!(build_command(launch).unwrap().arguments, expected);
+    }
+
+    #[test]
+    fn mpv_stream_title_is_ignored_for_other_player_modes_and_services() {
+        let streams = [
+            spec(QualityPolicy::Source, PlayerMode::Mpv).stream,
+            PlaybackStream::Kick {
+                slug: KickSlug::parse("example").unwrap(),
+            },
+            PlaybackStream::Youtube {
+                locator: YoutubeLocator::parse("dQw4w9WgXcQ").unwrap(),
+            },
+        ];
+        for mode in [
+            PlayerMode::Default,
+            PlayerMode::Mpv,
+            PlayerMode::Vlc,
+            PlayerMode::Custom,
+        ] {
+            for stream in &streams {
+                if mode == PlayerMode::Mpv && stream.service() == StreamingService::Twitch {
+                    continue;
+                }
+                let mut launch = spec(QualityPolicy::Source, mode);
+                launch.settings.mpv_stream_title = true;
+                launch.stream = stream.clone();
+                let arguments = build_command(launch).unwrap().arguments;
+                assert!(!arguments.iter().any(|arg| arg == "--title"));
+            }
+        }
+    }
+
     #[test]
     fn player_arguments_encode_spaces_quotes_braces_empty_unicode_and_windows_paths() {
         let input = [
