@@ -172,11 +172,13 @@ The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectiv
 Twitch playback from this app is not signed in to Twitch, which affects two separate things:
 
 - **Ad breaks:** Streamlink [filters Twitch ad segments](https://streamlink.github.io/cli/plugins/twitch.html#embedded-ads) automatically. Playback may pause during pre-roll and mid-roll breaks and resumes when the stream returns. Ad-free benefits from Twitch Turbo or a channel subscription do not apply.
-- **Highest qualities:** Source selects the best stream Twitch offers to Streamlink's default request, which advertises only H.264. Some broadcasts offer [higher qualities](https://streamlink.github.io/cli/plugins/twitch.html#higher-quality-streams) only to HEVC/AV1 or signed-in clients, so Source can be lower than what the Twitch website shows. On one reported broadcast, 1440p60 required both Streamlink's codec option and website authentication; the codec option alone reached 1080p60.
+- **Highest qualities:** Source selects the best stream Twitch offers to the codecs the app requests. By default that is H.264 only, Streamlink's default. Some broadcasts offer [higher qualities](https://streamlink.github.io/cli/plugins/twitch.html#higher-quality-streams) only with HEVC or AV1, which you can enable under **Twitch codecs** (below). Separately, some qualities are offered only to clients signed in to the Twitch website, so Source can still be lower than what the website shows. On one reported broadcast, 1440p60 required both the codec option and website authentication; the codec option alone reached 1080p60.
 
 Signed-in playback is deferred because Streamlink needs a Twitch website credential for it. See the [roadmap](docs/road-to-1.0.md#authenticated-twitch-playback-deferred).
 
 **Settings → Playback → Show stream details in mpv title** is off by default. With mpv selected, it shows the broadcaster, category and stream title for Twitch playback. Save the setting and select **Restart** in Watching to apply it to an existing session.
+
+**Settings → Playback → Twitch codecs** controls which video codecs Twitch playback requests. H.264 is always requested; **Also request HEVC (H.265)** and **Also request AV1** are off by default. With either enabled, the app passes Streamlink's `--twitch-supported-codecs` with `h264,h265`, `h264,av1` or `h264,h265,av1`, so Twitch may offer additional or higher-resolution renditions to Source, High, Medium and Low. Your player, and for smooth playback your hardware, must be able to decode the selected codecs; otherwise the player may show no video, fail, or decode slowly. Stream names can differ when extra codec variants exist. Kick and YouTube playback ignore this setting. Save it and select **Restart** in Watching to apply it to an existing session.
 
 ### Kick playback
 

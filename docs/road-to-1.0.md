@@ -64,7 +64,7 @@ Playback is best-effort: YouTube regularly changes its pages and may present con
 Two current behaviors follow from this and are documented separately in the README:
 
 - Streamlink [filters ad segments](https://streamlink.github.io/cli/plugins/twitch.html#embedded-ads), so playback may pause during ad breaks. Turbo and subscriber ad-free benefits do not apply.
-- Some broadcasts offer their highest qualities only to HEVC/AV1 or authenticated clients. In the [reporter's test](https://github.com/ChrisLauinger77/stream-gui-rs/issues/107#issuecomment-6707928172), 1440p60 required both website authentication and `twitch-supported-codecs`; the codec option alone reached 1080p60.
+- Some broadcasts offer their highest qualities only to HEVC/AV1 or authenticated clients. In the [reporter's test](https://github.com/ChrisLauinger77/stream-gui-rs/issues/107#issuecomment-6707928172), 1440p60 required both website authentication and `twitch-supported-codecs`; the codec option alone reached 1080p60. The codec part is now the typed **Settings → Playback → Twitch codecs** preference, which emits `--twitch-supported-codecs` while `--no-config` stays; the authentication part remains deferred.
 
 Alternatives ruled out by existing contracts:
 
