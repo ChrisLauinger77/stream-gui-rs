@@ -74,7 +74,7 @@ function SettingsForm({ saved, desktop, saving, commit, customThemeAvailable }: 
           <p className="muted">{t("settings.lowLatencyHelp")}</p>
           <label className="checkbox-label"><input type="checkbox" checked={draft.mpvStreamTitle} onChange={event => edit({ mpvStreamTitle: event.target.checked })} />{t("settings.mpvStreamTitle")}</label>
           <p className="muted">{t("settings.mpvStreamTitleHelp")}</p>
-          <div role="group" aria-labelledby="twitch-codecs-heading" className="setting-group">
+          <div role="group" aria-labelledby="twitch-codecs-heading" className="setting-subgroup">
             <h3 id="twitch-codecs-heading">{t("settings.twitchCodecs")}</h3>
             <label className="checkbox-label"><input type="checkbox" checked={draft.twitchCodecs.hevc} onChange={event => edit({ twitchCodecs: { ...draft.twitchCodecs, hevc: event.target.checked } })} />{t("settings.twitchCodecsHevc")}</label>
             <label className="checkbox-label"><input type="checkbox" checked={draft.twitchCodecs.av1} onChange={event => edit({ twitchCodecs: { ...draft.twitchCodecs, av1: event.target.checked } })} />{t("settings.twitchCodecsAv1")}</label>
