@@ -443,6 +443,8 @@
   "settings.languageHint": "System follows your operating system language. Unsupported languages use English.",
   "settings.languageSystem": "System",
   "settings.lowLatencyHelp": "Can reduce stream delay with less buffering resilience. Actual delay depends on the stream, network and player; no specific latency is guaranteed.",
+  "settings.mpvStreamTitle": "Show stream details in mpv title",
+  "settings.mpvStreamTitleHelp": "For Twitch playback in mpv mode, show the broadcaster, category and stream title when you start or restart playback.",
   "settings.notFound": "Not found",
   "settings.notTested": "Not tested",
   "settings.qualityHelp": "High, Medium and Low prefer their indicated resolution and fall back to Source when needed.",

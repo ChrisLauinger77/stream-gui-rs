@@ -127,6 +127,7 @@ mod tests {
                 quality: settings.default_quality,
                 automatic_chat: true,
                 low_latency: true,
+                mpv_stream_title: true,
             }),
             chat_error: None,
             started_at: u64::MAX,

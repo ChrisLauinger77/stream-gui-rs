@@ -443,6 +443,8 @@
   "settings.languageHint": "System übernimmt die Sprache des Betriebssystems. Nicht unterstützte Sprachen verwenden Englisch.",
   "settings.languageSystem": "System",
   "settings.lowLatencyHelp": "Kann die Streamverzögerung verringern, bietet aber weniger Pufferreserve. Die tatsächliche Verzögerung hängt von Stream, Netzwerk und Player ab; eine bestimmte Latenz wird nicht garantiert.",
+  "settings.mpvStreamTitle": "Streamdetails in der mpv-Titelleiste anzeigen",
+  "settings.mpvStreamTitleHelp": "Zeigt bei Twitch-Streams im mpv-Modus beim Start oder Neustart den Kanalnamen, die Kategorie und den Streamtitel an.",
   "settings.notFound": "Nicht gefunden",
   "settings.notTested": "Nicht getestet",
   "settings.qualityHelp": "Hoch, Mittel und Niedrig bevorzugen die angegebene Auflösung und fallen bei Bedarf auf Quelle zurück.",

@@ -72,6 +72,8 @@ function SettingsForm({ saved, desktop, saving, commit, customThemeAvailable }: 
           <p className="muted">{t("settings.qualityHelp")}</p>
           <label className="checkbox-label"><input type="checkbox" checked={draft.lowLatency} onChange={event => edit({ lowLatency: event.target.checked })} />{t("playbackSettings.preferLowLatency")}</label>
           <p className="muted">{t("settings.lowLatencyHelp")}</p>
+          <label className="checkbox-label"><input type="checkbox" checked={draft.mpvStreamTitle} onChange={event => edit({ mpvStreamTitle: event.target.checked })} />{t("settings.mpvStreamTitle")}</label>
+          <p className="muted">{t("settings.mpvStreamTitleHelp")}</p>
           <label className="checkbox-label"><input type="checkbox" checked={draft.automaticChat} onChange={event => edit({ automaticChat: event.target.checked })} />{t("settings.automaticChat")}</label>
           <p className="muted">{t("settings.chatHelp")}</p>
           <label>{t("playbackSettings.chatApplication")}<select value={draft.chatProvider} onChange={event => edit({ chatProvider: event.target.value as ChatProvider })}><option value="browser">{t("playbackSettings.browser")}</option><option value="chatterino">Chatterino</option></select></label>
