@@ -169,6 +169,13 @@ Navigation, interface reload, and Twitch logout leave existing streams running s
 
 The High, Medium, and Low selections prefer 720p30, 540p30, and 360p30 respectively, with source fallback when the service does not offer a matching rendition. They are preferences rather than guaranteed resolution caps. Audio requests only `audio,audio_only`: if unavailable, playback fails without falling back to video.
 
+Twitch playback from this app is not signed in to Twitch, which affects two separate things:
+
+- **Ad breaks:** Streamlink [filters Twitch ad segments](https://streamlink.github.io/cli/plugins/twitch.html#embedded-ads) automatically. Playback may pause during pre-roll and mid-roll breaks and resumes when the stream returns. Ad-free benefits from Twitch Turbo or a channel subscription do not apply.
+- **Highest qualities:** Source selects the best stream Twitch offers to Streamlink's default request, which advertises only H.264. Some broadcasts offer [higher qualities](https://streamlink.github.io/cli/plugins/twitch.html#higher-quality-streams) only to HEVC/AV1 or signed-in clients, so Source can be lower than what the Twitch website shows. On one reported broadcast, 1440p60 required both Streamlink's codec option and website authentication; the codec option alone reached 1080p60.
+
+Signed-in playback is deferred because Streamlink needs a Twitch website credential for it. See the [roadmap](docs/road-to-1.0.md#authenticated-twitch-playback-deferred).
+
 **Settings → Playback → Show stream details in mpv title** is off by default. With mpv selected, it shows the broadcaster, category and stream title for Twitch playback. Save the setting and select **Restart** in Watching to apply it to an existing session.
 
 ### Kick playback
@@ -278,7 +285,7 @@ See the [testing policy](docs/testing.md) for native acceptance and exact-packag
 
 ## Current limitations
 
-Stream GUI RS does not provide embedded video/chat, arbitrary chat applications, advanced Streamlink transports, an automatic updater, or legacy configuration import. Monitoring stops when the application is fully quit. Active sessions and logs are not persisted. See [architecture](docs/architecture.md) for the detailed contracts.
+Stream GUI RS does not provide embedded video/chat, signed-in Twitch playback, arbitrary chat applications, advanced Streamlink transports, an automatic updater, or legacy configuration import. Monitoring stops when the application is fully quit. Active sessions and logs are not persisted. See [architecture](docs/architecture.md) for the detailed contracts.
 
 ## Building from source
 

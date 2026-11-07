@@ -57,6 +57,27 @@ There is no Google account, OAuth, YouTube Data API client, cookie import, brows
 
 Playback is best-effort: YouTube regularly changes its pages and may present consent or bot checks that the installed Streamlink version cannot pass. Such failures are reported as ordinary process failures, never as offline status. Discovery, following and notifications remain deferred: the Data API's Google OAuth verification and daily quota make polling followed channels impractical for a distributed desktop client.
 
+## Authenticated Twitch playback: deferred
+
+**Decision, 2026-11-07 ([#107](https://github.com/ChrisLauinger77/stream-gui-rs/issues/107)).** Twitch launches remain unauthenticated. [Streamlink's Twitch authentication](https://streamlink.github.io/cli/plugins/twitch.html#authentication) uses a Twitch website token, the browser's `auth-token` cookie, sent with `--twitch-api-header`. The app's Device Flow token is issued to this app's public client ID and cannot replace it. Users have no supported way to obtain the website token other than copying it from browser developer tools. Streamlink documents only CLI arguments and configuration files for receiving it, and both conflict with keeping credentials out of process arguments and launching with `--no-config`. A native prompt and the OS credential store could protect entry and storage, but not delivery.
+
+Two current behaviors follow from this and are documented separately in the README:
+
+- Streamlink [filters ad segments](https://streamlink.github.io/cli/plugins/twitch.html#embedded-ads), so playback may pause during ad breaks. Turbo and subscriber ad-free benefits do not apply.
+- Some broadcasts offer their highest qualities only to HEVC/AV1 or authenticated clients. In the [reporter's test](https://github.com/ChrisLauinger77/stream-gui-rs/issues/107#issuecomment-6707928172), 1440p60 required both website authentication and `twitch-supported-codecs`; the codec option alone reached 1080p60.
+
+Alternatives ruled out by existing contracts:
+
+- Embedded twitch.tv sign-in that captures the cookie: the webview has no direct Twitch access under the CSP, its capabilities belong to the local main window, and the app does not read or import browser cookies.
+- Device Flow with a Twitch first-party client ID: authentication uses only this app's public client ID from the runtime override or build-time embedding.
+- App-side requests to Twitch's private GraphQL API: they would add a Twitch client outside the shared Helix client and rate budget and reimplement playback logic that Streamlink owns.
+- Ad-blocking proxies: advanced transports remain deferred.
+- Python argparse `@file` expansion, which Streamlink accepts but does not document as an input route.
+
+**Revisit trigger:** Streamlink documents a way to receive the Twitch API header that is neither a CLI argument nor a configuration file, and users have a supported way to obtain the token. A design must then keep the token in the OS credential store and out of argv, the environment, settings, logs and support reports. It must bind the token to the signed-in account and never send it with Kick or YouTube launches.
+
+**Current implementation boundary:** no website-token entry, storage, cookie import, GraphQL client or Streamlink authentication argument is added. The app's OAuth tokens are never passed to Streamlink.
+
 ## Native dependency maintenance after 1.0
 
 The 1.0 localization work used the pre-migration native dependency stack. The post-1.0 migrations remain separate:
