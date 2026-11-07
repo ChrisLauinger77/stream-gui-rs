@@ -74,7 +74,11 @@ test("single-line controls share sizing across browsing, settings and playback",
     <button class="text-button">Category</button><button class="item-link">Channel</button>`;
   document.body.append(fixture);
   try {
-    const controlHeight = "var(--control-height)";
+    // jsdom 31 resolves var() and rem in computed styles, while earlier versions return the declared
+    // value. A probe styled with the token yields the expected value either way.
+    const probe = document.createElement("div"); probe.style.height = "var(--control-height)"; fixture.append(probe);
+    const controlHeight = getComputedStyle(probe).height;
+    expect(controlHeight).not.toBe("auto");
     expect(getComputedStyle(document.documentElement).getPropertyValue("--control-height").trim()).toMatch(/^\d+(\.\d+)?rem$/);
     for (const field of fixture.querySelectorAll('input:not([type="checkbox"]),select')) {
       const fieldStyle = getComputedStyle(field);
