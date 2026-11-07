@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.9.0 - 2026-11-07
+
+### Added
+
+- Optional **Twitch codecs** playback setting that also requests HEVC (H.265) and/or AV1 from Twitch; H.264 is always requested and the default is unchanged.
+
 ## 1.8.0 - 2026-11-07
 
 ### Added
