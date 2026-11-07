@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 1.8.0 - 2026-11-07
+
+### Added
+
+- Optional **Show stream details in mpv title** playback setting that shows the broadcaster, category and stream title in mpv for Twitch playback.
+
+### Improved
+
+- Documented why Twitch playback can show ad breaks and lower Source quality than the Twitch website.
+- Updated webbrowser to 1.2.6, uuid to 1.29.1, Vitest to 5.1.0, @vitejs/plugin-react to 6.2.1 and other locked Rust and npm dependencies.
+
 ## 1.7.1 - 2026-11-03
 
 ### Fixed
