@@ -110,6 +110,7 @@ async fn untrusted_provider_error_bodies_do_not_escape() {
         Err(e) => e,
         Ok(_) => panic!("expected error"),
     };
+    assert_eq!(error.code, ErrorCode::AuthProvider);
     assert!(
         !serde_json::to_string(&error)
             .unwrap()

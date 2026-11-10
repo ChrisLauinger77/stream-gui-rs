@@ -101,19 +101,20 @@ mod tests {
         assert_eq!(state.accept(vec![stream("101", "1")]).len(), 1);
     }
     #[test]
-    fn pause_sleep_and_recovery_suppress_unobserved_transitions() {
-        for _reason in ["pause", "sleep", "network", "partial", "429"] {
-            let mut state = Transitions::default();
-            state.accept(vec![stream("100", "1")]);
-            state.rebaseline();
-            assert_eq!(state.live_count(), 1);
-            assert!(
-                state
-                    .accept(vec![stream("100", "1"), stream("200", "2")])
-                    .is_empty()
-            );
-            assert_eq!(state.accept(vec![stream("300", "3")]).len(), 1);
-        }
+    fn rebaseline_suppresses_unobserved_transitions() {
+        let mut state = Transitions::default();
+        state.accept(vec![stream("100", "1")]);
+        state.rebaseline();
+        assert_eq!(state.live_count(), 1);
+        assert!(
+            state
+                .accept(vec![stream("100", "1"), stream("200", "2")])
+                .is_empty()
+        );
+        let events = state.accept(vec![stream("300", "3")]);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].id, "300");
+        assert_eq!(events[0].user_id, "3");
     }
     #[test]
     fn history_capacity_rebaselines_without_replaying_old_events() {

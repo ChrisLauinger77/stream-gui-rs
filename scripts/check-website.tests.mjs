@@ -13,25 +13,29 @@ test("website metadata accepts the exact public URLs", () => {
   assert.deepEqual(metadataUrlErrors(validSources), []);
 });
 
-for (const [name, sources] of Object.entries({
+for (const [name, { expected, ...sources }] of Object.entries({
   "canonical URL with a hostile prefix": {
     ...validSources,
     html: validSources.html.replace(`href="${PUBLIC_URL}"`, `href="https://example.com/${PUBLIC_URL}"`),
+    expected: `canonical URL must be exactly ${PUBLIC_URL}`,
   },
   "Open Graph URL with a hostile suffix": {
     ...validSources,
     html: validSources.html.replace(`content="${PUBLIC_URL}"`, `content="${PUBLIC_URL}.example.com/"`),
+    expected: `Open Graph URL must be exactly ${PUBLIC_URL}`,
   },
   "robots sitemap URL with a hostile prefix": {
     ...validSources,
     robots: `Sitemap: https://example.com/${PUBLIC_URL}sitemap.xml\n`,
+    expected: `robots.txt sitemap URL must be exactly ${PUBLIC_URL}sitemap.xml`,
   },
   "sitemap location with a hostile suffix": {
     ...validSources,
     sitemap: `<urlset><url><loc>${PUBLIC_URL}.example.com/</loc></url></urlset>`,
+    expected: `sitemap location must be exactly ${PUBLIC_URL}`,
   },
 })) {
   test(`website metadata rejects ${name}`, () => {
-    assert.notDeepEqual(metadataUrlErrors(sources), []);
+    assert.deepEqual(metadataUrlErrors(sources), [expected]);
   });
 }

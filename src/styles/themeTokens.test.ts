@@ -1,6 +1,20 @@
 import { expect, test } from "vitest";
 import { BUNDLED_THEMES } from "./palettes";
-import { contrast, themeDefinition, themeTokenNames, themeTokens } from "./themeTokens";
+import { themeDefinition, themeTokenNames, themeTokens } from "./themeTokens";
+
+// Check WCAG contrast independently of the function used to adjust the tokens.
+// A broken production contrast calculation must not also validate its output.
+function contrast(first: string, second: string) {
+  const luminances = [first, second].map(hex => {
+    expect(hex).toMatch(/^#[0-9a-f]{6}$/i);
+    const rgb = Number.parseInt(hex.slice(1), 16);
+    return [0.2126, 0.7152, 0.0722].reduce((sum, weight, index) => {
+      const channel = ((rgb >> (16 - index * 8)) & 255) / 255;
+      return sum + weight * (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+    }, 0);
+  }).sort((a, b) => b - a);
+  return (luminances[0] + 0.05) / (luminances[1] + 0.05);
+}
 
 test("theme registry offers Sidra's eight bundled palettes and Default has no override", () => {
   expect(BUNDLED_THEMES.map(theme => theme.name)).toEqual([

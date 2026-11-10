@@ -17,13 +17,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn full_sha_is_shortened_to_seven_lowercase_characters() {
+    fn valid_shas_are_shortened_to_seven_lowercase_characters() {
         assert_eq!(short_commit(Some(&"ABCDEF0123".repeat(4))), "abcdef0");
         assert_eq!(short_commit(Some(&"1234ABCD".repeat(8))), "1234abc");
-    }
-
-    #[test]
-    fn short_sha_is_preserved() {
         assert_eq!(short_commit(Some("a1b2c3d")), "a1b2c3d");
     }
 

@@ -1289,7 +1289,8 @@ async fn restart_failure_retains_the_session_and_diagnostics_without_a_child() {
 #[tokio::test]
 async fn service_restart_uses_current_settings_and_survives_a_dropped_caller() {
     use stream_gui_rs::config::TwitchCodecs;
-    let root = tempfile::tempdir().unwrap();
+    let root = helper_directory();
+    let executable = renamed_helper(root.path(), "gatedprobe");
     let mut services = Services::new(root.path(), None).unwrap();
     services.auth = std::sync::Arc::new(stream_gui_rs::twitch::AuthService::new(
         stream_gui_rs::twitch::HttpTwitchApi::new().unwrap(),
@@ -1299,7 +1300,7 @@ async fn service_restart_uses_current_settings_and_survives_a_dropped_caller() {
     let services = std::sync::Arc::new(services);
     services
         .settings
-        .set_streamlink_path(Some(helper().to_string_lossy().into_owned()))
+        .set_streamlink_path(Some(executable.to_string_lossy().into_owned()))
         .unwrap();
     let first = services
         .sessions
@@ -1330,8 +1331,17 @@ async fn service_restart_uses_current_settings_and_survives_a_dropped_caller() {
                 .await
         })
     };
-    tokio::time::sleep(Duration::from_millis(10)).await;
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while !executable.with_extension("entered").exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(!caller.is_finished());
     caller.abort();
+    assert!(caller.await.unwrap_err().is_cancelled());
+    std::fs::write(executable.with_extension("release"), "continue").unwrap();
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             let state = services.sessions.sessions().await.pop().unwrap();

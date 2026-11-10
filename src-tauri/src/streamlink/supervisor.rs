@@ -821,12 +821,15 @@ mod tests {
             "",
             "../../file",
         ] {
-            assert!(
+            assert_eq!(
                 build_arguments(&LaunchRequest {
                     quality: quality.into(),
                     ..request.clone()
                 })
-                .is_err()
+                .unwrap_err()
+                .code,
+                ErrorCode::InvalidInput,
+                "{quality}"
             );
         }
         for url in [
@@ -838,12 +841,15 @@ mod tests {
             "https://twitch.tv/videos/123",
             "file:///tmp/evil",
         ] {
-            assert!(
+            assert_eq!(
                 build_arguments(&LaunchRequest {
                     url: url.into(),
                     ..request.clone()
                 })
-                .is_err()
+                .unwrap_err()
+                .code,
+                ErrorCode::InvalidInput,
+                "{url}"
             );
         }
         for quality in ["worst", "audio_only", "720p", "720p60"] {
