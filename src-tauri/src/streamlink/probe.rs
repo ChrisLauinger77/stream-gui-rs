@@ -259,18 +259,33 @@ mod tests {
 
     #[test]
     fn rejects_relative_missing_directory_and_non_executable() {
-        assert!(validate_executable(Path::new("streamlink")).is_err());
+        assert_eq!(
+            validate_executable(Path::new("streamlink"))
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidInput
+        );
         let dir = tempfile::tempdir().unwrap();
-        assert!(validate_executable(dir.path()).is_err());
-        assert!(validate_executable(&dir.path().join("missing")).is_err());
         let file = dir.path().join("plain.txt");
         std::fs::write(&file, "hello").unwrap();
-        assert!(validate_executable(&file).is_err());
+        for path in [dir.path().to_path_buf(), dir.path().join("missing"), file] {
+            assert_eq!(
+                validate_executable(&path).unwrap_err().code,
+                ErrorCode::InvalidExecutable,
+                "{}",
+                path.display()
+            );
+        }
         assert_eq!(
             discover_on_path(None).unwrap_err().code,
             ErrorCode::NotFound
         );
-        assert!(discover(Some("/not/a/real/streamlink")).is_err());
+        assert_eq!(
+            discover(Some(dir.path().join("missing").to_str().unwrap()))
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidExecutable
+        );
     }
 
     #[test]

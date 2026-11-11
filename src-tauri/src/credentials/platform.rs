@@ -193,10 +193,9 @@ mod tests {
                     refresh_token: Zeroizing::new(format!("refresh-{suffix}")),
                 })
                 .unwrap();
-            assert_eq!(
-                store.load().unwrap().unwrap().refresh_token.as_str(),
-                format!("refresh-{suffix}")
-            );
+            let restored = store.load().unwrap().unwrap();
+            assert_eq!(restored.access_token.as_str(), format!("access-{suffix}"));
+            assert_eq!(restored.refresh_token.as_str(), format!("refresh-{suffix}"));
         }
         store.clear().unwrap();
         store.clear().unwrap();

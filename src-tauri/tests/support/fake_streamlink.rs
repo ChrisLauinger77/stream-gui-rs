@@ -152,6 +152,15 @@ fn main() {
         return;
     }
     if args == ["--version"] {
+        if name.contains("gatedprobe") {
+            std::fs::write(executable.with_extension("entered"), "ready").unwrap();
+            let release = executable.with_extension("release");
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !release.exists() && std::time::Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(release.exists(), "test probe was not released");
+        }
         if name.contains("reportprobe") {
             let marker = executable.with_extension("count");
             let count = std::fs::read_to_string(&marker)

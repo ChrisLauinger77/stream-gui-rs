@@ -163,6 +163,10 @@ test("Live has loading, success and server-error retry states", async () => {
   const pending = deferred<PagedResult<StreamSummary>>(); vi.mocked(api.streams).mockReturnValueOnce(pending.promise); await render(); await click("Live"); expect(text()).toContain("Loading…");
   await act(async () => pending.resolve(page([stream]))); expect(text()).toContain("1.2K viewers");
   vi.mocked(api.streams).mockRejectedValueOnce({ code: "twitch_server" }); await click("Refresh"); expect(text()).toContain("temporarily unavailable"); expect(text()).toContain("Previous results"); await click("Retry");
+  expect(api.streams).toHaveBeenCalledTimes(3);
+  expect(api.streams).toHaveBeenLastCalledWith({ page: { sessionId: "1", cursor: null, refresh: true }, language: null });
+  expect(container.querySelectorAll(".stream-card")).toHaveLength(1);
+  expect(text()).toContain("1.2K viewers"); expect(text()).not.toContain("temporarily unavailable"); expect(text()).not.toContain("Previous results");
 });
 test("categories open their streams and Back restores the category focus", async () => {
   await render(); await click("Categories"); button("Open category Example Game").focus(); await click("Open category Example Game");
@@ -197,6 +201,9 @@ test("category search uses its own result type and pagination", async () => {
 test("online channel details include viewers, category and start time", async () => {
   vi.mocked(api.channel).mockResolvedValue({ ...details, channel: { ...channel, liveState: "live" }, stream });
   await render(); await click("Live"); await click("Open channel Example Channel"); expect(text()).toContain("LIVE NOW"); expect(text()).toContain("Started"); expect(text()).toContain("An example description");
+  expect(container.querySelector(".channel-stream .viewer-count")?.textContent).toBe("1.2K viewers");
+  expect(button("Example Game", ".channel-stream").textContent).toBe("Example Game");
+  expect(container.querySelector(".channel-stream time")?.getAttribute("datetime")).toBe(stream.startedAt);
 });
 test("offline and unavailable channel states are distinct", async () => {
   await render(); await click("Live"); await click("Open channel Example Channel"); expect(text()).toContain("Offline — no current live stream");
@@ -2230,10 +2237,14 @@ test("an unavailable unselected profile can be edited or deleted without activat
   expect(api.modifyPlayerProfile).toHaveBeenCalledExactlyOnceWith({ kind: "delete", id: "missing" });
 });
 test("Enter in the profile editor saves only that profile and leaves global draft edits intact", async () => {
-  profilesPersistence(); await render(); await openProfiles(); await click("Add profile"); await editControl("Profile name", "Keyboard profile");
+  profilesPersistence(); await render(); await click("Settings"); await editControl("Default quality", "high", "select");
+  await click("Player", ".settings-nav"); await click("Add profile"); await editControl("Profile name", "Keyboard profile");
   const input = container.querySelector<HTMLInputElement>('.profile-editor input')!;
   await act(async () => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
-  expect(api.modifyPlayerProfile).toHaveBeenCalledOnce(); expect(api.savePlaybackSettings).not.toHaveBeenCalled();
+  expect(api.modifyPlayerProfile).toHaveBeenCalledExactlyOnceWith({ kind: "create", profile: { name: "Keyboard profile", player: playbackSettings.player, quality: null, lowLatency: null } });
+  expect(container.querySelector(".profile-editor")).toBeNull(); expect(api.savePlaybackSettings).not.toHaveBeenCalled();
+  await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ defaultQuality: "high", profiles: [expect.objectContaining({ id: "profile-1", name: "Keyboard profile" })] }));
 });
 
 function localPreferences(initial = playbackSettings) {
