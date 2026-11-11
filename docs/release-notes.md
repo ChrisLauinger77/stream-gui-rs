@@ -1,22 +1,25 @@
-# Stream GUI RS 1.9.0
+# Stream GUI RS 1.10.0
 
-Changes since Stream GUI RS 1.8.0.
+Changes since Stream GUI RS 1.9.0.
 
-This feature release lets Twitch playback request HEVC and AV1 in addition to H.264.
+This feature release adds a tray submenu for starting followed live channels and makes opening Watching on launch optional.
 
 ## Features
 
-- Added **Settings → Playback → Twitch codecs** with **Also request HEVC (H.265)** and **Also request AV1** ([#109](https://github.com/ChrisLauinger77/stream-gui-rs/pull/109), [#107](https://github.com/ChrisLauinger77/stream-gui-rs/issues/107)). Both are off by default, and H.264 is always requested. Some Twitch broadcasts offer higher resolutions only with HEVC or AV1; your player and hardware must be able to decode the selected codecs. Some resolutions additionally require Twitch website sign-in, which the app still does not support. Kick and YouTube playback are unchanged. Save the setting and select **Restart** in Watching to apply it to a running session.
-- Streamlink still runs without user configuration files (`--no-config`); useful Streamlink options are offered as typed settings instead.
+- Added a **Live channels** submenu to the tray/menu-bar menu ([#121](https://github.com/ChrisLauinger77/stream-gui-rs/pull/121), [#119](https://github.com/ChrisLauinger77/stream-gui-rs/issues/119)). With live monitoring on, it lists up to 25 followed Twitch channels from the latest complete check. Choosing one starts playback exactly like **Watch**, using the current player, quality, channel and chat preferences, and leaves the window as it was; a failure restores the window and shows the error. The submenu says when monitoring is off or paused, when you are signed out, while checking, and when the list is unavailable or may be outdated. It uses the existing monitor checks and makes no additional Twitch requests.
+- Added **Settings → Playback → Open Watching when starting a stream** ([#120](https://github.com/ChrisLauinger77/stream-gui-rs/pull/120), [#118](https://github.com/ChrisLauinger77/stream-gui-rs/issues/118)). It is on by default. When off, starting a Twitch, Kick or YouTube stream keeps the current view and announces success or failure there; **Watching** remains available from its button, which shows the active-session count, and its keyboard shortcut.
+
+## Tests
+
+- Strengthened several test contracts, covered the local-window permission boundary for every registered command and removed duplicate checks ([#116](https://github.com/ChrisLauinger77/stream-gui-rs/pull/116)).
 
 ## Dependencies
 
-- Updated Vite from 8.3.5 to 8.3.6 ([#110](https://github.com/ChrisLauinger77/stream-gui-rs/pull/110)).
-- Updated jsdom from 30.1.3 to 31.0.0 and adjusted the control-height test to compare against the computed height of an element using the same CSS token ([#111](https://github.com/ChrisLauinger77/stream-gui-rs/pull/111)).
-- Refreshed the npm lockfile to pick up tough-cookie 6.1.0 and undici 8.12.4 ([#112](https://github.com/ChrisLauinger77/stream-gui-rs/pull/112)).
+- Refreshed the npm lockfile, updating parse5 from 8.1.0 to 8.1.1 ([#113](https://github.com/ChrisLauinger77/stream-gui-rs/pull/113)).
+- Updated the `anthropics/claude-code-action` workflow digest ([#114](https://github.com/ChrisLauinger77/stream-gui-rs/pull/114)).
 
 ## Upgrade and platform support
 
-Settings move from schema 11 to schema 12 when settings are next saved; existing values are unchanged and both extra codecs start off. Upgrade without signing out or clearing settings. Older versions reject the schema 12 settings file without overwriting it.
+Settings move from schema 12 to schema 13 when settings are next saved; existing values are unchanged and **Open Watching when starting a stream** starts on, so launches behave as before. Upgrade without signing out or clearing settings. Older versions reject the schema 13 settings file without overwriting it.
 
 Streamlink 8.0+ and a separately installed player remain required. Package formats remain Windows x86_64 installer and portable/Scoop ZIP; Linux x86_64 AppImage, DEB and RPM; and a universal macOS DMG for Apple Silicon and Intel requiring macOS 11.0 or later. Verify downloads against the accompanying SHA-256 files.

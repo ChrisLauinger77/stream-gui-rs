@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 1.10.0 - 2026-11-11
+
+### Added
+
+- **Live channels** submenu in the tray/menu bar that lists up to 25 followed live Twitch channels from the latest complete monitor check and starts playback like **Watch**.
+- Optional **Open Watching when starting a stream** playback setting; it stays on by default.
+
+### Improved
+
+- Strengthened test-suite contracts and removed duplicate checks.
+- Refreshed locked npm dependencies.
+
 ## 1.9.0 - 2026-11-07
 
 ### Added
