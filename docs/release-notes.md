@@ -16,6 +16,7 @@ This feature release adds a tray submenu for starting followed live channels and
 ## Dependencies
 
 - Refreshed the npm lockfile, updating parse5 from 8.1.0 to 8.1.1 ([#113](https://github.com/ChrisLauinger77/stream-gui-rs/pull/113)).
+- Refreshed both lockfiles ([#115](https://github.com/ChrisLauinger77/stream-gui-rs/pull/115)), including wry 0.57.1 → 0.57.2, webbrowser 1.2.6 → 1.2.7, uuid 1.29.1 → 1.29.2, rustls-pki-types 1.15.1 → 1.16.0 and webpki-root-certs 1.0.11 → 1.0.12. The test-only tldts-core moved from the deprecated partial release 7.4.20 to 7.4.19.
 - Updated the `anthropics/claude-code-action` workflow digest ([#114](https://github.com/ChrisLauinger77/stream-gui-rs/pull/114)).
 
 ## Upgrade and platform support

@@ -12,7 +12,7 @@
 ### Improved
 
 - Strengthened test-suite contracts and removed duplicate checks.
-- Refreshed locked npm dependencies.
+- Updated wry to 0.57.2, webbrowser to 1.2.7, uuid to 1.29.2 and other locked Rust and npm dependencies.
 
 ## 1.9.0 - 2026-11-07
 
