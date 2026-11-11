@@ -447,6 +447,8 @@
   "settings.mpvStreamTitleHelp": "Al iniciar o reiniciar un stream de Twitch en modo mpv, muestra el nombre del canal, la categoría y el título del stream.",
   "settings.notFound": "No encontrado",
   "settings.notTested": "Sin probar",
+  "settings.openWatchingOnLaunch": "Abrir Reproducción al iniciar un stream",
+  "settings.openWatchingOnLaunchHelp": "Si se desactiva, al iniciar un stream se mantiene la vista actual. Reproducción sigue disponible desde su botón y su atajo de teclado.",
   "settings.qualityHelp": "Alta, Media y Baja prefieren la resolución indicada y, si hace falta, vuelven a Origen.",
   "settings.runningPreferencesHelp": "Los cambios de preferencias no afectan a los streams en curso. Salir detiene la reproducción.",
   "settings.saved": "Ajustes guardados. Las preferencias de segundo plano se aplican ahora; las de reproducción, en nuevos inicios y reinicios.",

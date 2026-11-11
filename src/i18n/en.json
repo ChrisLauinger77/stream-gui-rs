@@ -447,6 +447,8 @@
   "settings.mpvStreamTitleHelp": "For Twitch playback in mpv mode, show the broadcaster, category and stream title when you start or restart playback.",
   "settings.notFound": "Not found",
   "settings.notTested": "Not tested",
+  "settings.openWatchingOnLaunch": "Open Watching when starting a stream",
+  "settings.openWatchingOnLaunchHelp": "When off, starting a stream keeps the current view. Watching stays available from its button and keyboard shortcut.",
   "settings.qualityHelp": "High, Medium and Low prefer their indicated resolution and fall back to Source when needed.",
   "settings.runningPreferencesHelp": "Changing preferences leaves running streams unchanged. Explicit Quit stops playback.",
   "settings.saved": "Settings saved. Background preferences apply now; playback preferences apply to new launches and restarts.",

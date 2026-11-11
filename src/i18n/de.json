@@ -447,6 +447,8 @@
   "settings.mpvStreamTitleHelp": "Zeigt bei Twitch-Streams im mpv-Modus beim Start oder Neustart den Kanalnamen, die Kategorie und den Streamtitel an.",
   "settings.notFound": "Nicht gefunden",
   "settings.notTested": "Nicht getestet",
+  "settings.openWatchingOnLaunch": "„Wiedergabe“ beim Start eines Streams öffnen",
+  "settings.openWatchingOnLaunchHelp": "Wenn deaktiviert, bleibt beim Start eines Streams die aktuelle Ansicht erhalten. „Wiedergabe“ bleibt über die Schaltfläche und das Tastenkürzel erreichbar.",
   "settings.qualityHelp": "Hoch, Mittel und Niedrig bevorzugen die angegebene Auflösung und fallen bei Bedarf auf Quelle zurück.",
   "settings.runningPreferencesHelp": "Änderungen an Einstellungen beeinflussen laufende Streams nicht. „Beenden“ stoppt die Wiedergabe.",
   "settings.saved": "Einstellungen gespeichert. Hintergrundeinstellungen gelten sofort; Wiedergabeeinstellungen gelten bei neuen Starts und Neustarts.",

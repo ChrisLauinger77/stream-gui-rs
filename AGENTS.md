@@ -180,9 +180,9 @@ user.
 
 ## Settings and launch configuration
 
-- `SettingsStore` owns strict version 12 settings: global Streamlink/player/quality/low-latency/mpv title/Twitch codecs/chat/theme/color-mode/background/discovery-language/UI-language/text-scale preferences
+- `SettingsStore` owns strict version 13 settings: global Streamlink/player/quality/low-latency/mpv title/Twitch codecs/open-Watching-on-launch/chat/theme/color-mode/background/discovery-language/UI-language/text-scale preferences
   and sparse channel overrides, under Tauri's app config directory. Preserve atomic replacement, in-memory
-  migrations from this app's versions 1–11 and rejection of malformed/unknown schemas without overwrite.
+  migrations from this app's versions 1–12 and rejection of malformed/unknown schemas without overwrite.
   The Twitch codec preference is a closed global `{ hevc, av1 }` pair: H.264 is always requested, nothing is
   emitted when both are off, otherwise one fixed h264-first `--twitch-supported-codecs` value before `--`,
   Twitch launches only. No free-form codec strings or generic per-service Streamlink options.
