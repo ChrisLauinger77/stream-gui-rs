@@ -23,7 +23,7 @@ use std::{
 };
 use ts_rs::TS;
 
-pub const SETTINGS_VERSION: u32 = 12;
+pub const SETTINGS_VERSION: u32 = 13;
 const MAX_SETTINGS_BYTES: u64 = 256 * 1024;
 const MAX_CHANNEL_OVERRIDES: usize = 1000;
 
@@ -154,7 +154,7 @@ impl TwitchCodecs {
 }
 
 /// Global preferences only. Channel records have their own narrow update operation.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Settings {
     pub discovery: discovery::DiscoveryPreferences,
@@ -164,6 +164,8 @@ pub struct Settings {
     pub default_quality: QualityPolicy,
     pub mpv_stream_title: bool,
     pub twitch_codecs: TwitchCodecs,
+    // Presentation-only: React decides whether a launch request also opens Watching.
+    pub open_watching_on_launch: bool,
     pub automatic_chat: bool,
     pub theme: Theme,
     pub theme_palette: ThemePalette,
@@ -176,6 +178,33 @@ pub struct Settings {
     pub chatterino_path: Option<String>,
     pub profiles: Vec<PlayerProfile>,
     pub selected_profile_id: Option<String>,
+}
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            discovery: Default::default(),
+            shortcuts: Default::default(),
+            streamlink_path: None,
+            player: Default::default(),
+            default_quality: Default::default(),
+            mpv_stream_title: false,
+            twitch_codecs: Default::default(),
+            // Opening Watching was the only behavior before version 13.
+            open_watching_on_launch: true,
+            automatic_chat: false,
+            theme: Default::default(),
+            theme_palette: Default::default(),
+            ui_language: Default::default(),
+            background: Default::default(),
+            discovery_language: None,
+            low_latency: false,
+            text_scale: Default::default(),
+            chat_provider: Default::default(),
+            chatterino_path: None,
+            profiles: Vec::new(),
+            selected_profile_id: None,
+        }
+    }
 }
 impl Settings {
     pub fn validate(&self) -> Result<()> {
@@ -303,7 +332,7 @@ impl SettingsDocument {
         })?;
         // Migrate only this application's schemas, in memory until the next save.
         let version = value.get("version").and_then(|v| v.as_u64());
-        if let Some(6..=11) = version {
+        if let Some(6..=12) = version {
             let fields = value
                 .get_mut("settings")
                 .and_then(|settings| settings.as_object_mut())
@@ -316,11 +345,18 @@ impl SettingsDocument {
             {
                 return Err(settings_error("Invalid legacy settings."));
             }
+            if version.is_some_and(|v| v <= 11)
+                && fields
+                    .insert(
+                        "twitchCodecs".into(),
+                        serde_json::to_value(TwitchCodecs::default()).expect("codec defaults"),
+                    )
+                    .is_some()
+            {
+                return Err(settings_error("Invalid legacy settings."));
+            }
             if fields
-                .insert(
-                    "twitchCodecs".into(),
-                    serde_json::to_value(TwitchCodecs::default()).expect("codec defaults"),
-                )
+                .insert("openWatchingOnLaunch".into(), true.into())
                 .is_some()
             {
                 return Err(settings_error("Invalid legacy settings."));
@@ -572,7 +608,7 @@ impl SettingsDocument {
                 serde_json::from_value(value)
                     .map_err(|_| settings_error("Invalid version 8 settings."))?
             }
-            Some(9..=11) => {
+            Some(9..=12) => {
                 let mut value = value;
                 value["version"] = SETTINGS_VERSION.into();
                 serde_json::from_value(value)

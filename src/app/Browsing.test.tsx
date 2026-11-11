@@ -54,7 +54,7 @@ beforeEach(() => {
   vi.mocked(api.customTheme).mockResolvedValue(null);
   vi.mocked(api.systemUiLanguage).mockResolvedValue("en");
   vi.mocked(api.acknowledgeDesktopAction).mockResolvedValue(null);
-  vi.mocked(api.playbackSettings).mockResolvedValue({ chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, mpvStreamTitle: false, twitchCodecs: { hevc: false, av1: false }, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", themePalette: "default", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
+  vi.mocked(api.playbackSettings).mockResolvedValue({ chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, mpvStreamTitle: false, twitchCodecs: { hevc: false, av1: false }, openWatchingOnLaunch: true, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", themePalette: "default", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" });
   vi.mocked(api.channelSettings).mockImplementation(async broadcasterId => ({ broadcasterId, overrides: { lowLatency: null, notifications: null, quality: null, automaticChat: null }, defaultQuality: "source", defaultAutomaticChat: false, defaultLowLatency: false, defaultNotifications: false, effectiveNotifications: false, effective: { profileId: null, mpvStreamTitle: false, twitchCodecs: { hevc: false, av1: false }, chatProvider: "browser" as const, chatterinoPath: null, lowLatency: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, quality: "source", automaticChat: false } }));
   vi.mocked(api.authStatus).mockResolvedValue(signedIn);
   vi.mocked(api.account).mockResolvedValue({ id: "viewer", login: "viewer", displayName: "Viewer", profileImageUrl: null });
@@ -423,7 +423,7 @@ const playing = (id = "play-one", broadcasterId = "channel-one"): import("../lib
   url: "https://www.twitch.tv/example", quality: "best", exitCode: null, stopRequested: false,
   logs: [{ sequence: 1, source: "stderr", text: "Synthetic diagnostic warning" }], droppedLogEntries: 5,
 });
-const playbackSettings: import("../lib/generated").Settings = { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, mpvStreamTitle: false, twitchCodecs: { hevc: false, av1: false }, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", themePalette: "default", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
+const playbackSettings: import("../lib/generated").Settings = { chatProvider: "browser", chatterinoPath: null, profiles: [], selectedProfileId: null, discovery: { bookmarks: [], hidden: [] }, shortcuts: defaultBindings(), discoveryLanguage: null, mpvStreamTitle: false, twitchCodecs: { hevc: false, av1: false }, openWatchingOnLaunch: true, lowLatency: false, textScale: "100", background: { monitoringEnabled: false, notificationsEnabled: false, closeToBackground: false, intervalSeconds: 60 }, theme: "system", themePalette: "default", uiLanguage: "system", automaticChat: false, streamlinkPath: null, player: { mode: "default", executable: null, arguments: [] }, defaultQuality: "source" };
 async function editControl(label: string, value: string, kind: "input" | "select" = "input") {
   const control = [...container.querySelectorAll<HTMLInputElement | HTMLSelectElement>(kind)].find(el => el.labels?.[0]?.textContent?.startsWith(label));
   if (!control) throw new Error(`Missing control: ${label}`);
@@ -602,6 +602,45 @@ test.each(["Following", "Live", "Category"])("Watch launches trusted broadcaster
   expect(container.querySelector(".watching-panel")?.textContent).toContain("Running");
   expect(text()).toContain("Streamlink process started");
 });
+test("with Open Watching off, a Twitch launch keeps browsing while progress, count, failures and the shortcut remain", async () => {
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, openWatchingOnLaunch: false });
+  const launch = deferred<ReturnType<typeof playing>>();
+  vi.mocked(api.launch).mockReturnValueOnce(launch.promise).mockRejectedValueOnce({ code: "streamlink_not_found", message: "PRIVATE BACKEND PAYLOAD" });
+  await render(); await click("Live");
+  const watchButton = button("Watch Example Channel"); watchButton.focus();
+  await click("Watch Example Channel");
+  expect(api.launch).toHaveBeenCalledExactlyOnceWith({ authSessionId: "1", broadcasterId: "channel-one", quality: null });
+  expect(button("Watch Example Channel").disabled).toBe(true);
+  expect(container.querySelector(".watching-panel")).toBeNull();
+  expect(container.querySelector(".workspace")).not.toBeNull();
+  expect(document.activeElement).toBe(watchButton);
+  await act(async () => { launch.resolve(playing()); });
+  expect(container.querySelector(".watching-panel")).toBeNull();
+  expect(container.querySelector(".playback-feedback")?.textContent).toContain("Streamlink process started");
+  expect(button("Watching").textContent).toBe("Watching (1)");
+  expect(button("Watching").getAttribute("aria-expanded")).toBe("false");
+  await click("Watch Example Channel");
+  expect(container.querySelector('.playback-feedback[role="alert"]')?.textContent).toContain("Streamlink was not found");
+  expect(container.querySelector(".watching-panel")).toBeNull(); expect(text()).not.toContain("PRIVATE BACKEND PAYLOAD");
+  await keypress("4");
+  expect(container.querySelector(".watching-panel")?.textContent).toContain("Running");
+});
+test.each(["kick", "youtube"] as const)("with Open Watching off, a signed-out %s launch keeps Open channel visible", async service => {
+  vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  vi.mocked(api.playbackSettings).mockResolvedValue({ ...playbackSettings, openWatchingOnLaunch: false });
+  vi.mocked(api.launchKick).mockResolvedValue(kickPlaying());
+  vi.mocked(api.launchYoutube).mockResolvedValue(youtubePlaying());
+  await render(); await click("Open channel");
+  if (service === "kick") { await editControl("Kick channel name", "example-1"); await click("Play Kick channel"); }
+  else { await editControl("Service", "youtube", "select"); await editControl("YouTube video ID, @handle or channel ID", "@example"); await click("Play YouTube stream"); }
+  expect(service === "kick" ? api.launchKick : api.launchYoutube).toHaveBeenCalledOnce();
+  expect(container.querySelector(".watching-panel")).toBeNull();
+  expect(container.querySelector(".signed-out-channel")).not.toBeNull();
+  expect(container.querySelector(".playback-feedback")?.textContent).toContain("Streamlink process started");
+  expect(button("Watching").textContent).toBe("Watching (1)");
+  await click("Watching");
+  expect(container.querySelector(".service-badge")?.textContent).toBe(service === "kick" ? "Kick" : "YouTube");
+});
 test("live search and Channel details offer Watch but offline and unknown channels do not", async () => {
   vi.mocked(api.searchChannels).mockResolvedValue(page([{ ...channel, liveState: "live" }, { ...channel, broadcasterId: "offline", displayName: "Offline" }, { ...channel, broadcasterId: "unknown", displayName: "Unknown", liveState: "unknown" }]));
   vi.mocked(api.launch).mockResolvedValue(playing());
@@ -725,6 +764,19 @@ test("mpv stream title is opt-in and saving leaves playback alone", async () => 
   expect(api.savePlaybackSettings).toHaveBeenCalledWith(expect.objectContaining({ mpvStreamTitle: true }));
   await click("Settings"); await click("Settings");
   expect(checkbox().checked).toBe(true);
+  expect(api.launch).not.toHaveBeenCalled(); expect(api.restart).not.toHaveBeenCalled();
+});
+test("Open Watching on launch is on by default and saves an opt-out without touching playback", async () => {
+  const label = "Open Watching when starting a stream";
+  const checkbox = () => [...container.querySelectorAll("label")]
+    .find(node => node.textContent === label)!.querySelector<HTMLInputElement>("input")!;
+  vi.mocked(api.savePlaybackSettings).mockImplementation(async value => value);
+  await render(); await click("Settings");
+  expect(checkbox().checked).toBe(true);
+  await toggleControl(label); await click("Save settings");
+  expect(api.savePlaybackSettings).toHaveBeenCalledWith(expect.objectContaining({ openWatchingOnLaunch: false }));
+  await click("Settings"); await click("Settings");
+  expect(checkbox().checked).toBe(false);
   expect(api.launch).not.toHaveBeenCalled(); expect(api.restart).not.toHaveBeenCalled();
 });
 test("Twitch codecs are a closed opt-in group and saving leaves playback alone", async () => {

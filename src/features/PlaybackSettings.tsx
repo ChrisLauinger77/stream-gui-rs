@@ -89,6 +89,8 @@ function SettingsForm({ saved, desktop, saving, commit, customThemeAvailable }: 
             {chatterino !== undefined && <p className="muted path">{t("playbackSettings.chatterino")}{" "}{chatterino ?? t("settings.chatterinoMissing")}</p>}
             <p className="muted">{t("settings.chatterinoHelp")}</p>
           </>}
+          <label className="checkbox-label"><input type="checkbox" checked={draft.openWatchingOnLaunch} onChange={event => edit({ openWatchingOnLaunch: event.target.checked })} />{t("settings.openWatchingOnLaunch")}</label>
+          <p className="muted">{t("settings.openWatchingOnLaunchHelp")}</p>
           <p className="muted">{t("settings.runningPreferencesHelp")}</p>
         </div>
         <div hidden={section !== "Streamlink"} className="setting-group">

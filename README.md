@@ -180,6 +180,8 @@ Signed-in playback is deferred because Streamlink needs a Twitch website credent
 
 **Settings → Playback → Twitch codecs** controls which video codecs Twitch playback requests. H.264 is always requested; **Also request HEVC (H.265)** and **Also request AV1** are off by default. With either enabled, the app passes Streamlink's `--twitch-supported-codecs` with `h264,h265`, `h264,av1` or `h264,h265,av1`, so Twitch may offer additional or higher-resolution renditions to Source, High, Medium and Low. Your player, and for smooth playback your hardware, must be able to decode the selected codecs; otherwise the player may show no video, fail, or decode slowly. Stream names can differ when extra codec variants exist. Kick and YouTube playback ignore this setting. Save it and select **Restart** in Watching to apply it to an existing session.
 
+**Settings → Playback → Open Watching when starting a stream** is on by default. Turn it off to keep the current view when you start a Twitch, Kick or YouTube stream; launch results and errors still appear above the content, the **Watching** button shows the active-session count, and its button or keyboard shortcut opens it.
+
 ### Kick playback
 
 Choose **Open channel → Service → Kick**, enter the channel name and select **Play Kick channel**. Open channel is also available beside Watching while signed out of Twitch. Names accept 1–100 ASCII letters, digits, underscores or hyphens and are normalized to lowercase; enter a name, not a URL. This is a playback locator, not a verified account identity: the app does not check live status or retrieve viewer counts, titles or categories.

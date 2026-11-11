@@ -447,6 +447,8 @@
   "settings.mpvStreamTitleHelp": "Au démarrage ou au redémarrage d’un stream Twitch en mode mpv, affiche le nom de la chaîne, la catégorie et le titre du stream.",
   "settings.notFound": "Introuvable",
   "settings.notTested": "Non testé",
+  "settings.openWatchingOnLaunch": "Ouvrir Lecture au démarrage d’un stream",
+  "settings.openWatchingOnLaunchHelp": "Si désactivé, le démarrage d’un stream conserve la vue actuelle. Lecture reste accessible depuis son bouton et son raccourci clavier.",
   "settings.qualityHelp": "Haute, Moyenne et Basse préfèrent la résolution indiquée et reviennent à Source si nécessaire.",
   "settings.runningPreferencesHelp": "Les modifications des préférences n’affectent pas les streams en cours. Quitter arrête la lecture.",
   "settings.saved": "Paramètres enregistrés. Les préférences d’arrière-plan s’appliquent maintenant ; celles de lecture aux prochains lancements et redémarrages.",

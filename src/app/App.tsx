@@ -142,19 +142,25 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
     back: () => { if (settings) closeSettings(); else if (watching) closeWatching(); else if (notificationTest) setNotificationTest(false); else if (openChannel && !auth.sessionId) closeOpenChannel(); else workspace.current?.back(); },
     refresh: () => { if (!settings) workspace.current?.refresh(); },
   }, playback.settings?.shortcuts);
+  // Until settings load, keep the historical behavior; launch feedback stays outside Watching either way.
+  const openWatchingOnLaunch = playback.settings?.openWatchingOnLaunch ?? true;
+  const showLaunch = useCallback(() => {
+    if (!openWatchingOnLaunch) return;
+    capture("watching"); setWatching(true); setSettings(false);
+  }, [openWatchingOnLaunch, capture]);
   const watch = useCallback((broadcasterId: string) => {
     if (!auth.sessionId) return;
-    capture("watching"); setWatching(true); setSettings(false);
+    showLaunch();
     void run(`launch:${broadcasterId}`, () => api.launch({ authSessionId: auth.sessionId!, broadcasterId, quality: null }), "app.playbackStarted");
-  }, [auth.sessionId, run, capture]);
+  }, [auth.sessionId, run, showLaunch]);
   const watchKick = useCallback(async (slug: string) => {
-    capture("watching"); setWatching(true); setSettings(false);
+    showLaunch();
     await run(`launch:kick:${slug.toLowerCase()}`, () => api.launchKick({ slug, quality: null }), "app.playbackStarted");
-  }, [run, capture]);
+  }, [run, showLaunch]);
   const watchYoutube = useCallback(async (locator: string) => {
-    capture("watching"); setWatching(true); setSettings(false);
+    showLaunch();
     await run(`launch:youtube:${locator}`, () => api.launchYoutube({ locator, quality: null }), "app.playbackStarted");
-  }, [run, capture]);
+  }, [run, showLaunch]);
   const activeCount = playback.sessions.filter(session => session.restarting || ["starting", "running", "stopping"].includes(session.phase)).length;
   const controls = <div className="account-controls">
     <span className="connection-dot" aria-hidden="true" />
