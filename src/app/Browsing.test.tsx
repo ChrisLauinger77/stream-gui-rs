@@ -1244,6 +1244,21 @@ test("notification actions survive reconstruction, navigate once and never launc
   expect(api.acknowledgeDesktopAction).toHaveBeenCalledOnce();
   expect(api.launch).not.toHaveBeenCalled();
 });
+test("a failed tray launch shows fixed playback feedback once without relaunching", async () => {
+  vi.mocked(api.desktopStatus).mockResolvedValue({ ...desktopSnapshot, action: { kind: "playback_failed", id: "tray-1", code: "stream_offline" } });
+  vi.mocked(api.acknowledgeDesktopAction).mockResolvedValue(null);
+  await render();
+  const feedback = container.querySelector(".playback-feedback")!;
+  expect(feedback.getAttribute("role")).toBe("alert");
+  expect(feedback.textContent).toContain("This channel is no longer live. Refresh the browsing view.");
+  expect(api.acknowledgeDesktopAction).toHaveBeenCalledWith("tray-1");
+  await click("Dismiss", ".playback-feedback");
+  // The cached snapshot cannot replay an acknowledged failure.
+  await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+  expect(container.querySelector(".playback-feedback")!.textContent).toBe("");
+  expect(api.acknowledgeDesktopAction).toHaveBeenCalledOnce();
+  expect(api.launch).not.toHaveBeenCalled(); expect(api.channel).not.toHaveBeenCalled();
+});
 test("a late desktop poll cannot replace the accepted Pause snapshot", async () => {
   vi.mocked(api.desktopStatus).mockResolvedValue(desktopSnapshot);
   await render(); await click("Settings"); await click("Background", ".settings-nav");

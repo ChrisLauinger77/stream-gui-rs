@@ -104,6 +104,8 @@ async fn session_history(replacement: Option<&str>) {
         assert_eq!(monitor.snapshot().live_count, None);
         login(&auth, &clock, user).await;
         assert_ne!(auth.monitor_session().unwrap().0, old_id);
+        // Account A's live list never reappears for the new session.
+        assert!(monitor.live_channels().is_none());
     } else {
         auth.api
             .validations
@@ -121,6 +123,9 @@ async fn session_history(replacement: Option<&str>) {
     }
     cycle(&monitor, &helix).await; // Recovery baseline temporarily omits stream 100.
     assert_eq!(monitor.snapshot().live_count, Some(0));
+    let live = monitor.live_channels().unwrap();
+    assert_eq!(live.auth_session_id, auth.monitor_session().unwrap().0);
+    assert!(live.channels.is_empty() && !live.stale);
     assert_eq!(sink.0.lock().unwrap().len(), 1);
     cycle(&monitor, &helix).await; // Same stream ID reappears.
     let expected = if replacement.is_some() { 2 } else { 1 };

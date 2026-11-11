@@ -4,6 +4,17 @@ use crate::{
     monitor::{LiveNotification, Monitor, MonitorPhase, NotificationSink},
 };
 
+fn live_ids(monitor: &Monitor) -> Option<(Vec<String>, bool)> {
+    monitor.live_channels().map(|live| {
+        (
+            live.channels
+                .into_iter()
+                .map(|channel| channel.broadcaster_id)
+                .collect(),
+            live.stale,
+        )
+    })
+}
 fn streams(ids: &[(&str, &str)], cursor: Option<&str>) -> String {
     let template: serde_json::Value = serde_json::from_str(STREAM).unwrap();
     let data: Vec<_> = ids
@@ -151,12 +162,23 @@ async fn owned_monitor_cancels_pause_rebaselines_resume_and_drains_shutdown() {
     gate.notify_one();
     phase(&monitor, MonitorPhase::Paused).await;
     assert!(sink.0.lock().unwrap().is_empty());
+    // The scan cancelled by pause never publishes a list.
+    assert_eq!(live_ids(&monitor), None);
     monitor.pause(false);
     server.wait_for_requests(2).await;
     phase(&monitor, MonitorPhase::Running).await;
     assert_eq!(monitor.snapshot().live_count, Some(2));
     assert!(sink.0.lock().unwrap().is_empty());
+    let live = monitor.live_channels().unwrap();
+    assert_eq!(
+        live.auth_session_id,
+        client.auth.monitor_session().unwrap().0
+    );
+    assert_eq!((live.total, live.stale), (2, false));
     client.auth.logout().await.unwrap();
+    // The session-bound list is unusable as soon as logout cancels the session.
+    assert!(live.cancelled());
+    assert!(monitor.live_channels().is_none());
     phase(&monitor, MonitorPhase::SignedOut).await;
     assert_eq!(monitor.snapshot().live_count, None);
     monitor.shutdown().await;
@@ -218,16 +240,23 @@ async fn monitor_backoff_recovery_sleep_and_channel_filtering_use_fresh_baseline
     cycle(&monitor, &client).await;
     assert_eq!(sink.0.lock().unwrap().len(), 1);
     assert_eq!(sink.0.lock().unwrap()[0].broadcaster_id, "2");
+    let ids = |values: &[&str]| values.iter().map(|id| id.to_string()).collect::<Vec<_>>();
+    assert_eq!(live_ids(&monitor), Some((ids(&["1", "2", "3"]), false)));
     cycle(&monitor, &client).await;
     assert_eq!(monitor.snapshot().phase, MonitorPhase::Recovering);
     assert_eq!(monitor.snapshot().error, Some(ErrorCode::TwitchServer));
     assert!(monitor.snapshot().stale);
+    // A failed refresh keeps the last complete list, labelled stale, rather
+    // than implying that every channel went offline.
+    assert_eq!(live_ids(&monitor), Some((ids(&["1", "2", "3"]), true)));
     cycle(&monitor, &client).await;
     assert_eq!(monitor.snapshot().phase, MonitorPhase::Running);
     assert_eq!(sink.0.lock().unwrap().len(), 1); // Channel 4 joined during outage.
+    assert_eq!(live_ids(&monitor), Some((ids(&["1", "2", "4"]), false)));
     client.clear_cache();
     monitor.test_advance(3600).await; // Resume with a quiet current baseline.
     assert_eq!(monitor.snapshot().live_count, Some(1));
+    assert_eq!(live_ids(&monitor), Some((ids(&["5"]), false)));
     assert_eq!(sink.0.lock().unwrap().len(), 1);
     cycle(&monitor, &client).await;
     assert_eq!(sink.0.lock().unwrap().len(), 2);
@@ -268,6 +297,8 @@ async fn sleep_during_inflight_scan_discards_response_and_recovers_quietly() {
     assert_eq!(monitor.snapshot().phase, MonitorPhase::Recovering);
     assert_eq!(monitor.snapshot().error, Some(ErrorCode::Timeout));
     assert_eq!(monitor.snapshot().live_count, None);
+    // No complete scan has been accepted, so there is no list to show.
+    assert_eq!(live_ids(&monitor), None);
     gate.notify_one();
     let seconds = monitor.snapshot().retry_in_seconds + 2;
     for _ in 0..seconds {
@@ -329,6 +360,8 @@ async fn response_before_suspend_heartbeat_is_discarded_before_transition_accept
     assert_eq!(monitor.snapshot().phase, MonitorPhase::Recovering);
     assert_eq!(monitor.snapshot().error, Some(ErrorCode::Timeout));
     assert!(sink.0.lock().unwrap().is_empty());
+    // The response spanning suspend neither replaces nor refreshes the list.
+    assert_eq!(live_ids(&monitor), Some((vec!["1".to_string()], true)));
     tokio::time::resume();
     advance_cycle(&monitor).await;
     assert_eq!(monitor.snapshot().live_count, Some(1));

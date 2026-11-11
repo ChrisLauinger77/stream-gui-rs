@@ -53,7 +53,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
   const openChannelButton = useRef<HTMLButtonElement>(null);
   const [navigationFocus, setNavigationFocus] = useState<{ id: string; target: "channel" | "watching" | "test" } | null>(null);
   const playback = usePlayback();
-  const { run } = playback;
+  const { run, report } = playback;
   const customTheme = useCustomTheme(settings || playback.settings?.themePalette === "custom");
   useAppearance(playback.settings?.theme ?? "system", playback.settings?.themePalette ?? "default", customTheme, playback.settings?.textScale ?? "100");
   const workspace = useRef<BrowserActions>(null);
@@ -82,6 +82,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
           setNavigationFocus({ id: action.id, target: "channel" });
         }
       } else if (action.kind === "about") { setSupport(false); setAbout(action.id); }
+      else if (action.kind === "playback_failed") report(action.code);
       else {
         setNotificationTest(false); setSettings(false); setWatching(true);
         setNavigationFocus({ id: action.id, target: "watching" });
@@ -95,7 +96,7 @@ function Application({ desktop, developer }: { desktop: ReturnType<typeof useDes
       .then(() => { actionState.acknowledged = action.id; })
       .catch(() => { /* Retry acknowledgement on the next snapshot without navigating again. */ })
       .finally(() => { actionState.acknowledging = false; });
-  }, [desktop.status, auth.sessionId, notificationTest, actionState]);
+  }, [desktop.status, auth.sessionId, notificationTest, actionState, report]);
   useEffect(() => {
     const pending = desktop.status?.navigation;
     const state = desktop.navigationActions.current;

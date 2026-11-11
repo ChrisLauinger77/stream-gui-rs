@@ -166,6 +166,22 @@ mod tests {
         for locale in [Locale::En, Locale::De, Locale::Es, Locale::Fr] {
             assert!(!named(locale, "native.live", "Alice").contains("{name}"));
             assert!(!counted(locale, "native.watching", 2).contains("{count}"));
+            for key in [
+                "native.liveChannels",
+                "native.liveMenu.disabled",
+                "native.liveMenu.empty",
+                "native.liveMenu.loading",
+                "native.liveMenu.paused",
+                "native.liveMenu.signedOut",
+                "native.liveMenu.stale",
+                "native.liveMenu.unavailable",
+            ] {
+                assert_ne!(text(locale, key), "⟦missing native translation⟧", "{key}");
+            }
+            for key in ["native.liveChannelsCount", "native.liveMenu.more"] {
+                assert!(!counted(locale, key, 2).contains("{count}"), "{key}");
+                assert!(counted(locale, key, 2).contains('2'), "{key}");
+            }
             assert_ne!(
                 phase(locale, MonitorPhase::Running),
                 "⟦missing native translation⟧"
