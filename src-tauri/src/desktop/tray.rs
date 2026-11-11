@@ -1,11 +1,189 @@
 use super::localization as l10n;
 use super::*;
-use crate::domain::background::DesktopAction;
+use crate::{
+    domain::background::DesktopAction,
+    monitor::{LiveChannel, LiveChannels, MonitorPhase, MonitorStatus},
+};
+use std::collections::HashSet;
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::TrayIconBuilder,
 };
+
+const LIVE_PREFIX: &str = "live:";
+
+/// What the Live channels submenu shows, derived only from Rust-owned monitor
+/// state so every platform renders the same explicit states.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum LiveMenu {
+    Notice(&'static str),
+    Channels {
+        session: u64,
+        stale: bool,
+        channels: Vec<LiveChannel>,
+        total: usize,
+    },
+}
+
+fn live_menu(status: &MonitorStatus, enabled: bool, live: Option<&LiveChannels>) -> LiveMenu {
+    if !enabled {
+        return LiveMenu::Notice("native.liveMenu.disabled");
+    }
+    if status.paused {
+        return LiveMenu::Notice("native.liveMenu.paused");
+    }
+    match (status.phase, live) {
+        (MonitorPhase::SignedOut, _) => LiveMenu::Notice("native.liveMenu.signedOut"),
+        (MonitorPhase::Stopped, _) => LiveMenu::Notice("native.liveMenu.unavailable"),
+        // Only a current complete scan may say that nobody is live.
+        (_, Some(live)) if live.channels.is_empty() => LiveMenu::Notice(if live.stale {
+            "native.liveMenu.unavailable"
+        } else {
+            "native.liveMenu.empty"
+        }),
+        (_, Some(live)) => LiveMenu::Channels {
+            session: live.auth_session_id,
+            stale: live.stale,
+            channels: live.channels.clone(),
+            total: live.total,
+        },
+        (MonitorPhase::Recovering, None) => LiveMenu::Notice("native.liveMenu.unavailable"),
+        (_, None) => LiveMenu::Notice("native.liveMenu.loading"),
+    }
+}
+
+/// Twitch names and categories are literal text; `&` is muda's mnemonic marker.
+fn channel_label(channel: &LiveChannel) -> String {
+    let label = if channel.category.is_empty() {
+        channel.display_name.clone()
+    } else {
+        format!("{} · {}", channel.display_name, channel.category)
+    };
+    label.replace('&', "&&")
+}
+
+fn live_title(locale: l10n::Locale, model: &LiveMenu) -> String {
+    match model {
+        LiveMenu::Channels {
+            stale: false,
+            total,
+            ..
+        } => l10n::counted(locale, "native.liveChannelsCount", *total),
+        _ => l10n::text(locale, "native.liveChannels").into(),
+    }
+}
+
+fn render_live(
+    app: &tauri::AppHandle,
+    submenu: &Submenu<tauri::Wry>,
+    locale: l10n::Locale,
+    model: &LiveMenu,
+) -> tauri::Result<()> {
+    while submenu.remove_at(0)?.is_some() {}
+    submenu.set_text(live_title(locale, model))?;
+    let notice = |key: &str| MenuItem::new(app, l10n::text(locale, key), false, None::<&str>);
+    match model {
+        LiveMenu::Notice(key) => submenu.append(&notice(key)?)?,
+        LiveMenu::Channels {
+            stale,
+            channels,
+            total,
+            ..
+        } => {
+            if *stale {
+                submenu.append(&notice("native.liveMenu.stale")?)?;
+                submenu.append(&PredefinedMenuItem::separator(app)?)?;
+            }
+            for channel in channels {
+                submenu.append(&MenuItem::with_id(
+                    app,
+                    format!("{LIVE_PREFIX}{}", channel.broadcaster_id),
+                    channel_label(channel),
+                    true,
+                    None::<&str>,
+                )?)?;
+            }
+            if *total > channels.len() {
+                submenu.append(&PredefinedMenuItem::separator(app)?)?;
+                submenu.append(&MenuItem::new(
+                    app,
+                    l10n::counted(locale, "native.liveMenu.more", total - channels.len()),
+                    false,
+                    None::<&str>,
+                )?)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The list rendered in the menu and launches already requested from it.
+#[derive(Default)]
+struct LiveSelection {
+    rendered: Option<LiveChannels>,
+    launching: HashSet<String>,
+}
+
+/// Starts playback as the main window's Watch action does: the playback
+/// service resolves fresh live identity under the session that produced the
+/// menu, then applies current player, quality, channel and chat preferences.
+fn launch_live(app: &tauri::AppHandle, selection: &Arc<Mutex<LiveSelection>>, broadcaster: &str) {
+    let session = {
+        let mut state = selection.lock().expect("tray live selection poisoned");
+        let Some(live) = state.rendered.as_ref().filter(|live| !live.cancelled()) else {
+            return;
+        };
+        if !live
+            .channels
+            .iter()
+            .any(|channel| channel.broadcaster_id == broadcaster)
+        {
+            return;
+        }
+        let session = live.auth_session_id;
+        // A repeated click while that launch is pending is not another stream.
+        if !state.launching.insert(broadcaster.to_owned()) {
+            return;
+        }
+        session
+    };
+    let (app, selection, broadcaster) = (app.clone(), selection.clone(), broadcaster.to_owned());
+    tauri::async_runtime::spawn(async move {
+        let services = app.state::<Arc<Services>>().inner().clone();
+        let result = services
+            .play(crate::streamlink::playback::PlaybackRequest {
+                auth_session_id: session.to_string(),
+                broadcaster_id: broadcaster.clone(),
+                quality: None,
+            })
+            .await;
+        selection
+            .lock()
+            .expect("tray live selection poisoned")
+            .launching
+            .remove(&broadcaster);
+        let stopping = app
+            .state::<Arc<Lifecycle>>()
+            .stopping
+            .load(Ordering::SeqCst);
+        // The tray has no feedback area; surface failure in the main window.
+        if let Err(error) = result
+            && !stopping
+        {
+            app.state::<Arc<notifications::Notifications>>()
+                .shared
+                .state
+                .lock()
+                .expect("native notification state poisoned")
+                .action = Some(DesktopAction::PlaybackFailed {
+                id: uuid::Uuid::new_v4().to_string(),
+                code: error.code,
+            });
+            show_window(&app);
+        }
+    });
+}
 
 const GLYPH_SIZE: u32 = 64;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -166,6 +344,19 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
         true,
         None::<&str>,
     )?;
+    let live = Submenu::with_id_and_items(
+        app,
+        "live",
+        l10n::text(locale, "native.liveChannels"),
+        true,
+        &[&MenuItem::new(
+            app,
+            l10n::text(locale, "native.liveMenu.loading"),
+            false,
+            None::<&str>,
+        )?],
+    )?;
+    let selection = Arc::new(Mutex::new(LiveSelection::default()));
     let pause = MenuItem::with_id(
         app,
         "monitor",
@@ -199,6 +390,7 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
         &[
             &show,
             &hide,
+            &live,
             &pause,
             &watching,
             &PredefinedMenuItem::separator(app)?,
@@ -207,11 +399,15 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
             &quit,
         ],
     )?;
+    let clicked = selection.clone();
     let builder = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
         .tooltip("Stream GUI RS")
         .show_menu_on_left_click(true)
-        .on_menu_event(|app, event| match event.id.as_ref() {
+        .on_menu_event(move |app, event| match event.id.as_ref() {
+            id if id.starts_with(LIVE_PREFIX) => {
+                launch_live(app, &clicked, &id[LIVE_PREFIX.len()..]);
+            }
             "show" => show_window(app),
             "hide" => hide_window(app),
             "monitor" => {
@@ -249,6 +445,7 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let mut previous = None;
+        let mut previous_live = None;
         loop {
             if app
                 .state::<Arc<Lifecycle>>()
@@ -291,6 +488,18 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
                 .lock()
                 .expect("native notification state poisoned")
                 .tray_host;
+            let channels = services.monitor.live_channels();
+            let model = live_menu(&status, enabled, channels.as_ref());
+            // Rebuild only on visible change, so an open menu is not disturbed by
+            // routine scans that observe the same channels.
+            if previous_live.as_ref() != Some(&(model.clone(), locale)) {
+                let _ = render_live(&app, &live, locale, &model);
+                selection
+                    .lock()
+                    .expect("tray live selection poisoned")
+                    .rendered = channels.filter(|_| matches!(model, LiveMenu::Channels { .. }));
+                previous_live = Some((model, locale));
+            }
             let current = (status.phase, status.paused, enabled, count, host, locale);
             if previous != Some(current) {
                 let _ = show.set_text(l10n::text(locale, "native.show"));
@@ -342,6 +551,122 @@ pub(super) fn install(app: &tauri::AppHandle) -> tauri::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio_util::sync::CancellationToken;
+
+    fn channel(id: &str, name: &str, category: &str) -> LiveChannel {
+        LiveChannel {
+            broadcaster_id: id.into(),
+            display_name: name.into(),
+            category: category.into(),
+        }
+    }
+    fn live(channels: Vec<LiveChannel>, total: usize, stale: bool) -> LiveChannels {
+        LiveChannels {
+            auth_session_id: 7,
+            session_cancel: CancellationToken::new(),
+            channels,
+            total,
+            stale,
+        }
+    }
+    fn status(phase: MonitorPhase, paused: bool) -> MonitorStatus {
+        MonitorStatus {
+            phase,
+            paused,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn live_menu_states_never_turn_unknown_into_offline() {
+        let notice = |status: &MonitorStatus, enabled, list: Option<&LiveChannels>| match live_menu(
+            status, enabled, list,
+        ) {
+            LiveMenu::Notice(key) => key,
+            LiveMenu::Channels { .. } => "channels",
+        };
+        let one = live(vec![channel("1", "Alice", "Chess")], 1, false);
+        let running = status(MonitorPhase::Running, false);
+        // Preferences and authentication take precedence over any retained list.
+        assert_eq!(
+            notice(&running, false, Some(&one)),
+            "native.liveMenu.disabled"
+        );
+        assert_eq!(
+            notice(&status(MonitorPhase::Paused, true), true, Some(&one)),
+            "native.liveMenu.paused"
+        );
+        assert_eq!(
+            notice(&status(MonitorPhase::SignedOut, false), true, Some(&one)),
+            "native.liveMenu.signedOut"
+        );
+        assert_eq!(
+            notice(&status(MonitorPhase::Stopped, false), true, None),
+            "native.liveMenu.unavailable"
+        );
+        // Before the first complete scan: loading, or unavailable after failure.
+        for phase in [
+            MonitorPhase::Disabled,
+            MonitorPhase::Baseline,
+            MonitorPhase::Running,
+        ] {
+            assert_eq!(
+                notice(&status(phase, false), true, None),
+                "native.liveMenu.loading"
+            );
+        }
+        assert_eq!(
+            notice(&status(MonitorPhase::Recovering, false), true, None),
+            "native.liveMenu.unavailable"
+        );
+        // Only a current complete scan says nobody is live.
+        assert_eq!(
+            notice(&running, true, Some(&live(vec![], 0, false))),
+            "native.liveMenu.empty"
+        );
+        assert_eq!(
+            notice(
+                &status(MonitorPhase::Recovering, false),
+                true,
+                Some(&live(vec![], 0, true))
+            ),
+            "native.liveMenu.unavailable"
+        );
+        let stale = live(vec![channel("1", "Alice", "Chess")], 30, true);
+        assert_eq!(
+            live_menu(&status(MonitorPhase::Recovering, false), true, Some(&stale)),
+            LiveMenu::Channels {
+                session: 7,
+                stale: true,
+                channels: vec![channel("1", "Alice", "Chess")],
+                total: 30,
+            }
+        );
+    }
+
+    #[test]
+    fn live_menu_labels_are_literal_and_counted_only_when_current() {
+        assert_eq!(
+            channel_label(&channel("1", "R&D_Team", "Food & Drink")),
+            "R&&D_Team · Food && Drink"
+        );
+        assert_eq!(channel_label(&channel("1", "Alice", "")), "Alice");
+        let menu = |stale| LiveMenu::Channels {
+            session: 7,
+            stale,
+            channels: vec![channel("1", "Alice", "Chess")],
+            total: 3,
+        };
+        assert_eq!(
+            live_title(l10n::Locale::En, &menu(false)),
+            "Live channels (3)"
+        );
+        assert_eq!(live_title(l10n::Locale::En, &menu(true)), "Live channels");
+        assert_eq!(
+            live_title(l10n::Locale::En, &LiveMenu::Notice("native.liveMenu.empty")),
+            "Live channels"
+        );
+    }
 
     #[test]
     fn tray_glyph_is_single_color_with_separated_marks() {

@@ -36,7 +36,7 @@ This is an independent rewrite inspired by [Streamlink Twitch GUI](https://githu
 - Default and eight bundled color themes, conditional Custom Theme, System/Light/Dark modes, 100/125/150% text size, and focused application shortcuts
 - English, German, Spanish, and French interface languages, with a System setting and English fallback
 - Opt-in followed-stream monitoring, desktop notifications, and per-channel notification preferences
-- Tray/menu-bar controls, Pause/Resume, and optional close-to-background behavior
+- Tray/menu-bar controls, a Live channels launch submenu, Pause/Resume, and optional close-to-background behavior
 - About on every desktop platform and a previewable support report
 
 See the [latest release notes](docs/release-notes.md) for changes and upgrade guidance. Notes for previous versions are available on [GitHub Releases](https://github.com/ChrisLauinger77/stream-gui-rs/releases). Candidate builds are not published releases.
@@ -277,7 +277,7 @@ In **Settings → Background**, enable **Monitor followed live streams**, choose
 
 The first scan is quiet. Later newly observed Twitch stream IDs can notify with channel, title, and category. Pause stops polling until Resume or application restart. Resume, waking from sleep, and recovering from an outage establish a quiet baseline, without replaying missed transitions. Incomplete scans retain a marked previous count and retry with bounded backoff. Very large or slow scans can report incomplete monitoring; they never silently report a partial list as complete. At most ten eligible notifications are sent per scan; excess transitions are suppressed rather than queued into a later burst.
 
-Notification clicks restore the app and select the channel while the original sign-in session remains valid; they do not start playback. **Watching** and **Quit** are available from the tray menu, and Quit is also in the main interface. Quit's label indicates active streams that it will stop.
+Notification clicks restore the app and select the channel while the original sign-in session remains valid; they do not start playback. With monitoring on, the tray's **Live channels** submenu lists up to 25 followed channels from the latest complete check. Choosing one starts playback exactly like **Watch**, using current player, quality, channel and chat preferences; a failure restores the window with the error. The submenu says when monitoring is off or paused, when you are signed out, while checking, and when the list is unavailable or may be outdated. **Watching** and **Quit** are available from the tray menu, and Quit is also in the main interface. Quit's label indicates active streams that it will stop.
 
 **Keep Stream GUI RS running in the background when the window is closed** is opt-in. Normal minimize remains the OS minimize action. Background close hides the window when a tray is available, or minimizes it when there is no usable tray. Playback continues in both cases; restore the app to use Stop/Restart.
 

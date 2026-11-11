@@ -56,6 +56,56 @@ impl Default for MonitorStatus {
     }
 }
 
+/// Live channels kept for native menus. Bounded and only replaced by complete
+/// scans, so a failed or partial refresh can mark it stale but never empty it.
+pub const MAX_LIVE_CHANNELS: usize = 25;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiveChannel {
+    pub broadcaster_id: String,
+    pub display_name: String,
+    pub category: String,
+}
+#[derive(Clone)]
+pub struct LiveChannels {
+    pub auth_session_id: u64,
+    pub session_cancel: CancellationToken,
+    /// Highest-viewer channels from the latest complete scan, at most
+    /// [`MAX_LIVE_CHANNELS`].
+    pub channels: Vec<LiveChannel>,
+    /// Number of live channels in that scan, including omitted ones.
+    pub total: usize,
+    /// The latest scan did not complete, or monitoring must re-establish its
+    /// observation boundary; entries may no longer be live.
+    pub stale: bool,
+}
+impl LiveChannels {
+    pub fn cancelled(&self) -> bool {
+        self.session_cancel.is_cancelled()
+    }
+    fn from_scan(
+        auth_session_id: u64,
+        session_cancel: CancellationToken,
+        streams: &[crate::helix::models::Stream],
+    ) -> Self {
+        Self {
+            auth_session_id,
+            session_cancel,
+            // Helix orders followed streams by viewers; keep that prefix.
+            channels: streams
+                .iter()
+                .take(MAX_LIVE_CHANNELS)
+                .map(|stream| LiveChannel {
+                    broadcaster_id: stream.user_id.clone(),
+                    display_name: compact(&stream.user_name, 100),
+                    category: compact(&stream.game_name, 80),
+                })
+                .collect(),
+            total: streams.len(),
+            stale: false,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct LiveNotification {
     pub auth_session_id: String,
@@ -91,6 +141,7 @@ struct Control {
 pub struct Monitor {
     control: Mutex<Control>,
     status: Mutex<MonitorStatus>,
+    live: Mutex<Option<LiveChannels>>,
     changed: Notify,
     stop: CancellationToken,
     started: AtomicBool,
@@ -108,6 +159,7 @@ impl Default for Monitor {
                 cancel: CancellationToken::new(),
             }),
             status: Mutex::default(),
+            live: Mutex::default(),
             changed: Notify::new(),
             stop: CancellationToken::new(),
             started: AtomicBool::new(false),
@@ -144,6 +196,28 @@ impl Monitor {
 
     pub fn snapshot(&self) -> MonitorStatus {
         self.status.lock().expect("monitor mutex poisoned").clone()
+    }
+    /// Session-bound live channels; `None` when no list belongs to the current
+    /// monitoring state (signed out, disabled, paused or not yet scanned).
+    pub fn live_channels(&self) -> Option<LiveChannels> {
+        self.live
+            .lock()
+            .expect("monitor live mutex poisoned")
+            .clone()
+            .filter(|live| !live.cancelled())
+    }
+    fn set_live(&self, live: Option<LiveChannels>) {
+        *self.live.lock().expect("monitor live mutex poisoned") = live;
+    }
+    fn mark_live_stale(&self) {
+        if let Some(live) = self
+            .live
+            .lock()
+            .expect("monitor live mutex poisoned")
+            .as_mut()
+        {
+            live.stale = true;
+        }
     }
     pub fn set_sink(&self, sink: Arc<dyn NotificationSink>) {
         *self.sink.lock().expect("notification mutex poisoned") = sink;
@@ -200,6 +274,7 @@ impl Monitor {
         if let Some(task) = task {
             let _ = task.await;
         }
+        self.set_live(None);
         *self.status.lock().expect("monitor mutex poisoned") = MonitorStatus {
             phase: MonitorPhase::Stopped,
             ..Default::default()
@@ -227,6 +302,7 @@ impl Monitor {
             // well as those that pause. A long scheduler stall is treated safely too.
             if now.saturating_sub(last_tick) > Duration::from_secs(10) {
                 machine.rebaseline();
+                self.mark_live_stale();
                 next = now;
             }
             last_tick = now;
@@ -242,6 +318,8 @@ impl Monitor {
                     .is_some_and(|(_, cancel)| cancel.is_cancelled())
             {
                 machine = state::Transitions::default();
+                // A list never outlives the session that observed it.
+                self.set_live(None);
                 session = identity.clone();
                 next = now;
                 failures = 0;
@@ -252,6 +330,7 @@ impl Monitor {
             };
             if generation.is_cancelled() {
                 machine.rebaseline();
+                self.mark_live_stale();
                 next = now;
                 failures = 0;
             }
@@ -268,6 +347,7 @@ impl Monitor {
             };
             if let Some(phase) = inactive {
                 machine.rebaseline();
+                self.set_live(None);
                 *self.status.lock().expect("monitor mutex poisoned") = MonitorStatus {
                     phase,
                     paused,
@@ -311,6 +391,11 @@ impl Monitor {
                 last_tick = finished;
                 match result {
                     Ok(streams) => {
+                        self.set_live(Some(LiveChannels::from_scan(
+                            id,
+                            session_cancel.clone(),
+                            &streams,
+                        )));
                         let events = machine.accept(streams);
                         failures = 0;
                         let mut notification_error = false;
@@ -349,6 +434,7 @@ impl Monitor {
                     }
                     Err(error) => {
                         machine.rebaseline();
+                        self.mark_live_stale();
                         failures = failures.saturating_add(1);
                         let delay = backoff(failures, prefs.interval_seconds, jitter);
                         next = finished + delay;
@@ -417,6 +503,33 @@ mod tests {
             }
         }
         assert!(!suspend_since(clock.now(), &heartbeat));
+    }
+    #[test]
+    fn live_channels_keep_bounded_viewer_order_and_compact_labels() {
+        let template: crate::helix::models::Stream = serde_json::from_value(
+            serde_json::from_str::<serde_json::Value>(include_str!(
+                "../../tests/fixtures/helix/stream.json"
+            ))
+            .unwrap()["data"][0]
+                .clone(),
+        )
+        .unwrap();
+        let streams: Vec<_> = (0..MAX_LIVE_CHANNELS + 5)
+            .map(|n| {
+                let mut stream = template.clone();
+                stream.user_id = (n + 1).to_string();
+                stream.user_name = format!("Name\n{n}");
+                stream.game_name = "x".repeat(200);
+                stream
+            })
+            .collect();
+        let live = LiveChannels::from_scan(7, CancellationToken::new(), &streams);
+        assert_eq!(live.channels.len(), MAX_LIVE_CHANNELS);
+        assert_eq!(live.total, MAX_LIVE_CHANNELS + 5);
+        assert_eq!(live.channels[0].broadcaster_id, "1");
+        assert_eq!(live.channels[0].display_name, "Name0");
+        assert_eq!(live.channels[0].category.chars().count(), 80);
+        assert!(!live.stale && !live.cancelled());
     }
     #[test]
     fn retry_delays_are_bounded_and_jitter_does_not_accumulate() {

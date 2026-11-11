@@ -67,7 +67,9 @@ export function usePlayback() {
       if (mounted.current) setPending(new Set(inFlight.current));
     }
   }, []);
-  return { ...preferences, sessions, pending, run,
+  // Native launches (tray) have no pending key; show their failure in the same feedback area.
+  const report = useCallback((code: ErrorCode) => { setMessage(null); setError(code); }, []);
+  return { ...preferences, sessions, pending, run, report,
     error: error ? playbackError({ code: error }, locale) : preferences.error ? playbackError(preferences.error, locale) : null,
     message: message ? translate(locale, message) : null,
     dismiss: () => { setError(null); setMessage(null); preferences.dismiss(); } };

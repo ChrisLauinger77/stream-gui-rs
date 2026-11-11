@@ -38,11 +38,19 @@ pub enum DesktopAction {
     About {
         id: String,
     },
+    /// A tray launch failed before the window could show its own feedback.
+    PlaybackFailed {
+        id: String,
+        code: super::ErrorCode,
+    },
 }
 impl DesktopAction {
     pub fn id(&self) -> &str {
         match self {
-            Self::Channel { id, .. } | Self::Watching { id } | Self::About { id } => id,
+            Self::Channel { id, .. }
+            | Self::Watching { id }
+            | Self::About { id }
+            | Self::PlaybackFailed { id, .. } => id,
         }
     }
 }
