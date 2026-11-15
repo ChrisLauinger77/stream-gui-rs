@@ -63,7 +63,7 @@ jobs:
         with:
           node-version: 26
           cache: npm
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
       - name: Install native build requirements
         run: |
           sudo apt-get update
@@ -124,7 +124,7 @@ jobs:
         with:
           node-version: 26
           cache: npm
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
       - run: npm ci
       - name: Require registered Twitch client ID
         shell: pwsh
@@ -204,7 +204,7 @@ jobs:
         with:
           node-version: 26
           cache: npm
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - run: npm ci
