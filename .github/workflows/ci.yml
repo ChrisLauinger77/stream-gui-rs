@@ -7,6 +7,7 @@ on:
     types: [opened, synchronize, reopened]
     paths-ignore:
       - "**/*.md"
+      - ".github/workflows/claude.yml"
   schedule:
     - cron: "3 3 1 * *"
 
