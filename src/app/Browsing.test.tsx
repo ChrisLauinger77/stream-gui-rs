@@ -2329,6 +2329,48 @@ function localPreferences(initial = playbackSettings) {
   return () => saved;
 }
 
+test("bookmarks group by kind, sort by saved label, and restore the view after opening a bookmark", async () => {
+  const saved = localPreferences({ ...playbackSettings, discovery: { hidden: [], bookmarks: [
+    { kind: "youtube", id: "@example", name: "@example" },
+    { kind: "channel", id: "987", name: "Zulu channel" },
+    { kind: "category", id: "123", name: "Game 10" },
+    { kind: "kick_channel", id: "example", name: "example" },
+    { kind: "channel", id: channel.broadcasterId, name: "alpha channel" },
+    { kind: "category", id: "456", name: "game 2" },
+  ] } });
+  await render(); await click("Bookmarks");
+  const toggles = () => [...container.querySelectorAll<HTMLButtonElement>(".bookmark-group-toggle")];
+  const rows = (toggle: HTMLButtonElement) => document.getElementById(toggle.getAttribute("aria-controls")!)!;
+  expect(toggles().map(toggle => toggle.textContent)).toEqual(["Categories (2)", "Twitch channels (2)", "Kick (1)", "YouTube (1)"]);
+  expect(toggles().every(toggle => toggle.getAttribute("aria-expanded") === "true")).toBe(true);
+  expect(toggles().map(toggle => [...rows(toggle).querySelectorAll(".saved-item")].map(row => row.firstElementChild?.textContent))).toEqual([
+    ["game 2", "Game 10"], ["alpha channel", "Zulu channel"], ["example"], ["@example"],
+  ]);
+  expect(saved().discovery.bookmarks[0].kind).toBe("youtube");
+  expect(api.modifyDiscovery).not.toHaveBeenCalled();
+
+  const categories = button("Categories (2)");
+  categories.focus(); await click("Categories (2)");
+  expect(document.activeElement).toBe(categories);
+  expect(categories.getAttribute("aria-expanded")).toBe("false");
+  expect(rows(categories).hidden).toBe(true);
+  expect(rows(button("Twitch channels (2)")).hidden).toBe(false);
+
+  const content = container.querySelector(".browse-content")!;
+  content.scrollTop = 80;
+  button("alpha channel").focus(); await click("alpha channel");
+  await click("Go back");
+  expect(rows(button("Categories (2)")).hidden).toBe(true);
+  expect(content.scrollTop).toBe(80);
+  expect(document.activeElement).toBe(button("alpha channel"));
+  await click("Categories (2)");
+  expect(rows(button("Categories (2)")).hidden).toBe(false);
+  await click("Remove bookmark Game 10");
+  expect(toggles().map(toggle => toggle.textContent)).toContain("Categories (1)");
+  await click("Remove bookmark game 2");
+  expect(toggles().map(toggle => toggle.textContent)).toEqual(["Twitch channels (2)", "Kick (1)", "YouTube (1)"]);
+});
+
 test("channel bookmarks remain reachable while hidden and are independent of Twitch follows", async () => {
   const saved = localPreferences();
   await render(); await click("Live"); await click("Open channel Example Channel");
@@ -2699,9 +2741,9 @@ test.each([signedIn, signedOut])("bookmark rows offer browser chat only for supp
   vi.mocked(api.openKickBrowserChat).mockResolvedValue(null);
   vi.mocked(api.openYoutubeBrowserChat).mockResolvedValue(null);
   await render(); await click("Bookmarks");
-  const rows = container.querySelectorAll(".saved-item");
-  expect(rows[1].textContent).not.toContain("chat"); expect(rows[2].textContent).not.toContain("chat");
-  expect([...rows[3].querySelectorAll("button")].filter(b => b.textContent === "Open YouTube browser chat")).toHaveLength(1);
+  expect(button("Remove bookmark @example").closest(".saved-item")?.textContent).not.toContain("chat");
+  expect(button("Remove bookmark UCaBcDeFgHiJkLmNoPqRsT_-").closest(".saved-item")?.textContent).not.toContain("chat");
+  expect(button("Open YouTube browser chat", ".saved-items").closest(".saved-item")?.firstElementChild?.textContent).toBe("aBc-_123XyZ");
   await click("Open Kick browser chat", ".saved-items"); await click("Open YouTube browser chat", ".saved-items");
   expect(api.openKickBrowserChat).toHaveBeenCalledExactlyOnceWith({ slug: "example-1" });
   expect(api.openYoutubeBrowserChat).toHaveBeenCalledExactlyOnceWith({ locator: "aBc-_123XyZ" });

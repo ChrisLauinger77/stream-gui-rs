@@ -220,6 +220,10 @@ button, select { max-width:100%; overflow-wrap:anywhere; }
 .saved-items { display: grid; gap: .65rem; }
 .saved-item > :first-child, .saved-item > .muted { min-width: 0; overflow-wrap: anywhere; }
 .saved-item > button:last-child { margin-left: auto; }
+.bookmark-group-toggle { display: flex; align-items: center; gap: .5rem; width: 100%; text-align: start; font-weight: 650; }
+.bookmark-group-toggle::before { content: ""; width: .375rem; height: .375rem; flex: none; border: solid var(--muted); border-width: 0 1px 1px 0; transform: rotate(-45deg); }
+.bookmark-group-toggle[aria-expanded="true"]::before { transform: rotate(45deg); }
+.bookmark-group-items:not([hidden]) { display: grid; gap: .65rem; padding: .5rem 0 0 .75rem; }
 
 .shortcut-editor { display: grid; gap: .5rem; }
 .shortcut-row { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }

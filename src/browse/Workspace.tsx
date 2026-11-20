@@ -4,7 +4,7 @@ import { api } from "../lib/ipc";
 import type { NavigationIntent, Settings, StreamLanguage, BrowseRequest, CategorySummary, ChannelSummary, StreamSummary } from "../lib/generated";
 import { ViewMemory, usePage } from "./usePage";
 import { CategoryList, ChannelList, Media, PageFrame, StreamList } from "./components";
-import { LocalItemActions, SavedItems } from "../features/DiscoveryPreferences";
+import { LocalItemActions, SavedItems, useBookmarkGroups } from "../features/DiscoveryPreferences";
 import { TeamView } from "./TeamView";
 import { OpenChannel, type OpenChannelDraft } from "./OpenChannel";
 import { LanguageFilter } from "./LanguageFilter";
@@ -31,6 +31,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
   const [lookup, setLookup] = useState<OpenChannelDraft>({ service: "twitch", twitchLogin: "", kickSlug: "", youtubeLocator: "" });
   const [search, setSearch] = useState("");
   const [searchType, setSearchType] = useState<"channels" | "categories" | "teams">("channels");
+  const bookmarkGroups = useBookmarkGroups();
   const content = useRef<HTMLElement>(null);
   const focusSearch = useRef(false);
   const filterChange = useRef(false);
@@ -104,7 +105,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
       {route.kind === "live" && <Streams key={`live:${language}`} mode="live" language={language} context={context} links={links} />}
       {route.kind === "categories" && <Categories context={context} links={links} />}
       {route.kind === "category" && <Category key={`${route.id}:${language}`} id={route.id} language={language} context={context} links={links} />}
-      {route.kind === "bookmarks" && <SavedItems list="bookmarks" watchKick={watchKick} watchYoutube={watchYoutube} open={(kind, id, name) => navigate({ kind, id, name })} />}
+      {route.kind === "bookmarks" && <SavedItems list="bookmarks" bookmarkGroups={bookmarkGroups} watchKick={watchKick} watchYoutube={watchYoutube} open={(kind, id, name) => navigate({ kind, id, name })} />}
       {route.kind === "lookup" && <OpenChannel sessionId={sessionId} draft={lookup} change={value => { setFuture([]); setLookup(value); }} open={links.channel} onAuthLost={onAuthLost} watchKick={watchKick} watchYoutube={watchYoutube} />}
       {route.kind === "search" && <SearchView context={context} links={links} draft={search} setDraft={value => { setFuture([]); setSearch(value); }} type={searchType} setType={value => { setFuture([]); setSearchType(value); }} />}
       {route.kind === "team" && <TeamView key={route.id} name={route.id} context={context} links={links} />}

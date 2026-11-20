@@ -211,6 +211,7 @@
   "discovery.restoreNamed": "Restaurer {name}",
   "discovery.restoreToDiscovery": "Restaurer dans l’exploration",
   "discovery.restored": "De nouveau visible dans l’exploration.",
+  "discovery.twitchChannels": "Chaînes Twitch",
   "discovery.twitchSignIn": "Connectez-vous à Twitch pour ouvrir ce favori.",
   "errors.authDenied": "L’autorisation Twitch a été refusée. Vous pouvez réessayer de vous connecter.",
   "errors.authExpired": "Votre code de connexion a expiré. Recommencez la connexion.",

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { DiscoveryList, ErrorCode, ItemKind, SavedItem } from "../lib/generated";
 import { useSettings } from "../settings/useSettings";
 import { errorCode, errorText } from "../browse/errors";
@@ -7,6 +7,23 @@ import { KickChatButton, YoutubeChatButton, youtubeVideoId } from "./BrowserChat
 
 type TwitchItemKind = Extract<ItemKind, "channel" | "category">;
 type AnonymousItemKind = Extract<ItemKind, "kick_channel" | "youtube">;
+
+const bookmarkGroupLabels = [
+  ["category", "browse.categories"],
+  ["channel", "discovery.twitchChannels"],
+  ["kick_channel", "service.kick"],
+  ["youtube", "service.youtube"],
+] as const;
+
+export function useBookmarkGroups() {
+  const [collapsed, setCollapsed] = useState<ItemKind[]>([]);
+  return {
+    collapsed,
+    toggle(kind: ItemKind) {
+      setCollapsed(current => current.includes(kind) ? current.filter(value => value !== kind) : [...current, kind]);
+    },
+  };
+}
 
 function useDiscoveryMutation() {
   const { t, locale } = useI18n();
@@ -66,28 +83,56 @@ function SavedPlayback({ item, watch }: { item: SavedItem; watch: (locator: stri
   return <button type="button" disabled={pending} data-focus={`saved:${item.kind}:${item.id}`} onClick={() => { void play(); }}>{t(item.kind === "kick_channel" ? "kick.play" : "youtube.play")}</button>;
 }
 
-export function SavedItems({ list, open, watchKick, watchYoutube }: { list: DiscoveryList; open?: (kind: TwitchItemKind, id: string, name: string) => void; watchKick?: (slug: string) => Promise<void>; watchYoutube?: (locator: string) => Promise<void> }) {
-  const { t } = useI18n();
+export function SavedItems({ list, open, watchKick, watchYoutube, bookmarkGroups }: {
+  list: DiscoveryList;
+  open?: (kind: TwitchItemKind, id: string, name: string) => void;
+  watchKick?: (slug: string) => Promise<void>;
+  watchYoutube?: (locator: string) => Promise<void>;
+  bookmarkGroups?: ReturnType<typeof useBookmarkGroups>;
+}) {
+  const { t, locale, number } = useI18n();
   const { settings, pending, change, feedback } = useDiscoveryMutation();
   const region = useRef<HTMLDivElement>(null);
+  const groupId = useId();
+  const localGroups = useBookmarkGroups();
+  const groups = bookmarkGroups ?? localGroups;
   const items = settings?.discovery[list] ?? [];
-  return <div ref={region} tabIndex={-1} className="saved-items" role="region" aria-label={list === "bookmarks" ? t("discovery.localBookmarks") : t("settings.sectionHidden")}>
-    <p className="muted">{list === "bookmarks" ? t("discovery.bookmarksHelp") : t("discovery.hiddenHelp")}</p>
-    {list === "bookmarks" && <p className="muted">{t("discovery.anonymousBookmarksHelp")}</p>}
-    {!items.length && <p>{list === "bookmarks" ? t("discovery.noBookmarks") : t("discovery.noHidden")}</p>}
-    {items.map(item => <div className="saved-item" key={`${item.kind}:${item.id}`}>
-      {open && (item.kind === "channel" || item.kind === "category") ? <button type="button" className="text-button" data-focus={`saved:${item.kind}:${item.id}`} onClick={() => { if (item.kind === "channel" || item.kind === "category") open(item.kind, item.id, item.name); }}>{item.name}</button> : <span>{item.name}</span>}
-      <span className="muted">{t(({ channel: "discovery.channel", category: "discovery.category", kick_channel: "service.kick", youtube: "service.youtube" } as const)[item.kind])} · {item.id}</span>
+  const bookmarks = list === "bookmarks";
+  const { compare } = new Intl.Collator(locale, { sensitivity: "base", numeric: true });
+  const renderItem = (item: SavedItem) => {
+    const { kind, id, name } = item;
+    const twitch = kind === "channel" || kind === "category";
+    return <div className="saved-item" key={`${kind}:${id}`}>
+      {open && twitch ? <button type="button" className="text-button" data-focus={`saved:${kind}:${id}`} onClick={() => open(kind, id, name)}>{name}</button> : <span>{name}</span>}
+      {!bookmarks && twitch && <span className="muted">{t(kind === "channel" ? "discovery.channel" : "discovery.category")} · {id}</span>}
+      {bookmarks && (twitch || id !== name) && <span className="muted">{id}</span>}
       {item.kind === "kick_channel" && <>{watchKick && <SavedPlayback item={item} watch={watchKick} />}<KickChatButton slug={item.id} /></>}
       {item.kind === "youtube" && <>{watchYoutube && <SavedPlayback item={item} watch={watchYoutube} />}{youtubeVideoId(item.id) && <YoutubeChatButton locator={item.id} />}</>}
-      {list === "bookmarks" && !open && (item.kind === "channel" || item.kind === "category") && <span className="muted">{t("discovery.twitchSignIn")}</span>}
-      <button type="button" disabled={pending} aria-label={t(list === "bookmarks" ? "discovery.removeNamed" : "discovery.restoreNamed", { name: item.name })} onClick={event => {
+      {bookmarks && !open && twitch && <span className="muted">{t("discovery.twitchSignIn")}</span>}
+      <button type="button" disabled={pending} aria-label={t(bookmarks ? "discovery.removeNamed" : "discovery.restoreNamed", { name })} onClick={event => {
         const button = event.currentTarget;
         void change(list, item, false).then(() => {
           if (!button.isConnected && document.activeElement === document.body) region.current?.focus();
         });
-      }}>{list === "bookmarks" ? t("discovery.remove") : t("discovery.restore")}</button>
-    </div>)}
+      }}>{t(bookmarks ? "discovery.remove" : "discovery.restore")}</button>
+    </div>;
+  };
+  return <div ref={region} tabIndex={-1} className="saved-items" role="region" aria-label={t(bookmarks ? "discovery.localBookmarks" : "settings.sectionHidden")}>
+    <p className="muted">{t(bookmarks ? "discovery.bookmarksHelp" : "discovery.hiddenHelp")}</p>
+    {bookmarks && <p className="muted">{t("discovery.anonymousBookmarksHelp")}</p>}
+    {!items.length && <p>{t(bookmarks ? "discovery.noBookmarks" : "discovery.noHidden")}</p>}
+    {bookmarks ? bookmarkGroupLabels.map(([kind, label]) => {
+      const entries = items.filter(item => item.kind === kind).sort((a, b) => compare(a.name, b.name));
+      if (!entries.length) return null;
+      const expanded = !groups.collapsed.includes(kind);
+      const id = `${groupId}-${kind}`;
+      return <div className="bookmark-group" key={kind}>
+        <button type="button" className="bookmark-group-toggle" aria-expanded={expanded} aria-controls={id} data-focus={`bookmark-group:${kind}`} onClick={() => groups.toggle(kind)}>
+          {t(label)} <span className="muted">({number(entries.length)})</span>
+        </button>
+        <div className="bookmark-group-items" id={id} hidden={!expanded}>{entries.map(renderItem)}</div>
+      </div>;
+    }) : items.map(renderItem)}
     {feedback}
   </div>;
 }
