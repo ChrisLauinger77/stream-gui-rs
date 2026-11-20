@@ -211,6 +211,7 @@
   "discovery.restoreNamed": "Restore {name}",
   "discovery.restoreToDiscovery": "Restore to discovery",
   "discovery.restored": "Restored to discovery.",
+  "discovery.twitchChannels": "Twitch channels",
   "discovery.twitchSignIn": "Sign in to Twitch to open this bookmark.",
   "errors.authDenied": "Twitch authorization was declined. You can try signing in again.",
   "errors.authExpired": "Your sign-in code expired. Start a new sign-in.",

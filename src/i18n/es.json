@@ -211,6 +211,7 @@
   "discovery.restoreNamed": "Restaurar {name}",
   "discovery.restoreToDiscovery": "Restaurar en exploración",
   "discovery.restored": "Restaurado a la exploración.",
+  "discovery.twitchChannels": "Canales de Twitch",
   "discovery.twitchSignIn": "Inicia sesión en Twitch para abrir este marcador.",
   "errors.authDenied": "Se rechazó la autorización de Twitch. Puedes volver a iniciar sesión.",
   "errors.authExpired": "Tu código de inicio de sesión ha caducado. Inicia una nueva sesión.",

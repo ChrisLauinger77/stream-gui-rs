@@ -2329,6 +2329,98 @@ function localPreferences(initial = playbackSettings) {
   return () => saved;
 }
 
+test("bookmarks group by kind, sort by saved label, and restore the view after opening a bookmark", async () => {
+  const saved = localPreferences({ ...playbackSettings, discovery: { hidden: [], bookmarks: [
+    { kind: "youtube", id: "@example", name: "@example" },
+    { kind: "channel", id: "987", name: "Zulu channel" },
+    { kind: "category", id: "123", name: "Game 10" },
+    { kind: "kick_channel", id: "example", name: "example" },
+    { kind: "channel", id: channel.broadcasterId, name: "alpha channel" },
+    { kind: "category", id: "456", name: "game 2" },
+  ] } });
+  await render(); await click("Bookmarks");
+  const toggles = () => [...container.querySelectorAll<HTMLButtonElement>(".bookmark-group-toggle")];
+  const rows = (toggle: HTMLButtonElement) => document.getElementById(toggle.getAttribute("aria-controls")!)!;
+  expect(toggles().map(toggle => toggle.textContent)).toEqual(["Categories (2)", "Twitch channels (2)", "Kick (1)", "YouTube (1)"]);
+  expect(toggles().every(toggle => toggle.getAttribute("aria-expanded") === "true")).toBe(true);
+  expect(toggles().map(toggle => [...rows(toggle).querySelectorAll(".saved-item")].map(row => row.firstElementChild?.textContent))).toEqual([
+    ["game 2", "Game 10"], ["alpha channel", "Zulu channel"], ["example"], ["@example"],
+  ]);
+  expect(saved().discovery.bookmarks[0].kind).toBe("youtube");
+  expect(api.modifyDiscovery).not.toHaveBeenCalled();
+
+  const categories = button("Categories (2)");
+  categories.focus(); await click("Categories (2)");
+  expect(document.activeElement).toBe(categories);
+  expect(categories.getAttribute("aria-expanded")).toBe("false");
+  expect(rows(categories).hidden).toBe(true);
+  expect(rows(button("Twitch channels (2)")).hidden).toBe(false);
+
+  const content = container.querySelector(".browse-content")!;
+  content.scrollTop = 80;
+  button("alpha channel").focus(); await click("alpha channel");
+  await click("Go back");
+  expect(rows(button("Categories (2)")).hidden).toBe(true);
+  expect(content.scrollTop).toBe(80);
+  expect(document.activeElement).toBe(button("alpha channel"));
+  await click("Categories (2)");
+  expect(rows(button("Categories (2)")).hidden).toBe(false);
+  await click("Remove bookmark Game 10");
+  expect(toggles().map(toggle => toggle.textContent)).toContain("Categories (1)");
+  await click("Remove bookmark game 2");
+  expect(toggles().map(toggle => toggle.textContent)).toEqual(["Twitch channels (2)", "Kick (1)", "YouTube (1)"]);
+});
+
+test("bookmark visits restore their own disclosure state, scroll, and focus on Back and Forward", async () => {
+  localPreferences({ ...playbackSettings, discovery: { hidden: [], bookmarks: [
+    { kind: "category", id: category.id, name: category.name },
+    { kind: "channel", id: channel.broadcasterId, name: channel.displayName },
+  ] } });
+  await render(); await click("Bookmarks");
+  const content = container.querySelector(".browse-content")!;
+  await click("Categories (1)");
+  content.scrollTop = 80;
+  button(channel.displayName).focus(); await click(channel.displayName);
+
+  await click("Bookmarks");
+  await click("Categories (1)"); await click("Twitch channels (1)");
+  content.scrollTop = 140;
+  button(category.name).focus();
+  await click("Go back"); await click("Go back");
+  expect(button("Categories (1)").getAttribute("aria-expanded")).toBe("false");
+  expect(button("Twitch channels (1)").getAttribute("aria-expanded")).toBe("true");
+  expect(content.scrollTop).toBe(80);
+  expect(document.activeElement).toBe(button(channel.displayName));
+
+  await click("Go forward"); await click("Go forward");
+  expect(button("Categories (1)").getAttribute("aria-expanded")).toBe("true");
+  expect(button("Twitch channels (1)").getAttribute("aria-expanded")).toBe("false");
+  expect(content.scrollTop).toBe(140);
+  expect(document.activeElement).toBe(button(category.name));
+});
+
+test.each(["authenticated", "signed_out"] as const)("empty bookmark groups reopen when refilled while %s", async phase => {
+  const saved = localPreferences({ ...playbackSettings, discovery: { hidden: [], bookmarks: [
+    { kind: "kick_channel", id: "previous", name: "previous" },
+    { kind: "youtube", id: "@example", name: "@example" },
+  ] } });
+  if (phase === "signed_out") vi.mocked(api.authStatus).mockResolvedValue(signedOut);
+  await render(); await click("Bookmarks");
+  await click("Kick (1)"); await click("YouTube (1)");
+  if (phase === "authenticated") await click("Open channel");
+  await editControl("Service", "kick", "select");
+  await editControl("Kick channel name", "previous");
+  await click("Remove bookmark", ".exact-lookup");
+  expect(saved().discovery.bookmarks.map(item => item.kind)).toEqual(["youtube"]);
+  await editControl("Kick channel name", "replacement");
+  await click("Add bookmark", ".exact-lookup");
+
+  if (phase === "authenticated") await click("Go back");
+  expect(button("Kick (1)").getAttribute("aria-expanded")).toBe("true");
+  expect(button("Remove bookmark replacement").closest("[hidden]")).toBeNull();
+  expect(button("YouTube (1)").getAttribute("aria-expanded")).toBe("false");
+});
+
 test("channel bookmarks remain reachable while hidden and are independent of Twitch follows", async () => {
   const saved = localPreferences();
   await render(); await click("Live"); await click("Open channel Example Channel");
@@ -2680,6 +2772,12 @@ test.each(["signed_in", "signed_out"] as const)("Open channel bookmarks persist 
   expect(container.querySelectorAll(".saved-item")).toHaveLength(2);
   expect(container.querySelector(".saved-items")?.textContent).toContain("no live status");
   expect(container.querySelector(".saved-items")?.textContent).toContain("stops working when that stream ends");
+  for (const [name, service] of [["example-1", "Kick"], ["@example", "YouTube"]]) {
+    const remove = button(`Remove bookmark ${name}`);
+    const description = document.getElementById(remove.getAttribute("aria-describedby") ?? "");
+    expect(description?.textContent).toBe(service);
+    expect(description?.closest(".saved-item")).toBe(remove.closest(".saved-item"));
+  }
   await click("Play Kick channel", ".saved-items");
   expect(api.launchKick).toHaveBeenCalledExactlyOnceWith({ slug: "example-1", quality: null });
   await click("Close Watching"); await click("Play YouTube stream", ".saved-items");
@@ -2699,9 +2797,9 @@ test.each([signedIn, signedOut])("bookmark rows offer browser chat only for supp
   vi.mocked(api.openKickBrowserChat).mockResolvedValue(null);
   vi.mocked(api.openYoutubeBrowserChat).mockResolvedValue(null);
   await render(); await click("Bookmarks");
-  const rows = container.querySelectorAll(".saved-item");
-  expect(rows[1].textContent).not.toContain("chat"); expect(rows[2].textContent).not.toContain("chat");
-  expect([...rows[3].querySelectorAll("button")].filter(b => b.textContent === "Open YouTube browser chat")).toHaveLength(1);
+  expect(button("Remove bookmark @example").closest(".saved-item")?.textContent).not.toContain("chat");
+  expect(button("Remove bookmark UCaBcDeFgHiJkLmNoPqRsT_-").closest(".saved-item")?.textContent).not.toContain("chat");
+  expect(button("Open YouTube browser chat", ".saved-items").closest(".saved-item")?.firstElementChild?.textContent).toBe("aBc-_123XyZ");
   await click("Open Kick browser chat", ".saved-items"); await click("Open YouTube browser chat", ".saved-items");
   expect(api.openKickBrowserChat).toHaveBeenCalledExactlyOnceWith({ slug: "example-1" });
   expect(api.openYoutubeBrowserChat).toHaveBeenCalledExactlyOnceWith({ locator: "aBc-_123XyZ" });

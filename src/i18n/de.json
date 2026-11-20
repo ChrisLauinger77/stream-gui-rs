@@ -211,6 +211,7 @@
   "discovery.restoreNamed": "{name} wiederherstellen",
   "discovery.restoreToDiscovery": "In Entdeckung wiederherstellen",
   "discovery.restored": "In der Entdeckung wieder sichtbar.",
+  "discovery.twitchChannels": "Twitch-Kanäle",
   "discovery.twitchSignIn": "Melde dich bei Twitch an, um dieses Lesezeichen zu öffnen.",
   "errors.authDenied": "Die Twitch-Autorisierung wurde abgelehnt. Du kannst die Anmeldung erneut versuchen.",
   "errors.authExpired": "Dein Anmeldecode ist abgelaufen. Starte eine neue Anmeldung.",
