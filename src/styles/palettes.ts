@@ -1,5 +1,7 @@
 // Adapted from Sidra's bundled palettes (Blue Oak Model License 1.0.0).
 // License text: https://blueoakcouncil.org/license/1.0.0
+// The Claude and GitHub palettes are not from Sidra; this application maps
+// them onto the same ladder from the sources listed below.
 //
 // Bundled theme palettes. Each palette maps an upstream colour scheme
 // onto the 12 semantic slots consumed by this application's adapter. Shades
@@ -14,8 +16,10 @@
 //
 // Upstream sources for palette colour values:
 // - Catppuccin (Mocha/Latte)  https://github.com/catppuccin/palette      MIT
+// - Claude                    Anthropic brand colours (Dark, Light, Mid Gray, Light Gray, Orange)
 // - Dracula                   https://github.com/dracula/dracula-theme   MIT
 // - Everforest (Dark/Light)   https://github.com/sainnhe/everforest      MIT
+// - GitHub (Dark/Light)       https://github.com/primer/primitives       MIT
 // - Gruvbox                   https://github.com/morhetz/gruvbox         MIT
 // - Nord                      https://github.com/nordtheme/nord          MIT
 // - Ros\u00e9 Pine (Main/Dawn)     https://github.com/rose-pine/palette       MIT
@@ -38,8 +42,10 @@ interface BundledTheme extends ThemeDefinition {
 /** Names of the bundled themes, matching the Rust settings enum. */
 export type BundledThemeName =
   | 'catppuccin'
+  | 'claude'
   | 'dracula'
   | 'everforest'
+  | 'github'
   | 'gruvbox'
   | 'nord'
   | 'rose-pine'
@@ -100,6 +106,39 @@ export const BUNDLED_THEMES: readonly BundledTheme[] = [
     },
   },
   {
+    name: 'claude',
+    label: 'Claude',
+    dark: {
+      base: '#1f1e1d', // derived
+      mantle: '#1a1918', // derived
+      crust: '#141413',
+      surface0: '#262624', // derived
+      surface1: '#30302e', // derived
+      surface2: '#73726c', // derived
+      overlay: '#87867f', // derived
+      text: '#faf9f5',
+      subtext1: '#e8e6dc',
+      subtext0: '#b0aea5',
+      accent: '#d97757',
+      accentHover: '#e08e70', // derived
+    },
+    light: {
+      base: '#faf9f5',
+      mantle: '#f3f1ea', // derived
+      crust: '#e8e6dc',
+      surface0: '#f5f4ed', // derived
+      surface1: '#f0eee6', // derived
+      surface2: '#87867f', // derived
+      overlay: '#b0aea5',
+      text: '#141413',
+      subtext1: '#3d3d3a', // derived
+      subtext0: '#5e5d59', // derived
+      // Darker Orange keeps the accent close to 4.5:1 on light surfaces.
+      accent: '#b85433', // derived
+      accentHover: '#d97757',
+    },
+  },
+  {
     name: 'dracula',
     label: 'Dracula',
     dark: draculaDark,
@@ -137,6 +176,40 @@ export const BUNDLED_THEMES: readonly BundledTheme[] = [
       subtext0: '#5c6a72',
       accent: '#5d6b01',
       accentHover: '#206e4e',
+    },
+  },
+  {
+    name: 'github',
+    label: 'GitHub',
+    dark: {
+      // Dark default (Primer)
+      base: '#0d1117',
+      mantle: '#070a0f', // derived
+      crust: '#010409',
+      surface0: '#151b23',
+      surface1: '#212830',
+      surface2: '#3d444d',
+      overlay: '#656c76',
+      text: '#f0f6fc',
+      subtext1: '#d1d7e0', // derived
+      subtext0: '#9198a1',
+      accent: '#4493f8',
+      accentHover: '#1f6feb',
+    },
+    light: {
+      // Light default (Primer)
+      base: '#ffffff',
+      mantle: '#f6f8fa',
+      crust: '#eff2f5',
+      surface0: '#f6f8fa',
+      surface1: '#eff2f5',
+      surface2: '#d1d9e0',
+      overlay: '#818b98',
+      text: '#1f2328',
+      subtext1: '#393f46', // derived
+      subtext0: '#59636e',
+      accent: '#0969da',
+      accentHover: '#0550ae', // derived
     },
   },
   {

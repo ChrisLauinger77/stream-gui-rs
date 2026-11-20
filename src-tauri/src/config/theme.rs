@@ -10,8 +10,10 @@ pub enum ThemePalette {
     #[default]
     Default,
     Catppuccin,
+    Claude,
     Dracula,
     Everforest,
+    Github,
     Gruvbox,
     Nord,
     RosePine,
@@ -119,6 +121,22 @@ mod tests {
             "subtext1":"#bac2de","subtext0":"#a6adc8","accent":"#f38ba8","accentHover":"#eba0ac"
         }})
         .to_string()
+    }
+
+    #[test]
+    fn palette_wire_names_match_frontend_registry() {
+        for (palette, name) in [
+            (ThemePalette::Claude, "claude"),
+            (ThemePalette::Github, "github"),
+            (ThemePalette::RosePine, "rose-pine"),
+            (ThemePalette::TokyoNight, "tokyo-night"),
+        ] {
+            assert_eq!(serde_json::to_value(palette).unwrap(), name);
+            assert_eq!(
+                serde_json::from_value::<ThemePalette>(name.into()).unwrap(),
+                palette
+            );
+        }
     }
 
     #[test]

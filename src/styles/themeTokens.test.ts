@@ -16,9 +16,9 @@ function contrast(first: string, second: string) {
   return (luminances[0] + 0.05) / (luminances[1] + 0.05);
 }
 
-test("theme registry offers Sidra's eight bundled palettes and Default has no override", () => {
+test("theme registry offers ten bundled palettes and Default has no override", () => {
   expect(BUNDLED_THEMES.map(theme => theme.name)).toEqual([
-    "catppuccin", "dracula", "everforest", "gruvbox", "nord", "rose-pine", "solarized", "tokyo-night",
+    "catppuccin", "claude", "dracula", "everforest", "github", "gruvbox", "nord", "rose-pine", "solarized", "tokyo-night",
   ]);
   expect(themeDefinition("default", null)).toBeNull();
   expect(themeDefinition("custom", null)).toBeNull();
