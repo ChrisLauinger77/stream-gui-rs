@@ -1,10 +1,10 @@
 import { useI18n } from "../i18n";
 import { memo, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { api } from "../lib/ipc";
-import type { NavigationIntent, Settings, StreamLanguage, BrowseRequest, CategorySummary, ChannelSummary, StreamSummary } from "../lib/generated";
+import type { NavigationIntent, Settings, StreamLanguage, BrowseRequest, CategorySummary, ChannelSummary, ItemKind, SavedItem, StreamSummary } from "../lib/generated";
 import { ViewMemory, usePage } from "./usePage";
 import { CategoryList, ChannelList, Media, PageFrame, StreamList } from "./components";
-import { LocalItemActions, SavedItems, useBookmarkGroups } from "../features/DiscoveryPreferences";
+import { LocalItemActions, SavedItems, retainPopulatedBookmarkGroups, useBookmarkGroups } from "../features/DiscoveryPreferences";
 import { TeamView } from "./TeamView";
 import { OpenChannel, type OpenChannelDraft } from "./OpenChannel";
 import { LanguageFilter } from "./LanguageFilter";
@@ -14,7 +14,14 @@ type Section = "following" | "live" | "categories" | "search" | "lookup" | "book
 export type BrowserActions = { intent: (intent: NavigationIntent) => void; channel: (id: string, name: string) => void; navigate: (section: Section) => void; back: () => void; forward: () => void; refresh: () => void; focus: () => void };
 type Route = ({ kind: Section } | { kind: "category" | "channel" | "team" | "login"; id: string; name: string }) & { language?: StreamLanguage | null };
 type Visit = { route: Route; section: Section; scroll: number; focus?: string;
-  lookup: OpenChannelDraft; search: string; searchType: "channels" | "categories" | "teams"; following: "live" | "channels" };
+  lookup: OpenChannelDraft; search: string; searchType: "channels" | "categories" | "teams"; following: "live" | "channels"; collapsedBookmarkGroups: ItemKind[] };
+function pruneEmptyBookmarkGroups(visits: Visit[], bookmarks: readonly SavedItem[] | undefined) {
+  const updated = visits.map(visit => {
+    const collapsedBookmarkGroups = retainPopulatedBookmarkGroups(visit.collapsedBookmarkGroups, bookmarks);
+    return collapsedBookmarkGroups === visit.collapsedBookmarkGroups ? visit : { ...visit, collapsedBookmarkGroups };
+  });
+  return updated.some((visit, index) => visit !== visits[index]) ? updated : visits;
+}
 const routeKey = (route: Route) => route.kind + ("id" in route ? `:${route.id}` : "") + (route.kind === "live" || route.kind === "category" ? `:${route.language ?? "any"}` : "");
 export type QueryContext = { sessionId: string; memory: ViewMemory; hidden?: Settings["discovery"]["hidden"]; onAuthLost: () => void };
 export type Watch = { watch: (id: string) => void; pending: ReadonlySet<string> };
@@ -31,32 +38,46 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({ sessionId, onAu
   const [lookup, setLookup] = useState<OpenChannelDraft>({ service: "twitch", twitchLogin: "", kickSlug: "", youtubeLocator: "" });
   const [search, setSearch] = useState("");
   const [searchType, setSearchType] = useState<"channels" | "categories" | "teams">("channels");
-  const bookmarkGroups = useBookmarkGroups();
+  const bookmarks = preferences?.discovery.bookmarks;
+  const bookmarkGroups = useBookmarkGroups(bookmarks);
   const content = useRef<HTMLElement>(null);
   const focusSearch = useRef(false);
   const filterChange = useRef(false);
   const restore = useRef<{ scroll: number; focus?: string } | null>(null);
-  const visit = (): Visit => ({ route, section, lookup, search, searchType, following, scroll: content.current?.scrollTop ?? 0, focus: (document.activeElement as HTMLElement | null)?.dataset.focus });
+  useLayoutEffect(() => {
+    // A group can empty while Bookmarks is unmounted. Forget its disclosure state in both directions.
+    setHistory(visits => pruneEmptyBookmarkGroups(visits, bookmarks));
+    setFuture(visits => pruneEmptyBookmarkGroups(visits, bookmarks));
+  }, [bookmarks]);
+  const visit = (): Visit => ({
+    route, section, lookup, search, searchType, following,
+    collapsedBookmarkGroups: route.kind === "bookmarks" ? bookmarkGroups.collapsed : [],
+    scroll: content.current?.scrollTop ?? 0, focus: (document.activeElement as HTMLElement | null)?.dataset.focus,
+  });
   const acceptVisit = (previous: Visit) => {
     restore.current = previous; setSection(previous.section); setRoute(previous.route);
     setLookup(previous.lookup); setSearch(previous.search); setSearchType(previous.searchType); setFollowing(previous.following);
+    if (previous.route.kind === "bookmarks") bookmarkGroups.setCollapsed(previous.collapsedBookmarkGroups);
   };
   const navigate = (next: Route) => {
     if (next.kind === "live" || next.kind === "category") next = { ...next, language: preferences?.discoveryLanguage ?? null };
     if (routeKey(next) === routeKey(route)) return;
-    setHistory(items => [...items, visit()].slice(-12)); setFuture([]);
+    const current = visit();
+    setHistory(items => [...items, current].slice(-12)); setFuture([]);
     if (next.kind !== "category" && next.kind !== "channel" && next.kind !== "team" && next.kind !== "login") setSection(next.kind);
     restore.current = null; setRoute(next);
   };
   const back = () => {
     const previous = history.at(-1);
     if (!previous) return;
-    setFuture(items => [...items, visit()].slice(-12)); setHistory(history.slice(0, -1)); acceptVisit(previous);
+    const current = visit();
+    setFuture(items => [...items, current].slice(-12)); setHistory(history.slice(0, -1)); acceptVisit(previous);
   };
   const forward = () => {
     const next = future.at(-1);
     if (!next) return;
-    setHistory(items => [...items, visit()].slice(-12)); setFuture(future.slice(0, -1)); acceptVisit(next);
+    const current = visit();
+    setHistory(items => [...items, current].slice(-12)); setFuture(future.slice(0, -1)); acceptVisit(next);
   };
   useImperativeHandle(actionsRef, () => ({
     intent: intent => {

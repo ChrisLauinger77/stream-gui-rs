@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { DiscoveryList, ErrorCode, ItemKind, SavedItem } from "../lib/generated";
 import { useSettings } from "../settings/useSettings";
 import { errorCode, errorText } from "../browse/errors";
@@ -8,17 +8,33 @@ import { KickChatButton, YoutubeChatButton, youtubeVideoId } from "./BrowserChat
 type TwitchItemKind = Extract<ItemKind, "channel" | "category">;
 type AnonymousItemKind = Extract<ItemKind, "kick_channel" | "youtube">;
 
+const itemKindLabels = {
+  category: "discovery.category",
+  channel: "discovery.channel",
+  kick_channel: "service.kick",
+  youtube: "service.youtube",
+} satisfies Record<ItemKind, MessageKey>;
+
 const bookmarkGroupLabels = [
   ["category", "browse.categories"],
   ["channel", "discovery.twitchChannels"],
-  ["kick_channel", "service.kick"],
-  ["youtube", "service.youtube"],
+  ["kick_channel", itemKindLabels.kick_channel],
+  ["youtube", itemKindLabels.youtube],
 ] as const;
 
-export function useBookmarkGroups() {
+export function retainPopulatedBookmarkGroups(collapsed: ItemKind[], bookmarks: readonly SavedItem[] | undefined) {
+  const populated = collapsed.filter(kind => bookmarks?.some(item => item.kind === kind));
+  return populated.length === collapsed.length ? collapsed : populated;
+}
+
+export function useBookmarkGroups(bookmarks: readonly SavedItem[] | undefined) {
   const [collapsed, setCollapsed] = useState<ItemKind[]>([]);
+  useLayoutEffect(() => {
+    setCollapsed(current => retainPopulatedBookmarkGroups(current, bookmarks));
+  }, [bookmarks]);
   return {
     collapsed,
+    setCollapsed,
     toggle(kind: ItemKind) {
       setCollapsed(current => current.includes(kind) ? current.filter(value => value !== kind) : [...current, kind]);
     },
@@ -93,23 +109,23 @@ export function SavedItems({ list, open, watchKick, watchYoutube, bookmarkGroups
   const { t, locale, number } = useI18n();
   const { settings, pending, change, feedback } = useDiscoveryMutation();
   const region = useRef<HTMLDivElement>(null);
-  const groupId = useId();
-  const localGroups = useBookmarkGroups();
+  const idPrefix = useId();
+  const bookmarks = list === "bookmarks";
+  const localGroups = useBookmarkGroups(bookmarks && !bookmarkGroups ? settings?.discovery.bookmarks : undefined);
   const groups = bookmarkGroups ?? localGroups;
   const items = settings?.discovery[list] ?? [];
-  const bookmarks = list === "bookmarks";
   const { compare } = new Intl.Collator(locale, { sensitivity: "base", numeric: true });
   const renderItem = (item: SavedItem) => {
     const { kind, id, name } = item;
     const twitch = kind === "channel" || kind === "category";
+    const serviceLabelId = twitch ? undefined : `${idPrefix}-${kind}-${id}-service`;
     return <div className="saved-item" key={`${kind}:${id}`}>
       {open && twitch ? <button type="button" className="text-button" data-focus={`saved:${kind}:${id}`} onClick={() => open(kind, id, name)}>{name}</button> : <span>{name}</span>}
-      {!bookmarks && twitch && <span className="muted">{t(kind === "channel" ? "discovery.channel" : "discovery.category")} · {id}</span>}
-      {bookmarks && (twitch || id !== name) && <span className="muted">{id}</span>}
+      <span className="muted" id={serviceLabelId}>{t(itemKindLabels[kind])}{(twitch || id !== name) && ` · ${id}`}</span>
       {item.kind === "kick_channel" && <>{watchKick && <SavedPlayback item={item} watch={watchKick} />}<KickChatButton slug={item.id} /></>}
       {item.kind === "youtube" && <>{watchYoutube && <SavedPlayback item={item} watch={watchYoutube} />}{youtubeVideoId(item.id) && <YoutubeChatButton locator={item.id} />}</>}
       {bookmarks && !open && twitch && <span className="muted">{t("discovery.twitchSignIn")}</span>}
-      <button type="button" disabled={pending} aria-label={t(bookmarks ? "discovery.removeNamed" : "discovery.restoreNamed", { name })} onClick={event => {
+      <button type="button" disabled={pending} aria-label={t(bookmarks ? "discovery.removeNamed" : "discovery.restoreNamed", { name })} aria-describedby={serviceLabelId} onClick={event => {
         const button = event.currentTarget;
         void change(list, item, false).then(() => {
           if (!button.isConnected && document.activeElement === document.body) region.current?.focus();
@@ -125,7 +141,7 @@ export function SavedItems({ list, open, watchKick, watchYoutube, bookmarkGroups
       const entries = items.filter(item => item.kind === kind).sort((a, b) => compare(a.name, b.name));
       if (!entries.length) return null;
       const expanded = !groups.collapsed.includes(kind);
-      const id = `${groupId}-${kind}`;
+      const id = `${idPrefix}-${kind}`;
       return <div className="bookmark-group" key={kind}>
         <button type="button" className="bookmark-group-toggle" aria-expanded={expanded} aria-controls={id} data-focus={`bookmark-group:${kind}`} onClick={() => groups.toggle(kind)}>
           {t(label)} <span className="muted">({number(entries.length)})</span>
