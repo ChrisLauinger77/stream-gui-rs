@@ -1,26 +1,22 @@
-# Stream GUI RS 1.10.0
+# Stream GUI RS 1.11.0
 
-Changes since Stream GUI RS 1.9.0.
+Changes since Stream GUI RS 1.10.0.
 
-This feature release adds a tray submenu for starting followed live channels and makes opening Watching on launch optional.
+This feature release groups bookmarks by type and adds Claude and GitHub color themes.
 
 ## Features
 
-- Added a **Live channels** submenu to the tray/menu-bar menu ([#121](https://github.com/ChrisLauinger77/stream-gui-rs/pull/121), [#119](https://github.com/ChrisLauinger77/stream-gui-rs/issues/119)). With live monitoring on, it lists up to 25 followed Twitch channels from the latest complete check. Choosing one starts playback exactly like **Watch**, using the current player, quality, channel and chat preferences, and leaves the window as it was; a failure restores the window and shows the error. The submenu says when monitoring is off or paused, when you are signed out, while checking, and when the list is unavailable or may be outdated. It uses the existing monitor checks and makes no additional Twitch requests.
-- Added **Settings → Playback → Open Watching when starting a stream** ([#120](https://github.com/ChrisLauinger77/stream-gui-rs/pull/120), [#118](https://github.com/ChrisLauinger77/stream-gui-rs/issues/118)). It is on by default. When off, starting a Twitch, Kick or YouTube stream keeps the current view and announces success or failure there; **Watching** remains available from its button, which shows the active-session count, and its keyboard shortcut.
-
-## Tests
-
-- Strengthened several test contracts, covered the local-window permission boundary for every registered command and removed duplicate checks ([#116](https://github.com/ChrisLauinger77/stream-gui-rs/pull/116)).
+- Grouped **Bookmarks** under Categories, Twitch channels, Kick and YouTube ([#139](https://github.com/ChrisLauinger77/stream-gui-rs/pull/139)). Each populated group shows a count and sorts by saved label in the interface language. A group reopens when it gains its first bookmark or refills after becoming empty, and Back and Forward restore each visit's open groups, scroll position and focus. Kick and YouTube rows keep a visible service label, and the grouped view is the same while signed out of Twitch.
+- Added **Claude** and **GitHub** to **Settings → Appearance → Theme** ([#142](https://github.com/ChrisLauinger77/stream-gui-rs/pull/142)). Both have dark and light variants that follow **Color mode**. GitHub uses GitHub's Primer colors and Claude uses Anthropic's brand colors; like the other bundled themes, text, accent and focus colors keep readable contrast on app surfaces.
 
 ## Dependencies
 
-- Refreshed the npm lockfile, updating parse5 from 8.1.0 to 8.1.1 ([#113](https://github.com/ChrisLauinger77/stream-gui-rs/pull/113)).
-- Refreshed both lockfiles ([#115](https://github.com/ChrisLauinger77/stream-gui-rs/pull/115)), including wry 0.57.1 → 0.57.2, webbrowser 1.2.6 → 1.2.7, uuid 1.29.1 → 1.29.2, rustls-pki-types 1.15.1 → 1.16.0 and webpki-root-certs 1.0.11 → 1.0.12. The test-only tldts-core moved from the deprecated partial release 7.4.20 to 7.4.19.
-- Updated the `anthropics/claude-code-action` workflow digest ([#114](https://github.com/ChrisLauinger77/stream-gui-rs/pull/114)).
+- Refreshed both lockfiles ([#123](https://github.com/ChrisLauinger77/stream-gui-rs/pull/123), [#125](https://github.com/ChrisLauinger77/stream-gui-rs/pull/125), [#129](https://github.com/ChrisLauinger77/stream-gui-rs/pull/129), [#132](https://github.com/ChrisLauinger77/stream-gui-rs/pull/132), [#134](https://github.com/ChrisLauinger77/stream-gui-rs/pull/134), [#136](https://github.com/ChrisLauinger77/stream-gui-rs/pull/136), [#138](https://github.com/ChrisLauinger77/stream-gui-rs/pull/138), [#141](https://github.com/ChrisLauinger77/stream-gui-rs/pull/141)), including tauri 2.12.5 → 2.12.7, wry 0.57.2 → 0.57.3, tao 0.37.2 → 0.37.3, keyring-core 1.0.1 → 1.1.0, dbus-secret-service 4.1.0 → 4.2.0, rustls-webpki 0.103.16 → 0.103.17, zeroize 1.9.1 → 1.9.2 and @tauri-apps/api 2.12.4 → 2.12.5.
+- Updated frontend build and test tooling: Vite 8.3.6 → 8.3.8 and @vitejs/plugin-react 6.2.1 → 6.3.0 ([#122](https://github.com/ChrisLauinger77/stream-gui-rs/pull/122), [#127](https://github.com/ChrisLauinger77/stream-gui-rs/pull/127)), jsdom 31.0.0 → 31.0.1 ([#131](https://github.com/ChrisLauinger77/stream-gui-rs/pull/131)) and @tauri-apps/cli 2.12.4 → 2.12.5 ([#137](https://github.com/ChrisLauinger77/stream-gui-rs/pull/137)).
+- Updated the `anthropics/claude-code-action` ([#124](https://github.com/ChrisLauinger77/stream-gui-rs/pull/124), [#126](https://github.com/ChrisLauinger77/stream-gui-rs/pull/126), [#130](https://github.com/ChrisLauinger77/stream-gui-rs/pull/130), [#133](https://github.com/ChrisLauinger77/stream-gui-rs/pull/133), [#135](https://github.com/ChrisLauinger77/stream-gui-rs/pull/135), [#140](https://github.com/ChrisLauinger77/stream-gui-rs/pull/140)) and `dtolnay/rust-toolchain` ([#128](https://github.com/ChrisLauinger77/stream-gui-rs/pull/128)) workflow digests.
 
 ## Upgrade and platform support
 
-Settings move from schema 12 to schema 13 when settings are next saved; existing values are unchanged and **Open Watching when starting a stream** starts on, so launches behave as before. Upgrade without signing out or clearing settings. Older versions reject the schema 13 settings file without overwriting it.
+Settings remain at schema 13; upgrading from 1.10.0 needs no migration. Upgrade without signing out or clearing settings. Older versions reject settings saved with the Claude or GitHub theme without overwriting the file; switch to another theme before downgrading.
 
 Streamlink 8.0+ and a separately installed player remain required. Package formats remain Windows x86_64 installer and portable/Scoop ZIP; Linux x86_64 AppImage, DEB and RPM; and a universal macOS DMG for Apple Silicon and Intel requiring macOS 11.0 or later. Verify downloads against the accompanying SHA-256 files.

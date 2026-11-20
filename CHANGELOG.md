@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 1.11.0 - 2026-11-20
+
+### Added
+
+- Bookmarks grouped under Categories, Twitch channels, Kick and YouTube, with counts and Back/Forward restoration of open groups.
+- **Claude** and **GitHub** color themes with dark and light variants.
+
+### Improved
+
+- Updated Tauri to 2.12.7, wry to 0.57.3 and other locked Rust and npm dependencies.
+
 ## 1.10.0 - 2026-11-11
 
 ### Added
