@@ -45,6 +45,10 @@ if [[ ! -d "$lib_dir" ]]; then
   exit 1
 fi
 
+# The AppImage runtime extracts directories as 0700. The repacker assigns
+# root ownership, so restore traversal permissions for unprivileged users.
+find "$app_dir" -type d -exec chmod 0755 {} +
+
 # Tauri 2.11's Ubuntu-built AppImage bundles desktop infrastructure libraries
 # that must remain compatible with the host Mesa, GVFS, and GLib stack. On
 # newer distributions those copies cause GVFS symbol failures and make
@@ -89,7 +93,30 @@ for pattern in "${host_library_patterns[@]}"; do
   fi
 done
 
-runtime_offset=$($source_appimage --appimage-offset)
+# Check version requirements on every packaged ELF, including bundled libraries
+# and WebKit helpers. The catalog's Ubuntu 22.04 environment uses glibc 2.35.
+find "$app_dir" -type f -print0 | while IFS= read -r -d '' binary; do
+  file_type=$(LC_ALL=C file -b -- "$binary")
+  if [[ $file_type != ELF\ * ]]; then
+    continue
+  fi
+  LC_ALL=C readelf --version-info --wide "$binary" | awk -v path="${binary#"$app_dir/"}" '
+    /^Version .* section/ { needs = /^Version needs section/ }
+    needs && match($0, /Name: GLIBC_[^[:space:]]+/) {
+      requirement = substr($0, RSTART + 6, RLENGTH - 6)
+      number = substr(requirement, 7)
+      split(number, version, ".")
+      if (number !~ /^[0-9]+\.[0-9]+(\.[0-9]+)?$/ || version[1] > 2 ||
+          (version[1] == 2 && (version[2] > 35 || (version[2] == 35 && version[3] > 0)))) {
+        print path " requires " requirement ", which is unavailable with glibc 2.35." > "/dev/stderr"
+        failed = 1
+      }
+    }
+    END { exit failed }
+  '
+done
+
+runtime_offset=$("$source_appimage" --appimage-offset)
 if [[ ! $runtime_offset =~ ^[1-9][0-9]*$ ]]; then
   echo "Could not determine the AppImage runtime size." >&2
   exit 1
@@ -124,6 +151,16 @@ PATH="$mksquashfs_dir:$PATH" \
   --runtime-file "$work_dir/runtime-x86_64" \
   "$app_dir" \
   "$patched_appimage"
+
+# Verify the directory modes in the final SquashFS, before runtime extraction
+# can change them again.
+LC_ALL=C unsquashfs -o "$runtime_offset" -ll "$patched_appimage" | awk '
+  /^d/ && $1 !~ /^...x..x..x/ {
+    print "AppImage directory is not traversable by all users: " $0 > "/dev/stderr"
+    failed = 1
+  }
+  END { exit failed }
+'
 
 install -m 0755 "$patched_appimage" "$output"
 echo "Repacked AppImage after removing $removed conflicting host libraries."

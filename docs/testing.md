@@ -50,4 +50,6 @@ For a metadata-only preparation, keep installed-package testing small and releas
 - Start one real stream and Stop it on each platform, confirming ordinary exit/owned-process cleanup. Check installed protocol registration only when the release changes or relies on it.
 - Record PASS, FAIL or NOT TESTED for each platform and gap. A DEB run does not establish RPM/AppImage execution; an Apple Silicon run does not establish Intel execution.
 
+For AppImage packaging changes, also launch the exact candidate as an unprivileged user on Ubuntu 22.04. Use a fresh profile and confirm that the window opens while offline. Repeat using the AppImage catalog's Firejail invocation (`firejail --noprofile --net=none --appimage ./Stream-GUI-RS_X.Y.Z_x86_64.AppImage`) and record the result separately from direct launch.
+
 Every feature, profile, navigation flow, shortcut, notification case or deep-link variant is outside this small smoke unless it changed after prior acceptance. A confirmed package defect requires a fix, fresh CI, a new complete candidate run and affected native retesting. The [release process](releasing.md) defines artifact provenance and publication gates.

@@ -49,10 +49,18 @@ jobs:
     name: Linux x86_64 packages
     needs: prepare
     runs-on: ubuntu-26.04
+    # Keep the package baseline independent of the hosted runner lifecycle.
+    container: ubuntu:22.04
     timeout-minutes: 45
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
+      - name: Install native build and package inspection requirements
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y ca-certificates curl file git build-essential desktop-file-utils libwebkit2gtk-4.1-dev libssl-dev libdbus-1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm squashfs-tools
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
@@ -64,10 +72,6 @@ jobs:
           node-version: 26
           cache: npm
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
-      - name: Install native build requirements
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev libdbus-1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
       - run: npm ci
       - name: Require registered Twitch client ID
         env:
@@ -77,7 +81,7 @@ jobs:
         env:
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
         run: npm run tauri build -- --bundles appimage,deb,rpm --features custom-protocol --ci -- --locked
-      - name: Repair AppImage host-library compatibility
+      - name: Repack and verify the AppImage
         shell: bash
         run: |
           appimage=$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)
@@ -89,7 +93,7 @@ jobs:
         shell: bash
         run: |
           mkdir release
-          cp "$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)" "release/Stream-GUI-RS_${VERSION}_linux_x86_64.AppImage"
+          cp "$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)" "release/Stream-GUI-RS_${VERSION}_x86_64.AppImage"
           cp "$(find src-tauri/target/release/bundle/deb -maxdepth 1 -name '*.deb' -print -quit)" "release/Stream-GUI-RS_${VERSION}_linux_amd64.deb"
           cp "$(find src-tauri/target/release/bundle/rpm -maxdepth 1 -name '*.rpm' -print -quit)" "release/Stream-GUI-RS_${VERSION}_linux_x86_64.rpm"
           test "$(dpkg-deb -f "release/Stream-GUI-RS_${VERSION}_linux_amd64.deb" Architecture)" = amd64
@@ -279,7 +283,7 @@ jobs:
             "SHA256SUMS_windows_x86_64.txt"
             "stream-gui-rs.json"
             "Stream-GUI-RS_${VERSION}_linux_amd64.deb"
-            "Stream-GUI-RS_${VERSION}_linux_x86_64.AppImage"
+            "Stream-GUI-RS_${VERSION}_x86_64.AppImage"
             "Stream-GUI-RS_${VERSION}_linux_x86_64.rpm"
             "Stream-GUI-RS_${VERSION}_macos_universal.dmg"
             "Stream-GUI-RS_${VERSION}_windows_x86_64-setup.exe"

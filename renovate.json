@@ -2,5 +2,15 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>ChrisLauinger77/ChrisLauinger77//renovate-config/stream-gui-rs"
+  ],
+  "packageRules": [
+    {
+      "description": "Preserve the AppImage glibc compatibility baseline",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [".github/workflows/release.yml"],
+      "matchDepTypes": ["container"],
+      "matchDepNames": ["ubuntu"],
+      "allowedVersions": "/^22\\.04$/"
+    }
   ]
 }
