@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.11.1 - 2026-11-21
+
 ### Fixed
 
 - Fixed Linux AppImage directory permissions and lowered the build baseline to Ubuntu 22.04. AppImage download names now omit `_linux_`.
