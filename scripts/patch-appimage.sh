@@ -16,6 +16,12 @@ if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
+asset_name="Stream-GUI-RS_${version}_x86_64.AppImage"
+if [[ ${output##*/} != "$asset_name" ]]; then
+  echo "Expected AppImage release filename $asset_name." >&2
+  exit 1
+fi
+
 if [[ ! -f "$input" ]]; then
   echo "AppImage not found: $input" >&2
   exit 1
@@ -143,14 +149,43 @@ if [[ ! -x "$appimagetool" || ! -x "$mksquashfs_dir/mksquashfs" ]]; then
   exit 1
 fi
 
-patched_appimage="$work_dir/patched.AppImage"
-PATH="$mksquashfs_dir:$PATH" \
-  ARCH=x86_64 \
-  LINUXDEPLOY_OUTPUT_VERSION="$version" \
-  "$appimagetool" \
-  --runtime-file "$work_dir/runtime-x86_64" \
-  "$app_dir" \
-  "$patched_appimage"
+# The updater discovers the latest stable sidecar, which points to a specific release asset.
+update_information='gh-releases-zsync|ChrisLauinger77|stream-gui-rs|latest|Stream-GUI-RS_*_x86_64.AppImage.zsync'
+asset_url="https://github.com/ChrisLauinger77/stream-gui-rs/releases/download/v${version}/${asset_name}"
+patched_appimage="$work_dir/$asset_name"
+# Jammy's zsyncmake writes the sidecar to the current directory.
+(
+  cd "$work_dir"
+  PATH="$mksquashfs_dir:$PATH" \
+    ARCH=x86_64 \
+    LINUXDEPLOY_OUTPUT_VERSION="$version" \
+    "$appimagetool" \
+    --runtime-file "$work_dir/runtime-x86_64" \
+    --updateinformation "$update_information" \
+    --file-url "$asset_url" \
+    "$app_dir" \
+    "$patched_appimage"
+)
+
+actual_update_information=$("$patched_appimage" --appimage-updateinformation)
+if [[ $actual_update_information != "$update_information" ]]; then
+  echo "The AppImage does not contain the expected update information." >&2
+  exit 1
+fi
+
+appimage_sha1=$(sha1sum "$patched_appimage")
+# Read the text header only. The zsync block checksums after it are binary.
+if ! LC_ALL=C awk -v filename="Filename: $asset_name" -v url="URL: $asset_url" \
+  -v sha1="SHA-1: ${appimage_sha1%% *}" '
+    /^$/ { exit }
+    $0 == filename { filename_matches = 1 }
+    $0 == url { url_matches = 1 }
+    $0 == sha1 { sha1_matches = 1 }
+    END { exit !(filename_matches && url_matches && sha1_matches) }
+  ' "$patched_appimage.zsync"; then
+  echo "The zsync file does not describe the final AppImage release asset." >&2
+  exit 1
+fi
 
 # Verify the directory modes in the final SquashFS, before runtime extraction
 # can change them again.
@@ -163,4 +198,5 @@ LC_ALL=C unsquashfs -o "$runtime_offset" -ll "$patched_appimage" | awk '
 '
 
 install -m 0755 "$patched_appimage" "$output"
-echo "Repacked AppImage after removing $removed conflicting host libraries."
+install -m 0644 "$patched_appimage.zsync" "$output.zsync"
+echo "Repacked AppImage with update information after removing $removed conflicting host libraries."
