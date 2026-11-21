@@ -36,12 +36,12 @@ For version `X.Y.Z`, the candidate and published release contain:
 - `Stream-GUI-RS_X.Y.Z_windows_x86_64-setup.exe`
 - `Stream-GUI-RS_X.Y.Z_windows_x86_64.zip`
 - `stream-gui-rs.json`
-- `Stream-GUI-RS_X.Y.Z_linux_x86_64.AppImage`
+- `Stream-GUI-RS_X.Y.Z_x86_64.AppImage`
 - `Stream-GUI-RS_X.Y.Z_linux_amd64.deb`
 - `Stream-GUI-RS_X.Y.Z_linux_x86_64.rpm`
 - `Stream-GUI-RS_X.Y.Z_macos_universal.dmg`
 - one SHA-256 file for each platform group
 
-The Windows manifest hashes the portable ZIP and carries Scoop `checkver` and `autoupdate` metadata. The macOS job verifies both executable slices with `lipo`, macOS 11.0 minimum, bundle version and identity, then strictly verifies its complete ad-hoc signature before upload. Linux verifies the package architectures and removes incompatible AppImage copies of Wayland/GLib host infrastructure libraries. The public Twitch client ID comes only from `TWITCH_CLIENT_ID_BUILD`; release packaging has no synthetic fallback and uses no client secret.
+The Windows manifest hashes the portable ZIP and carries Scoop `checkver` and `autoupdate` metadata. The macOS job verifies both executable slices with `lipo`, macOS 11.0 minimum, bundle version and identity, then strictly verifies its complete ad-hoc signature before upload. Linux builds in an Ubuntu 22.04 container and verifies package architectures. AppImage repacking removes incompatible copies of Wayland/GLib host libraries, checks bundled ELF files for glibc requirements beyond 2.35, and verifies that directories in the final SquashFS are traversable by unprivileged users. Release packaging requires the public Twitch client ID from `TWITCH_CLIENT_ID_BUILD` and uses no client secret.
 
 Release and Desktop checks pass `${{ github.sha }}` as `STREAM_GUI_RS_COMMIT` to each build. The build script validates and embeds its first seven hexadecimal characters; branch names and working-tree state do not supply release identity. See [building from source](../README.md#building-from-source) for local/source-archive fallback. Windows packages remain unsigned. macOS packages have an ad-hoc bundle signature but no Developer ID signature or notarization. Checksums establish file integrity, not trusted platform signing.
