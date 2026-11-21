@@ -55,6 +55,8 @@ Published releases provide these native artifacts:
 
 ARM Linux/Windows packages are not currently published. The macOS disk image contains both Apple Silicon and Intel executable slices, but each architecture still requires native exact-artifact validation; cross-compilation alone is not treated as runtime proof.
 
+Linux releases that include a companion `.AppImage.zsync` asset support delta updates through external tools. If your current AppImage predates this support, download a newer AppImage once to start using the updater. See [AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate).
+
 The Windows installer is not code-signed, so Windows may show a SmartScreen warning. The macOS app bundle is ad-hoc signed but has no Developer ID signature or notarization, and Gatekeeper may block its first launch. Verify every downloaded file against the accompanying SHA-256 checksum.
 
 ## Runtime requirements

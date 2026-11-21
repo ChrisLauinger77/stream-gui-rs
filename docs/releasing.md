@@ -37,11 +37,16 @@ For version `X.Y.Z`, the candidate and published release contain:
 - `Stream-GUI-RS_X.Y.Z_windows_x86_64.zip`
 - `stream-gui-rs.json`
 - `Stream-GUI-RS_X.Y.Z_x86_64.AppImage`
+- `Stream-GUI-RS_X.Y.Z_x86_64.AppImage.zsync`
 - `Stream-GUI-RS_X.Y.Z_linux_amd64.deb`
 - `Stream-GUI-RS_X.Y.Z_linux_x86_64.rpm`
 - `Stream-GUI-RS_X.Y.Z_macos_universal.dmg`
 - one SHA-256 file for each platform group
 
 The Windows manifest hashes the portable ZIP and carries Scoop `checkver` and `autoupdate` metadata. The macOS job verifies both executable slices with `lipo`, macOS 11.0 minimum, bundle version and identity, then strictly verifies its complete ad-hoc signature before upload. Linux builds in an Ubuntu 22.04 container and verifies package architectures. AppImage repacking removes incompatible copies of Wayland/GLib host libraries, checks bundled ELF files for glibc requirements beyond 2.35, and verifies that directories in the final SquashFS are traversable by unprivileged users. Release packaging requires the public Twitch client ID from `TWITCH_CLIENT_ID_BUILD` and uses no client secret.
+
+AppImage repacking embeds a GitHub Releases update locator that selects the latest stable release's x86_64 `.zsync` asset. The repacker checks the embedded locator and verifies that the `.zsync` header names and hashes the final AppImage and targets its versioned download URL. The Linux SHA-256 manifest covers both files. See the [AppImage update specification](https://github.com/AppImage/AppImageSpec/blob/master/draft.md#github-releases).
+
+For a downloaded candidate, make the AppImage executable and use `--appimage-updateinformation` to inspect its locator. To smoke-test a live update after publication, run AppImageUpdate on a copy of an older AppImage that carries the locator and verify the updated file against the new release's SHA-256 manifest.
 
 Release and Desktop checks pass `${{ github.sha }}` as `STREAM_GUI_RS_COMMIT` to each build. The build script validates and embeds its first seven hexadecimal characters; branch names and working-tree state do not supply release identity. See [building from source](../README.md#building-from-source) for local/source-archive fallback. Windows packages remain unsigned. macOS packages have an ad-hoc bundle signature but no Developer ID signature or notarization. Checksums establish file integrity, not trusted platform signing.

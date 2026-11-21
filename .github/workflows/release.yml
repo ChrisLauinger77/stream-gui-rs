@@ -60,7 +60,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           apt-get update
-          apt-get install -y ca-certificates curl file git build-essential desktop-file-utils libwebkit2gtk-4.1-dev libssl-dev libdbus-1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm squashfs-tools
+          apt-get install -y ca-certificates curl file git build-essential desktop-file-utils libwebkit2gtk-4.1-dev libssl-dev libdbus-1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm squashfs-tools zsync
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
@@ -84,19 +84,15 @@ jobs:
         env:
           TWITCH_CLIENT_ID_BUILD: ${{ secrets.TWITCH_CLIENT_ID_BUILD }}
         run: npm run tauri build -- --bundles appimage,deb,rpm --features custom-protocol --ci -- --locked
-      - name: Repack and verify the AppImage
-        shell: bash
-        run: |
-          appimage=$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)
-          test -n "$appimage"
-          scripts/patch-appimage.sh "$appimage" "$appimage" "$VERSION"
       - name: Verify frozen dependencies
         run: git diff --exit-code -- package-lock.json src-tauri/Cargo.lock
-      - name: Stage release files
+      - name: Repack the AppImage and stage release files
         shell: bash
         run: |
           mkdir release
-          cp "$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)" "release/Stream-GUI-RS_${VERSION}_x86_64.AppImage"
+          appimage=$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)
+          test -n "$appimage"
+          scripts/patch-appimage.sh "$appimage" "release/Stream-GUI-RS_${VERSION}_x86_64.AppImage" "$VERSION"
           cp "$(find src-tauri/target/release/bundle/deb -maxdepth 1 -name '*.deb' -print -quit)" "release/Stream-GUI-RS_${VERSION}_linux_amd64.deb"
           cp "$(find src-tauri/target/release/bundle/rpm -maxdepth 1 -name '*.rpm' -print -quit)" "release/Stream-GUI-RS_${VERSION}_linux_x86_64.rpm"
           test "$(dpkg-deb -f "release/Stream-GUI-RS_${VERSION}_linux_amd64.deb" Architecture)" = amd64
@@ -287,6 +283,7 @@ jobs:
             "stream-gui-rs.json"
             "Stream-GUI-RS_${VERSION}_linux_amd64.deb"
             "Stream-GUI-RS_${VERSION}_x86_64.AppImage"
+            "Stream-GUI-RS_${VERSION}_x86_64.AppImage.zsync"
             "Stream-GUI-RS_${VERSION}_linux_x86_64.rpm"
             "Stream-GUI-RS_${VERSION}_macos_universal.dmg"
             "Stream-GUI-RS_${VERSION}_windows_x86_64-setup.exe"

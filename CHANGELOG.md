@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Embedded GitHub release update information and a companion `.zsync` file for Linux AppImage updates with tools such as AppImageUpdate.
+
 ## 1.11.1 - 2026-11-21
 
 ### Fixed
