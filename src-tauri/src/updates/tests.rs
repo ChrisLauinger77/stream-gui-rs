@@ -63,7 +63,6 @@ fn semantic_comparison_and_untrusted_release_fields() {
 fn service(server: &Server) -> Arc<Updates> {
     Arc::new(Updates {
         endpoint: server.base.clone(),
-        timeout: Duration::from_millis(200),
         clock: Clock::for_test(),
         ..Default::default()
     })
@@ -115,7 +114,6 @@ async fn failures_are_quiet_cached_bounded_and_never_redirect_or_retry() {
         Reply::json(500, "secret provider body"),
         Reply::json(403, "rate limited"),
         Reply::disconnect(),
-        Reply::json(200, release("v9.0.0").to_string()).delayed(Duration::from_secs(1)),
         Reply::json(302, "").header("Location", "https://evil.invalid"),
     ] {
         let server = Server::new(vec![reply]).await;
@@ -127,6 +125,39 @@ async fn failures_are_quiet_cached_bounded_and_never_redirect_or_retry() {
         assert!(updates.release_destination().is_err());
     }
 }
+
+#[tokio::test]
+async fn response_timeout_is_unavailable_and_cached_without_retry() {
+    let gate = Arc::new(tokio::sync::Notify::new());
+    let server = Server::new(vec![
+        Reply::json(200, release("v9.0.0").to_string()).gated(gate),
+    ])
+    .await;
+    let updates = Arc::new(Updates {
+        endpoint: server.base.clone(),
+        timeout: Duration::from_secs(5),
+        clock: Clock::for_test(),
+        ..Default::default()
+    });
+    let check = {
+        let updates = updates.clone();
+        tokio::spawn(async move { updates.check(false).await })
+    };
+    // Let loopback I/O reach the fixture before advancing the request deadline.
+    server.wait_for_requests(1).await;
+    tokio::time::pause();
+    tokio::time::advance(updates.timeout).await;
+    let status = tokio::time::timeout(Duration::from_secs(1), check)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(status.phase, UpdatePhase::Unavailable);
+    assert_eq!(updates.check(false).await, status);
+    assert_eq!(updates.check(true).await, status);
+    assert_eq!(server.requests().len(), 1);
+    assert!(updates.release_destination().is_err());
+}
+
 #[tokio::test]
 async fn concurrent_and_dropped_callers_share_service_owned_check_and_shutdown_cancels() {
     let gate = Arc::new(tokio::sync::Notify::new());
