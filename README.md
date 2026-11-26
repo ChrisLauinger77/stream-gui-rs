@@ -161,6 +161,15 @@ brew install --cask stream-gui-rs
 
 The Windows release also includes `stream-gui-rs.json` for direct Scoop installation. The bucket and cask definitions update from published GitHub Release assets.
 
+On supported Debian and Ubuntu releases, deb-get installs the `amd64` package from GitHub Releases. First complete the [deb-get setup](https://github.com/wimpysworld/deb-get#install), including its GitHub token configuration.
+
+```sh
+deb-get update
+deb-get install stream-gui-rs
+```
+
+After installation, continue with step 3 above to set up Streamlink and a player. For supported distribution releases, see the [deb-get package definition](https://github.com/wimpysworld/deb-get/blob/main/01-main/packages/stream-gui-rs).
+
 Official installed builds contain the project's public Twitch application ID. Users do not set environment variables, register an application, or provide a client secret.
 
 ## Playback and privacy details
